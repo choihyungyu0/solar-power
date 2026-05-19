@@ -94,6 +94,13 @@ function SolarFeedSection() {
                 <p>{card.description}</p>
               </article>
             ))}
+            {feedCards.map((card) => (
+              <article className="solarFeedCard feedDuplicate" key={`${card.title}-duplicate`} aria-hidden="true">
+                <SafeLocalImage src={card.image} alt="" className="solarFeedCardImage" />
+                <h3>{card.title}</h3>
+                <p>{card.description}</p>
+              </article>
+            ))}
           </div>
         </div>
 
