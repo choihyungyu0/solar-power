@@ -1,8 +1,10 @@
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css");
+
 :root {
-  font-family:
-    "Noto Sans KR",
+  --font-sans:
     "Pretendard Variable",
     Pretendard,
+    "Noto Sans KR",
     SUIT,
     "Wanted Sans",
     "Apple SD Gothic Neo",
@@ -12,11 +14,16 @@
     "Segoe UI",
     system-ui,
     sans-serif;
+}
+
+:root {
+  font-family: var(--font-sans);
   color: #111827;
   background: #ffffff;
   line-height: 1.5;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  font-feature-settings: "kern";
 }
 
 * {
@@ -31,6 +38,10 @@ body {
   margin: 0;
   min-width: 320px;
   background: #ffffff;
+  overflow-x: hidden;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 a {
@@ -175,6 +186,8 @@ img {
   padding: 0 34px;
   font-size: 18px;
   font-weight: 950;
+  text-align: center;
+  white-space: nowrap;
   transition:
     transform 0.2s ease,
     box-shadow 0.2s ease,
@@ -231,12 +244,15 @@ img {
 }
 
 .heroCopy h1 {
+  max-width: 760px;
   margin: 18px 0 0;
   color: #050505;
   font-size: clamp(48px, 4.6vw, 82px);
   font-weight: 950;
   letter-spacing: 0;
   line-height: 1.12;
+  overflow-wrap: keep-all;
+  word-break: keep-all;
 }
 
 .heroDescription {
@@ -247,6 +263,8 @@ img {
   font-weight: 650;
   letter-spacing: 0;
   line-height: 1.55;
+  overflow-wrap: keep-all;
+  word-break: keep-all;
 }
 
 .disclaimer {
@@ -285,6 +303,7 @@ img {
   height: 100%;
   min-height: 610px;
   object-fit: cover;
+  object-position: center;
 }
 
 .imagePlaceholder {
@@ -747,6 +766,8 @@ img {
   .desktopNav {
     order: 3;
     width: 100%;
+    flex: 0 0 100%;
+    max-width: 100%;
     justify-content: flex-start;
     overflow-x: auto;
     padding-bottom: 4px;
@@ -754,6 +775,7 @@ img {
 
   .headerActions {
     margin-left: auto;
+    order: 2;
   }
 
   .heroSection {
@@ -765,7 +787,7 @@ img {
   }
 
   .heroVisual {
-    min-height: 560px;
+    min-height: 460px;
   }
 
   .heroVisual::before {
@@ -774,7 +796,7 @@ img {
 
   .heroImage,
   .heroVisual .imagePlaceholder {
-    min-height: 560px;
+    min-height: 460px;
   }
 
   .metricStack {
@@ -839,7 +861,9 @@ img {
 
   .headerActions {
     width: 100%;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    justify-content: stretch;
     gap: 12px;
   }
 
@@ -853,38 +877,60 @@ img {
     min-height: 58px;
     padding: 0 18px;
     font-size: 15px;
+    white-space: normal;
   }
 
   .headerCta {
     min-width: 0;
+    width: 100%;
     flex: 1;
   }
 
   .heroCopy {
+    width: 100vw;
+    max-width: 100vw;
     padding: 46px 22px 28px;
+    overflow: hidden;
   }
 
   .heroCopy h1 {
-    font-size: 43px;
+    width: 100%;
+    max-width: calc(100vw - 44px);
+    font-size: clamp(29px, 8vw, 32px);
+    line-height: 1.18;
+    overflow-wrap: break-word;
+    word-break: break-all;
   }
 
   .heroDescription {
-    font-size: 20px;
+    max-width: calc(100vw - 44px);
+    font-size: 15px;
+    overflow-wrap: break-word;
+    word-break: break-all;
+  }
+
+  .disclaimer {
+    max-width: calc(100vw - 44px);
+    overflow-wrap: break-word;
+    word-break: break-all;
   }
 
   .heroButtons {
+    max-width: calc(100vw - 44px);
     align-items: stretch;
     flex-direction: column;
     gap: 12px;
   }
 
   .heroVisual {
-    min-height: 640px;
+    width: 100vw;
+    max-width: 100vw;
+    min-height: 360px;
   }
 
   .heroImage,
   .heroVisual .imagePlaceholder {
-    min-height: 640px;
+    min-height: 360px;
   }
 
   .metricStack {
@@ -989,6 +1035,8 @@ img {
   font-weight: 950;
   letter-spacing: 0;
   line-height: 1.15;
+  overflow-wrap: keep-all;
+  word-break: keep-all;
 }
 
 .serviceIntroHeader p,
@@ -998,6 +1046,8 @@ img {
   color: #374151;
   font-size: 17px;
   font-weight: 750;
+  overflow-wrap: keep-all;
+  word-break: keep-all;
 }
 
 .introProcessGrid {
@@ -1077,6 +1127,8 @@ img {
   font-size: 16px;
   font-weight: 750;
   line-height: 1.58;
+  overflow-wrap: keep-all;
+  word-break: keep-all;
 }
 
 .introFeatureGrid {
@@ -1113,8 +1165,7 @@ img {
 }
 
 .introFeatureText,
-.dashboardMockup,
-.apartmentMapVisual {
+.introFeatureImage {
   position: relative;
   z-index: 2;
 }
@@ -1132,111 +1183,24 @@ img {
   line-height: 1.68;
 }
 
-.dashboardMockup {
-  width: min(100%, 420px);
-  margin-left: auto;
-  padding: 12px;
-  border-radius: 24px;
-  background: linear-gradient(135deg, #2f80ed, #1c4f9c);
-  box-shadow: 0 24px 45px rgba(24, 91, 177, 0.25);
-  transform: rotate(-5deg);
-}
-
-.mockToolbar {
-  height: 28px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 10px;
-}
-
-.mockToolbar span {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.75);
-}
-
-.mockDashboardBody {
-  min-height: 160px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 18px;
-  background: #ffffff;
-}
-
-.mockApartment {
-  min-height: 132px;
-  border-radius: 16px;
-  background:
-    linear-gradient(135deg, rgba(31, 115, 209, 0.18), rgba(255, 214, 83, 0.2)),
-    repeating-linear-gradient(90deg, transparent 0 18px, rgba(31, 115, 209, 0.18) 18px 20px),
-    #edf6ff;
-}
-
-.mockChart {
-  display: flex;
-  align-items: end;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 16px;
-  background: #f3f8ff;
-}
-
-.mockChart i {
-  flex: 1;
-  border-radius: 999px 999px 4px 4px;
-  background: linear-gradient(180deg, #60a5fa, #2563eb);
-}
-
-.mockChart i:nth-child(1) { height: 42%; }
-.mockChart i:nth-child(2) { height: 62%; }
-.mockChart i:nth-child(3) { height: 78%; }
-.mockChart i:nth-child(4) { height: 54%; }
-
-.mockDonut {
-  grid-column: 2;
-  width: 70px;
-  height: 70px;
-  margin: -82px 16px 0 auto;
-  border-radius: 999px;
-  background: conic-gradient(#f7c948 0 35%, #2f80ed 35% 75%, #b7d5ff 75% 100%);
-  border: 12px solid #ffffff;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
-}
-
-.apartmentMapVisual {
-  min-height: 196px;
-  display: grid;
-  place-items: center;
-}
-
-.mapApartmentImage {
-  width: min(100%, 350px);
+.introFeatureImage,
+.introFeaturePanel .imagePlaceholder {
+  width: min(100%, 430px);
   height: 210px;
+  justify-self: end;
+  border-radius: 22px;
   object-fit: contain;
 }
 
-.mapPin {
-  position: absolute;
-  top: 22px;
-  right: 28%;
-  width: 54px;
-  height: 54px;
-  border-radius: 999px 999px 999px 4px;
-  background: linear-gradient(135deg, #3387f5, #165ec7);
-  transform: rotate(-45deg);
-  box-shadow: 0 10px 22px rgba(22, 94, 199, 0.26);
+.dashboardImage {
+  object-fit: cover;
+  object-position: center;
 }
 
-.mapPin::after {
-  content: '';
-  position: absolute;
-  inset: 17px;
-  border-radius: 999px;
-  background: #ffffff;
+.mapApartmentImage {
+  width: min(100%, 390px);
+  height: 210px;
+  object-fit: contain;
 }
 
 .introMetricGrid {
@@ -1431,6 +1395,517 @@ img {
   color: #1268ca;
 }
 
+.solarFeedSection {
+  background: #ffffff;
+  color: #111827;
+}
+
+.solarFeedInner {
+  width: min(1440px, calc(100% - 96px));
+  margin: 0 auto;
+  padding: 52px 0 22px;
+}
+
+.solarFeedTop {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 34px;
+  align-items: stretch;
+}
+
+.solarFeedIntro {
+  padding-top: 24px;
+}
+
+.solarFeedIntro h2,
+.feedPanel h2,
+.noticePanel h2,
+.customerPanel h2 {
+  margin: 0;
+  color: #0f172a;
+  font-weight: 950;
+  letter-spacing: 0;
+  line-height: 1.18;
+}
+
+.solarFeedIntro h2 {
+  font-size: clamp(30px, 2.7vw, 42px);
+}
+
+.solarFeedIntro p {
+  max-width: 230px;
+  margin: 16px 0 0;
+  color: #475569;
+  font-size: 17px;
+  font-weight: 750;
+  line-height: 1.75;
+}
+
+.solarFeedIntro button,
+.noticePanel button {
+  min-height: 44px;
+  margin-top: 28px;
+  border: 1px solid #cfd9e8;
+  border-radius: 10px;
+  padding: 0 22px;
+  background: #ffffff;
+  color: #0f6eea;
+  font-size: 14px;
+  font-weight: 950;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+}
+
+.solarFeedCards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.solarFeedCard {
+  min-height: 278px;
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.72);
+  border-radius: 22px;
+  padding: 22px 26px;
+  background: linear-gradient(135deg, #f1faec 0%, #f7fff3 100%);
+}
+
+.solarFeedCard:nth-child(2) {
+  background: linear-gradient(135deg, #fff3e8 0%, #fffaf6 100%);
+}
+
+.solarFeedCard:nth-child(3) {
+  background: linear-gradient(135deg, #eaf5ff 0%, #f8fbff 100%);
+}
+
+.solarFeedCardImage,
+.solarFeedCard .imagePlaceholder {
+  width: 100%;
+  height: 145px;
+  border-radius: 16px;
+  object-fit: contain;
+}
+
+.solarFeedCard h3 {
+  margin: 18px 0 10px;
+  color: #111827;
+  font-size: 18px;
+  font-weight: 950;
+  letter-spacing: 0;
+}
+
+.solarFeedCard p {
+  margin: 0;
+  color: #475569;
+  font-size: 15px;
+  font-weight: 750;
+  line-height: 1.65;
+}
+
+.solarFeedContentGrid {
+  margin-top: 22px;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(360px, 1fr);
+  gap: 18px;
+}
+
+.solarFeedLeftColumn,
+.solarFeedRightColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.feedPanel,
+.noticePanel,
+.customerPanel {
+  border: 1px solid #dce4ee;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.policyNewsPanel {
+  padding: 24px 26px 16px;
+}
+
+.feedPanelTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.feedPanel h2,
+.noticePanel h2,
+.customerPanel h2 {
+  font-size: 23px;
+}
+
+.feedPanelTitleRow span {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #83d68c;
+  border-radius: 999px;
+  padding: 0 14px;
+  background: #effaf0;
+  color: #229039;
+  font-size: 13px;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.policyNewsList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.policyNewsList li {
+  min-height: 47px;
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto 34px;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 1px solid #e5eaf1;
+}
+
+.policyNewsList li:last-child {
+  border-bottom: 0;
+}
+
+.policyDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #63c968;
+}
+
+.policyNewsList p {
+  margin: 0;
+  color: #1f2937;
+  font-size: 15px;
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+
+.policyNewsList time {
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.policyNewsList button {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: transparent;
+  color: #64748b;
+  font-size: 26px;
+  line-height: 1;
+}
+
+.faqPanel {
+  padding: 18px 22px 20px;
+}
+
+.faqPanel h2 {
+  margin-bottom: 14px;
+}
+
+.faqRows {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.faqRows button {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #dbe3ed;
+  border-radius: 9px;
+  padding: 0 18px;
+  background: #ffffff;
+  color: #1f2937;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.faqRows strong {
+  flex: 0 0 auto;
+  color: #0f2b57;
+  font-size: 17px;
+}
+
+.noticePanel {
+  min-height: 200px;
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  align-items: center;
+  gap: 18px;
+  padding: 28px 34px;
+  border-color: #f1cf89;
+  background: linear-gradient(135deg, #fffaf1, #fff8ea);
+}
+
+.noticeImage,
+.noticePanel .imagePlaceholder {
+  width: 138px;
+  height: 138px;
+  border-radius: 20px;
+  object-fit: contain;
+}
+
+.noticePanel p {
+  margin: 14px 0 0;
+  color: #475569;
+  font-size: 15px;
+  font-weight: 750;
+  line-height: 1.65;
+}
+
+.noticePanel button {
+  color: #111827;
+}
+
+.customerPanel {
+  min-height: 220px;
+  padding: 22px 24px;
+  border-color: #bcd8f8;
+  background: linear-gradient(135deg, #eff7ff, #f9fcff);
+}
+
+.customerPanel h2 {
+  margin-bottom: 18px;
+  color: #083d83;
+}
+
+.customerItems {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.customerItems button {
+  min-height: 132px;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  border-right: 1px solid #d9e5f3;
+  background: transparent;
+  color: #111827;
+  text-align: center;
+}
+
+.customerItems button:last-child {
+  border-right: 0;
+}
+
+.customerImage,
+.customerItems .imagePlaceholder {
+  width: 72px;
+  height: 58px;
+  margin-bottom: 12px;
+  border-radius: 14px;
+  object-fit: contain;
+}
+
+.customerItems strong {
+  display: block;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.customerItems span {
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.solarFeedDemoNote {
+  margin: 14px 0 0;
+  border-radius: 14px;
+  padding: 12px 16px;
+  background: #f8fbff;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.6;
+}
+
+.solarFooter {
+  margin-top: 18px;
+  border-top: 1px solid #dfe6ee;
+  background: #ffffff;
+}
+
+.solarFooterInner {
+  width: min(1440px, calc(100% - 96px));
+  margin: 0 auto;
+  padding: 26px 0;
+  display: grid;
+  grid-template-columns: 1.35fr 1.45fr 0.95fr 1.35fr 1.2fr;
+  gap: 30px;
+}
+
+.solarFooterBrand,
+.solarFooterColumn {
+  min-height: 138px;
+  padding-right: 28px;
+  border-right: 1px solid #e2e8f0;
+}
+
+.solarFooterColumn:last-child {
+  border-right: 0;
+}
+
+.solarFooterLogo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.solarFooterLogoMark {
+  width: 44px;
+  height: 36px;
+  border-radius: 12px 12px 7px 7px;
+  background:
+    radial-gradient(circle at 21% 22%, #ffc107 0 16%, transparent 17%),
+    linear-gradient(135deg, transparent 0 25%, #0f8bdc 26% 45%, #1260bb 46% 100%);
+  box-shadow: inset 0 -10px 0 rgba(255, 255, 255, 0.18);
+}
+
+.solarFooterLogo strong,
+.solarFooterLogo small {
+  display: block;
+}
+
+.solarFooterLogo strong {
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.solarFooterLogo small {
+  margin-top: 3px;
+  color: #1e3a5f;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.solarFooterBrand p,
+.solarFooterColumn p,
+.solarFooterColumn a {
+  color: #4b5563;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.75;
+}
+
+.solarFooterBrand p {
+  max-width: 250px;
+  margin: 16px 0 0;
+}
+
+.solarFooterColumn h3 {
+  margin: 0 0 14px;
+  color: #111827;
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.solarFooterColumn p {
+  margin: 0;
+}
+
+.solarFooterColumn a {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.solarSocialLinks {
+  margin-top: 18px;
+  display: flex;
+  gap: 10px;
+}
+
+.solarSocialLinks span {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.solarSocialLinks span:nth-child(1) { background: #20c45a; }
+.solarSocialLinks span:nth-child(2) { background: #ff0000; }
+.solarSocialLinks span:nth-child(3) { background: linear-gradient(135deg, #f59e0b, #ec4899, #6366f1); }
+
+.solarStoreButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+
+.solarStoreButtons button {
+  min-height: 34px;
+  border-radius: 7px;
+  padding: 0 13px;
+  background: #050505;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.solarDownloadLink {
+  color: #1f2937 !important;
+}
+
+.solarFooterContact strong {
+  display: block;
+  margin-bottom: 10px;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 950;
+}
+
+.solarFooterBottom {
+  width: min(1440px, calc(100% - 96px));
+  min-height: 54px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.solarFooterBottom p,
+.solarFooterBottom a {
+  margin: 0;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.solarFooterBottom div {
+  display: flex;
+  gap: 48px;
+}
+
 @media (max-width: 1220px) {
   .serviceIntro {
     padding-left: 48px;
@@ -1449,8 +1924,10 @@ img {
     gap: 24px;
   }
 
-  .dashboardMockup {
+  .introFeatureImage,
+  .introFeaturePanel .imagePlaceholder {
     margin: 0;
+    justify-self: center;
   }
 
   .introReviewHeader {
@@ -1496,8 +1973,9 @@ img {
     padding: 26px 22px;
   }
 
-  .dashboardMockup {
-    transform: none;
+  .introFeatureImage,
+  .introFeaturePanel .imagePlaceholder {
+    height: 190px;
   }
 
   .introMetricCard,
@@ -1510,4 +1988,158 @@ img {
     align-items: stretch;
     flex-direction: column;
   }
+}
+
+@media (max-width: 1220px) {
+  .solarFeedInner,
+  .solarFooterInner,
+  .solarFooterBottom {
+    width: min(980px, calc(100% - 64px));
+  }
+
+  .solarFeedTop,
+  .solarFeedContentGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .solarFeedIntro {
+    padding-top: 0;
+  }
+
+  .solarFeedIntro p {
+    max-width: 620px;
+  }
+
+  .solarFooterInner {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .solarFooterBrand,
+  .solarFooterColumn {
+    min-height: auto;
+    border-right: 0;
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 22px;
+  }
+}
+
+@media (max-width: 820px) {
+  .solarFeedInner,
+  .solarFooterInner,
+  .solarFooterBottom {
+    width: calc(100% - 36px);
+  }
+
+  .solarFeedCards {
+    grid-template-columns: 1fr;
+  }
+
+  .solarFeedContentGrid {
+    gap: 14px;
+  }
+
+  .policyNewsList li {
+    grid-template-columns: 10px minmax(0, 1fr) 34px;
+    gap: 12px;
+    padding: 10px 0;
+  }
+
+  .policyNewsList time {
+    grid-column: 2 / 3;
+    justify-self: start;
+  }
+
+  .policyNewsList button {
+    grid-column: 3 / 4;
+    grid-row: 1 / 3;
+  }
+
+  .noticePanel {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+
+  .customerItems {
+    grid-template-columns: 1fr;
+  }
+
+  .customerItems button {
+    border-right: 0;
+    border-bottom: 1px solid #d9e5f3;
+  }
+
+  .customerItems button:last-child {
+    border-bottom: 0;
+  }
+
+  .solarFooterInner {
+    grid-template-columns: 1fr;
+  }
+
+  .solarFooterBottom {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 18px 0;
+  }
+
+  .solarFooterBottom div {
+    flex-wrap: wrap;
+    gap: 18px;
+  }
+}
+
+.logo strong,
+.heroCopy h1,
+.sectionHeading h2,
+.serviceIntroHeader h2,
+.introReviewHeader h2,
+.solarFeedPreview h2,
+.solarFeedIntro h2,
+.feedPanel h2,
+.noticePanel h2,
+.customerPanel h2,
+.ctaPanel h2 {
+  font-weight: 850;
+}
+
+.featureCard h2,
+.detailCard h3,
+.processCard h3,
+.introProcessText h3,
+.introFeatureText h3,
+.introMetricCard h3,
+.solarFeedCard h3,
+.solarFooterColumn h3 {
+  font-weight: 800;
+}
+
+.desktopNav,
+.loginButton,
+.primaryButton,
+.secondaryButton,
+.solarFeedTabs button,
+.solarFeedIntro button,
+.noticePanel button,
+.faqRows button,
+.policyNewsList p,
+.customerItems strong {
+  font-weight: 800;
+}
+
+.heroDescription,
+.featureCard p,
+.sectionHeading p:not(.sectionBadge),
+.detailCard p,
+.processCard p,
+.ctaPanel p,
+.serviceIntroHeader p,
+.introReviewHeader p,
+.solarFeedPreview p,
+.introProcessText p,
+.introFeatureText p,
+.solarFeedIntro p,
+.solarFeedCard p,
+.noticePanel p {
+  font-weight: 650;
 }

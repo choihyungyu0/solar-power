@@ -147,23 +147,12 @@ function ServiceIntroSection() {
               <h3>서비스 소개</h3>
               <p>아파트 태양광 가상설치, 보조금 조건 매칭, 맞춤 리포트를 한곳에서 제공합니다.</p>
             </div>
-            <div className="dashboardMockup" aria-label="태양광 분석 대시보드 예시" role="img">
-              <div className="mockToolbar">
-                <span />
-                <span />
-                <span />
-              </div>
-              <div className="mockDashboardBody">
-                <div className="mockApartment" />
-                <div className="mockChart">
-                  <i />
-                  <i />
-                  <i />
-                  <i />
-                </div>
-                <div className="mockDonut" />
-              </div>
-            </div>
+            <SafeLocalImage
+              src="/assets/landing/service-dashboard-tablet.png"
+              fallbackSrc="/assets/landing/urban-solar-building.png"
+              alt="태양광 분석 리포트가 표시된 태블릿 화면"
+              className="introFeatureImage dashboardImage"
+            />
           </article>
 
           <article className="introFeaturePanel mapPanel">
@@ -171,15 +160,12 @@ function ServiceIntroSection() {
               <h3>분석 현황</h3>
               <p>파일럿 분석 단지와 시뮬레이션 기준 절감 효과를 확인하세요.</p>
             </div>
-            <div className="apartmentMapVisual">
-              <SafeLocalImage
-                src="/assets/landing/intro-step-feasibility.png"
-                fallbackSrc="/assets/landing/apartment-isometric.png"
-                alt="지도 핀과 함께 표시된 아파트 태양광 분석 대상"
-                className="mapApartmentImage"
-              />
-              <span className="mapPin" aria-hidden="true" />
-            </div>
+            <SafeLocalImage
+              src="/assets/landing/service-map-apartment.png"
+              fallbackSrc="/assets/landing/apartment-isometric.png"
+              alt="지도 핀과 함께 표시된 아파트 태양광 분석 대상"
+              className="introFeatureImage mapApartmentImage"
+            />
           </article>
         </div>
 
@@ -224,7 +210,7 @@ function ServiceIntroSection() {
           ))}
         </div>
 
-        <div className="solarFeedPreview" id="solar-feed">
+        <div className="solarFeedPreview" id="solar-feed-preview">
           <div>
             <h2>솔라피드</h2>
             <p>태양광 보조금과 예산 소진 현황을 한눈에 확인하세요.</p>

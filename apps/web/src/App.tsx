@@ -1,4 +1,5 @@
 import SafeLocalImage from './components/SafeLocalImage';
+import SolarFeedSection from './components/SolarFeedSection';
 import ServiceIntroSection from './components/ServiceIntroSection';
 
 function App() {
@@ -35,14 +36,24 @@ function App() {
         <section className="heroSection" aria-labelledby="hero-title">
           <div className="heroCopy">
             <span className="eyebrow">Apartment Solar MVP</span>
-            <h1 id="hero-title">우리 아파트 태양광 설치 가능성을 한 번에 확인하세요</h1>
+            <h1 id="hero-title">
+              우리 아파트 태양광
+              <br />
+              설치 가능성을
+              <br />
+              한 번에 확인하세요
+            </h1>
             <p className="heroDescription">
-              전기요금 부담, 보조금 공고, 설치 가능성 판단을 따로 찾아보지 않도록
-              아파트 조건 기반의 예상 리포트와 다음 실행 단계를 제공합니다.
+              전기요금 부담, 보조금 공고, 설치 가능성 판단을
+              <br />
+              따로 찾아보지 않도록 아파트 조건 기반의
+              <br />
+              예상 리포트와 다음 실행 단계를 제공합니다.
             </p>
             <p className="disclaimer">
-              예상 절감액과 정책지원 후보는 데모 산식과 파일럿 화면 기준 추정값이며,
-              실제 신청 전에는 현장조사와 공고 기준 확인이 필요합니다.
+              예상 절감액과 정책지원 후보는 추정값입니다.
+              <br />
+              실제 신청 전 현장조사와 공고 기준 확인이 필요합니다.
             </p>
             <div className="heroActions">
               <a className="primaryButton" href="#service-intro">
@@ -65,6 +76,8 @@ function App() {
         </section>
 
         <ServiceIntroSection />
+
+        <SolarFeedSection />
 
         <section className="ctaPanel" id="contact">
           <div>
