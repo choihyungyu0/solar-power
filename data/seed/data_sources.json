@@ -1,0 +1,56 @@
+[
+  {
+    "category": "태양광 시뮬레이션",
+    "name": "경기기후플랫폼 태양광 도입",
+    "url": "https://climate.gg.go.kr/ips/engy/solar-adoption",
+    "use": "잠재량, 설치현황, 규제·적지 분석 벤치마크"
+  },
+  {
+    "category": "허가정보",
+    "name": "경기도 태양광 발전소 허가정보",
+    "url": "https://data.gg.go.kr/portal/data/service/selectServicePage.do?infId=VI0D9IY634MNRGJITBI527985650",
+    "use": "발전소 분포/인허가 현황"
+  },
+  {
+    "category": "적지분석",
+    "name": "AI Hub 태양광 적지 분석 데이터",
+    "url": "https://www.aihub.or.kr/aihubdata/data/view.do?currMenu=115&topMenu=100&dataSetSn=71348",
+    "use": "모델 학습/적지 피처 참고"
+  },
+  {
+    "category": "발전량 예측",
+    "name": "기상청 태양광 발전량 예측",
+    "url": "https://bd.kma.go.kr/kma2020/fs/energySelect1.do",
+    "use": "발전량 예측/날씨 피처"
+  },
+  {
+    "category": "건축물",
+    "name": "건축HUB 건축물대장 API",
+    "url": "https://www.data.go.kr/data/15134735/openapi.do",
+    "use": "건물 용도/면적/층수/대장정보"
+  },
+  {
+    "category": "전력가격",
+    "name": "전력거래소 SMP 실시간 API",
+    "url": "https://www.data.go.kr/data/15076302/openapi.do",
+    "use": "수익성/전력가격 참고"
+  },
+  {
+    "category": "전기사용량",
+    "name": "국토부 건축HUB 건물에너지정보",
+    "url": "https://www.data.go.kr/data/15135963/openapi.do",
+    "use": "월별 건물 전력 사용량"
+  },
+  {
+    "category": "정책",
+    "name": "경기도 주택태양광 지원시스템",
+    "url": "https://ggre100home.or.kr/",
+    "use": "정책자금/신청 단계"
+  },
+  {
+    "category": "정책",
+    "name": "한국에너지공단 신재생에너지센터 주택지원",
+    "url": "https://www.knrec.or.kr/biz/introduce/new_engy/intro_home.do",
+    "use": "정부 지원사업/절차"
+  }
+]

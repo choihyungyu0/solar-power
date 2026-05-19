@@ -1,0 +1,29 @@
+[
+  {
+    "id": "gg_re100_home",
+    "name": "경기도 주택태양광 지원 시스템",
+    "target": "경기도 단독·공동주택 태양광 설치 희망자",
+    "amountDisplay": "연도/시군/공고별 상이 — 관리자 확인 필요",
+    "status": "공고 확인 필요",
+    "sourceUrl": "https://ggre100home.or.kr/",
+    "mvpUse": "정책자금 후보 노출, 알림 신청, 필요서류 체크리스트"
+  },
+  {
+    "id": "knrec_home_support",
+    "name": "한국에너지공단 신재생에너지센터 주택지원",
+    "target": "주택용 신재생에너지 설비 설치 수요자",
+    "amountDisplay": "정부 공고 기준 — 연도별 지원단가 확인 필요",
+    "status": "공고 확인 필요",
+    "sourceUrl": "https://www.knrec.or.kr/biz/introduce/new_engy/intro_home.do",
+    "mvpUse": "국비/지자체 지원 가능성 안내"
+  },
+  {
+    "id": "gg_climate_solar_adoption",
+    "name": "경기기후플랫폼 태양광 도입 시뮬레이션",
+    "target": "경기도 태양광 잠재량·설비현황·적지 분석 참고",
+    "amountDisplay": "금액 정보가 아닌 잠재량/적지/규제 참고 데이터",
+    "status": "데이터/시뮬레이션 참고",
+    "sourceUrl": "https://climate.gg.go.kr/ips/engy/solar-adoption",
+    "mvpUse": "시각화·적합도 로직·데이터 출처 설계"
+  }
+]

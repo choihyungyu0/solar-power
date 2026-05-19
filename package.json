@@ -1,0 +1,11 @@
+{
+  "name": "solar-power-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "web:dev": "npm --prefix apps/web run dev",
+    "web:build": "npm --prefix apps/web run build",
+    "web:preview": "npm --prefix apps/web run preview",
+    "api:dev": "cd apps/api && uvicorn main:app --reload --port 8000"
+  }
+}

@@ -1,0 +1,33 @@
+### Health
+GET http://localhost:8000/api/health
+
+### Simulate
+POST http://localhost:8000/api/solar/simulate
+Content-Type: application/json
+
+{
+  "address": "경기도 성남시 분당구 샘플아파트",
+  "buildingType": "apartment",
+  "householdCount": 420,
+  "roofAreaM2": 2400,
+  "monthlyElectricBillKrw": 7200000,
+  "shadeScore": 82,
+  "roofUsableRatio": 0.42,
+  "averageDailySunHours": 3.7,
+  "electricityPriceKrwPerKwh": 165
+}
+
+### Policies
+GET http://localhost:8000/api/policies
+
+### Subscribe alert
+POST http://localhost:8000/api/alerts/subscribe
+Content-Type: application/json
+
+{
+  "name": "최현규",
+  "phoneOrEmail": "010-0000-0000",
+  "channel": "kakao",
+  "address": "경기도 성남시 분당구 샘플아파트",
+  "topic": "all"
+}
