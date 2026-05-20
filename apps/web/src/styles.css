@@ -684,7 +684,8 @@ img {
   }
 
   .heroSection {
-    min-height: 540px;
+    height: calc(100vh - 336px);
+    min-height: 620px;
   }
 
   .heroCopy {
@@ -713,7 +714,8 @@ img {
   .heroVisual,
   .heroImage,
   .heroVisual .imagePlaceholder {
-    min-height: 540px;
+    height: 100%;
+    min-height: 100%;
   }
 
   .metricStack {
@@ -739,6 +741,154 @@ img {
 
   .serviceDetailSection {
     padding-top: 54px;
+  }
+
+  .serviceIntro {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    padding: 22px 84px 28px;
+  }
+
+  .serviceIntroHeader {
+    margin-bottom: 14px;
+  }
+
+  .serviceIntroHeader h2,
+  .introReviewHeader h2 {
+    font-size: 38px;
+  }
+
+  .introProcessGrid {
+    gap: 16px;
+  }
+
+  .introProcessCard {
+    min-height: 158px;
+    grid-template-columns: 160px minmax(0, 1fr);
+    gap: 14px;
+    padding: 14px 22px;
+  }
+
+  .introProcessImage {
+    width: 148px;
+    height: 112px;
+  }
+
+  .introFeatureGrid {
+    margin-top: 16px;
+    gap: 18px;
+  }
+
+  .introFeaturePanel {
+    min-height: 216px;
+    padding: 26px 34px;
+  }
+
+  .introFeatureText h3 {
+    font-size: 29px;
+  }
+
+  .introFeatureText p {
+    margin-top: 14px;
+    font-size: 17px;
+    line-height: 1.58;
+  }
+
+  .introMetricGrid {
+    margin-top: 14px;
+    gap: 14px;
+  }
+
+  .introMetricCard {
+    min-height: 118px;
+    grid-template-columns: 76px minmax(0, 1fr);
+    gap: 14px;
+    padding: 16px 18px;
+  }
+
+  .introMetricImage {
+    width: 66px;
+    height: 66px;
+  }
+
+  .introMetricCard h3 {
+    font-size: 15px;
+  }
+
+  .metricValue {
+    font-size: 25px;
+  }
+
+  .metricValue.compact {
+    font-size: 23px;
+  }
+
+  .introMetricCard p,
+  .introDisclaimer {
+    font-size: 13px;
+    line-height: 1.42;
+  }
+
+  .introDisclaimer {
+    margin-top: 10px;
+    padding: 10px 14px;
+  }
+
+  .introReviewHeader {
+    margin: 18px 0 10px;
+  }
+
+  .introReviewCard {
+    min-height: 148px;
+    grid-template-columns: minmax(0, 1fr) 148px;
+    gap: 14px;
+    padding: 14px;
+  }
+
+  .reviewBadge {
+    min-height: 24px;
+    padding: 3px 12px;
+    font-size: 12px;
+  }
+
+  .reviewCopy p {
+    min-height: 48px;
+    margin: 10px 0 12px;
+    font-size: 15px;
+    line-height: 1.42;
+  }
+
+  .reviewResultBox {
+    padding: 12px;
+  }
+
+  .reviewResultBox strong {
+    font-size: 20px;
+  }
+
+  .reviewResultBox hr {
+    margin: 9px 0;
+  }
+
+  .ctaPanel {
+    min-height: 100vh;
+    margin-top: 0;
+    border-radius: 0;
+    padding: 92px 84px;
+  }
+
+  .ctaPanel h2 {
+    font-size: 56px;
+  }
+
+  .ctaPanel p {
+    max-width: 980px;
+    font-size: 20px;
+  }
+
+  .ctaPanel .primaryButton {
+    min-width: 360px;
   }
 }
 
@@ -1135,6 +1285,7 @@ img {
 
 .introProcessText {
   position: relative;
+  min-width: 0;
   padding-left: 48px;
 }
 
@@ -1164,6 +1315,10 @@ img {
 
 .introProcessText h3 {
   font-size: 25px;
+  line-height: 1.18;
+  white-space: nowrap;
+  word-break: keep-all;
+  overflow-wrap: normal;
 }
 
 .introProcessText p {
@@ -1414,6 +1569,35 @@ img {
   margin: 12px 0;
   border: 0;
   background: rgba(100, 116, 139, 0.24);
+}
+
+@media (max-width: 1760px) and (min-width: 1221px) {
+  .introProcessCard {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 14px;
+    min-height: 272px;
+    padding: 24px 26px;
+    text-align: center;
+  }
+
+  .introProcessImage {
+    width: 148px;
+    height: 114px;
+  }
+
+  .introProcessText {
+    padding-left: 0;
+  }
+
+  .introNumberBadge {
+    position: static;
+    margin: 0 auto 10px;
+  }
+
+  .introProcessText p {
+    max-width: 260px;
+  }
 }
 
 .solarFeedSection {
@@ -2926,7 +3110,7 @@ img {
   .heroSection::before {
     content: "";
     position: absolute;
-    top: 96px;
+    top: 0;
     right: 0;
     bottom: 0;
     left: 0;
@@ -2979,12 +3163,13 @@ img {
 
   .heroVisual {
     position: absolute;
-    top: 96px;
+    top: 0;
     right: 0;
+    bottom: 0;
     z-index: 1;
     width: 64%;
     max-width: none;
-    min-height: 406px;
+    min-height: 100%;
     opacity: 1;
     pointer-events: none;
   }
@@ -2996,8 +3181,8 @@ img {
   .heroImage,
   .heroVisual .imagePlaceholder {
     width: 100%;
-    height: 406px;
-    min-height: 406px;
+    height: 100%;
+    min-height: 100%;
     object-fit: cover;
     object-position: center;
   }
@@ -3007,10 +3192,10 @@ img {
     z-index: 4;
     width: calc(100% - 64px);
     max-width: none;
-    margin: 0 auto;
+    margin: 34px auto 0;
     align-items: stretch;
     flex-direction: column;
-    gap: 12px;
+    gap: 14px;
   }
 
   .primaryButton,
@@ -3211,7 +3396,6 @@ img {
   }
 
   .heroSection::before {
-    top: 82px;
     background:
       linear-gradient(90deg, #ffffff 0%, rgba(255, 255, 255, 0.99) 52%, rgba(255, 255, 255, 0.75) 70%, rgba(255, 255, 255, 0.04) 100%),
       linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, #ffffff 88%);
@@ -3241,17 +3425,22 @@ img {
   }
 
   .heroVisual {
-    top: 82px;
     right: 0;
+    bottom: 0;
     width: 46%;
-    min-height: 430px;
+    min-height: 100%;
   }
 
   .heroImage,
   .heroVisual .imagePlaceholder {
-    height: 430px;
-    min-height: 430px;
+    height: 100%;
+    min-height: 100%;
     object-position: 44% center;
+  }
+
+  .heroActions {
+    margin-top: 36px;
+    gap: 14px;
   }
 
   .heroActions,
@@ -3451,6 +3640,13 @@ img {
 
   .solarFeedCard h3 {
     font-size: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .introProcessText h3 {
+    font-size: 20px;
+    line-height: 1.22;
   }
 }
 
