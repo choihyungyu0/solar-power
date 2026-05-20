@@ -85,6 +85,13 @@
   box-shadow: 0 28px 60px rgba(15, 23, 42, 0.16);
 }
 
+.vworldMapShell.isSolarMode {
+  border-color: rgba(239, 68, 68, 0.72);
+  box-shadow:
+    0 28px 60px rgba(15, 23, 42, 0.16),
+    0 0 0 4px rgba(239, 68, 68, 0.14);
+}
+
 .vworldMapCanvas {
   width: 100%;
   height: 100%;
@@ -137,6 +144,109 @@
   color: #93a3b5;
 }
 
+.solarOverlayToggle {
+  min-width: 0;
+  border: 1px solid rgba(14, 116, 144, 0.22);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: rgba(240, 249, 255, 0.96);
+  color: #075985;
+  box-shadow: 0 16px 28px rgba(15, 23, 42, 0.12);
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.25;
+  pointer-events: auto;
+}
+
+.solarOverlayToggle.isActive {
+  background: linear-gradient(180deg, #0ea5e9 0%, #0369a1 100%);
+  color: #ffffff;
+  box-shadow: 0 16px 34px rgba(14, 116, 144, 0.28);
+}
+
+.solarSimulationOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.selectedRoofOverlay {
+  position: absolute;
+  left: 50%;
+  top: 47%;
+  width: clamp(220px, 31vw, 420px);
+  aspect-ratio: 1.9 / 1;
+  transform: translate(-50%, -50%) rotate(-8deg) skewX(-8deg);
+  border: 2px solid rgba(248, 113, 113, 0.98);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(248, 113, 113, 0.42), rgba(220, 38, 38, 0.2)),
+    rgba(254, 202, 202, 0.34);
+  box-shadow:
+    0 20px 60px rgba(127, 29, 29, 0.34),
+    0 0 0 6px rgba(239, 68, 68, 0.12),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+
+.panelGrid {
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: 7px;
+  padding: 18px;
+}
+
+.panelGrid span {
+  border: 1px solid rgba(191, 219, 254, 0.88);
+  border-radius: 4px;
+  background:
+    linear-gradient(90deg, rgba(15, 23, 42, 0.22) 1px, transparent 1px) 50% / 8px 100%,
+    linear-gradient(180deg, #1d4ed8 0%, #0f766e 100%);
+  box-shadow: 0 6px 12px rgba(8, 47, 73, 0.22);
+}
+
+.solarMapLabel {
+  position: absolute;
+  left: calc(50% + 118px);
+  top: calc(47% - 112px);
+  display: grid;
+  gap: 3px;
+  border: 1px solid rgba(239, 68, 68, 0.24);
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #991b1b;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.16);
+}
+
+.solarMapLabel strong {
+  color: #7f1d1d;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.solarMapLabel span {
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.solarMapDisclaimer {
+  position: absolute;
+  left: 50%;
+  top: calc(47% + 124px);
+  transform: translateX(-50%);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  max-width: min(520px, calc(100% - 48px));
+  text-align: center;
+}
+
 .riskLegend {
   position: absolute;
   left: 20px;
@@ -160,6 +270,46 @@
   color: #26364a;
   font-size: 13px;
   font-weight: 850;
+}
+
+.scenarioComparisonStrip {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  z-index: 4;
+  width: min(520px, calc(100% - 410px));
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  pointer-events: none;
+}
+
+.scenarioComparisonStrip div {
+  min-width: 0;
+  border: 1px solid rgba(201, 213, 225, 0.78);
+  border-radius: 16px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 16px 28px rgba(15, 23, 42, 0.1);
+}
+
+.scenarioComparisonStrip span,
+.scenarioComparisonStrip strong {
+  display: block;
+}
+
+.scenarioComparisonStrip span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.scenarioComparisonStrip strong {
+  margin-top: 3px;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 950;
+  line-height: 1.28;
 }
 
 .legendDot {
@@ -253,6 +403,33 @@
   font-weight: 950;
 }
 
+.riskPanelTabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 5px;
+  background: #f8fafc;
+}
+
+.riskPanelTabs button {
+  min-width: 0;
+  border-radius: 12px;
+  padding: 10px 6px;
+  background: transparent;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.riskPanelTabs button.isActive {
+  background: #ffffff;
+  color: #075bd8;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
 .buildingInfoList {
   display: grid;
   gap: 0;
@@ -311,6 +488,179 @@
   color: #40566e;
   font-size: 14px;
   font-weight: 650;
+}
+
+.simulationSummary,
+.policyReviewPanel,
+.geometryStatusBox {
+  margin-top: 18px;
+  border: 1px solid rgba(20, 120, 255, 0.16);
+  border-radius: 18px;
+  padding: 16px;
+  background: #f1f7ff;
+}
+
+.simulationSummary span {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: #dbeafe;
+  color: #075bd8;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.simulationSummary strong,
+.policyReviewPanel h3,
+.policyReviewPanel strong {
+  display: block;
+  margin-top: 8px;
+  color: #0f3f88;
+  font-size: 16px;
+  font-weight: 950;
+  letter-spacing: 0;
+}
+
+.simulationSummary p,
+.policyReviewPanel p,
+.policyReviewPanel li {
+  color: #40566e;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.58;
+}
+
+.simulationSummary p,
+.policyReviewPanel p {
+  margin: 8px 0 0;
+}
+
+.policyReviewPanel h3 {
+  margin: 0;
+}
+
+.policyReviewPanel strong {
+  color: #075985;
+}
+
+.policyReviewPanel ul {
+  display: grid;
+  gap: 7px;
+  margin: 12px 0 0;
+  padding-left: 18px;
+}
+
+.solarInfoList {
+  margin-top: 10px;
+}
+
+.geometryStatusBox {
+  display: grid;
+  gap: 10px;
+  background: #ffffff;
+}
+
+.geometryStatusBox div {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.8fr) minmax(0, 1.2fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.geometryStatusBox span {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.geometryStatusBox strong {
+  min-width: 0;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 900;
+  word-break: keep-all;
+}
+
+.geometryStatusBox p,
+.assumptionNote {
+  margin: 0;
+  color: #5b6b7d;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.55;
+}
+
+.devDiagnosticsPanel {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  border: 1px dashed rgba(100, 116, 139, 0.42);
+  border-radius: 14px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.devDiagnosticsPanel > strong {
+  color: #334155;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.devDiagnosticsPanel dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.devDiagnosticsPanel div {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.72fr) minmax(0, 1.28fr);
+  gap: 8px;
+}
+
+.devDiagnosticsPanel dt,
+.devDiagnosticsPanel dd {
+  min-width: 0;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.devDiagnosticsPanel dt {
+  color: #64748b;
+  font-weight: 850;
+}
+
+.devDiagnosticsPanel dd {
+  color: #0f172a;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.assumptionNote {
+  margin-top: 14px;
+}
+
+.panelToggleRow {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 0 14px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.panelToggleRow input {
+  width: 44px;
+  height: 24px;
+  accent-color: #0ea5e9;
 }
 
 .riskAnalysisButton {
@@ -381,8 +731,33 @@
   .riskLegend {
     left: 14px;
     right: 14px;
-    bottom: 14px;
+    bottom: 88px;
     border-radius: 18px;
+  }
+
+  .scenarioComparisonStrip {
+    left: 14px;
+    right: 14px;
+    bottom: 14px;
+    width: auto;
+    grid-template-columns: 1fr;
+  }
+
+  .selectedRoofOverlay {
+    top: 55%;
+    width: min(300px, 74vw);
+  }
+
+  .solarMapLabel {
+    left: 50%;
+    top: calc(55% - 116px);
+    transform: translateX(-50%);
+  }
+
+  .solarMapDisclaimer {
+    top: calc(55% + 112px);
+    border-radius: 16px;
+    white-space: normal;
   }
 
   .riskInfoPanel {
@@ -397,5 +772,10 @@
   .buildingInfoList div {
     grid-template-columns: 1fr;
     gap: 5px;
+  }
+
+  .geometryStatusBox div {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 }

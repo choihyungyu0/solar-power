@@ -84,6 +84,30 @@ http://localhost:5173
 VITE_API_BASE_URL=http://localhost:8000
 ```
 
+### VWorld 지도/공간정보 프록시 로컬 테스트
+
+`npm.cmd run dev`는 Vite 개발 서버만 5173 포트에서 실행하므로 `apps/web/api/*` Vercel Function은 함께 뜨지 않습니다.
+`/api/vworld-feature`까지 로컬에서 확인하려면 아래처럼 Vercel dev 서버로 실행하세요.
+
+```powershell
+cd apps\web
+npx vercel dev
+```
+
+그 다음 아래 주소로 접속합니다.
+
+```txt
+http://localhost:3000/risk-map
+```
+
+로컬 테스트 시 `apps/web/.env.local` 또는 Vercel 로컬 환경에 아래 값을 설정합니다.
+
+```env
+VITE_VWORLD_BUILDING_DATA_ID=LP_PA_CBND_BUBUN
+VWORLD_API_KEY=your_server_side_vworld_key
+VWORLD_DOMAIN=http://localhost:5173
+```
+
 ---
 
 ## 3. GitHub 레포 연결/초기 커밋

@@ -13,13 +13,27 @@ declare global {
   type VWorldClickHandler = (...args: unknown[]) => void;
 
   type VWorldMapInstance = {
+    addElement?: (object: unknown) => void;
+    createMarker?: (id: string, position: unknown, title: string) => unknown;
+    flyTo?: (position: unknown) => void;
+    getCurrentPosition?: () => unknown;
+    lookat?: {
+      moveTo?: (position: unknown) => void;
+    };
+    moveCamera?: (position: unknown) => void;
+    moveTo?: (position: unknown) => void;
+    setCameraPosition?: (position: unknown) => void;
     setOption?: (options: VWorldMapOptions) => void;
+    setPosition?: (position: unknown) => void;
     setMapId?: (mapId: string) => void;
     setInitPosition?: (position: VWorldCameraPosition) => void;
     setLogoVisible?: (visible: boolean) => void;
     setNavigationZoomVisible?: (visible: boolean) => void;
     start?: () => void;
     destroy?: () => void;
+    removeLayerElement?: (id: string) => void;
+    removeObject?: (object: unknown) => void;
+    removeObjectById?: (id: string) => void;
     onClick?: {
       addEventListener?: (handler: VWorldClickHandler) => void;
       removeEventListener?: (handler: VWorldClickHandler) => void;
@@ -40,6 +54,7 @@ declare global {
       initPosition: VWorldCameraPosition,
     ) => VWorldMapOptions;
     CameraPosition: new (coord: unknown, direction: unknown) => VWorldCameraPosition;
+    Coord: new (longitude: number, latitude: number) => unknown;
     CoordZ: new (longitude: number, latitude: number, height: number) => unknown;
     Direction: new (heading: number, pitch: number, roll: number) => unknown;
     BasemapType?: {
@@ -61,13 +76,19 @@ declare global {
         EMPTY?: unknown;
       };
     };
+    geom?: any;
+    layer?: any;
+    style?: any;
+    Feature?: any;
   };
 
   interface Window {
-    vw?: VWorldSdk;
+    $?: any;
+    jQuery?: any;
+    vw?: any;
     Cesium?: unknown;
-    ws3d?: unknown;
-    VW?: unknown;
-    __solarMateMapDiagnostics?: import('../lib/loadVWorldScript').VWorldLoadDiagnostics;
+    ws3d?: any;
+    VW?: any;
+    __solarMateMapDiagnostics?: any;
   }
 }
