@@ -1,4 +1,5 @@
 const VWORLD_SCRIPT_ID = 'vworld-3d-sdk-script';
+const DEFAULT_VWORLD_3D_VERSION = '3.0';
 
 let vworldScriptPromise: Promise<void> | null = null;
 
@@ -22,25 +23,37 @@ function getRequiredEnv(name: 'VITE_VWORLD_API_KEY' | 'VITE_VWORLD_3D_SDK_URL') 
   const value = import.meta.env[name]?.trim();
 
   if (!value) {
-    throw new Error(`${name} 환경변수가 필요합니다.`);
+    if (name === 'VITE_VWORLD_API_KEY') {
+      throw new Error(
+        'VITE_VWORLD_API_KEY가 비어 있습니다. 브이월드 개발키를 apps/web/.env.local과 Vercel Environment Variables에 설정해주세요.',
+      );
+    }
+
+    throw new Error(
+      'VITE_VWORLD_3D_SDK_URL이 비어 있습니다. 예: https://map.vworld.kr/js/webglMapInit.js.do 처럼 쿼리 없는 SDK 기본 URL을 설정해주세요.',
+    );
   }
 
   return value;
 }
 
-function buildVWorldSdkUrl(sdkUrl: string, apiKey: string) {
-  const encodedApiKey = encodeURIComponent(apiKey);
-  const placeholderPattern = /\{apiKey\}|\{apikey\}|\[apiKey\]|\[apikey\]|\[인증키\]/i;
+function getVWorld3DVersion() {
+  return import.meta.env.VITE_VWORLD_3D_VERSION?.trim() || DEFAULT_VWORLD_3D_VERSION;
+}
 
-  if (placeholderPattern.test(sdkUrl)) {
-    return sdkUrl.replace(/\{apiKey\}|\{apikey\}|\[apiKey\]|\[apikey\]|\[인증키\]/gi, encodedApiKey);
+function buildVWorldSdkUrl(sdkUrl: string, apiKey: string, version: string) {
+  let url: URL;
+
+  try {
+    url = new URL(sdkUrl);
+  } catch {
+    throw new Error(
+      'VITE_VWORLD_3D_SDK_URL은 절대 URL이어야 합니다. 예: https://map.vworld.kr/js/webglMapInit.js.do 처럼 설정하고 ?version=3.0은 넣지 마세요.',
+    );
   }
 
-  const url = new URL(sdkUrl, window.location.origin);
-
-  if (!url.searchParams.has('apiKey')) {
-    url.searchParams.set('apiKey', apiKey);
-  }
+  url.searchParams.set('version', version);
+  url.searchParams.set('apiKey', apiKey);
 
   return url.toString();
 }
@@ -75,18 +88,23 @@ export function loadVWorldScript() {
 
     const handleError = () => {
       vworldScriptPromise = null;
-      reject(new Error('브이월드 3D 지도 스크립트를 불러오지 못했습니다.'));
+      reject(
+        new Error(
+          '브이월드 3D SDK 스크립트 로드에 실패했습니다. VITE_VWORLD_3D_SDK_URL, VITE_VWORLD_3D_VERSION, Vercel 허용 도메인 등록 상태를 확인해주세요.',
+        ),
+      );
     };
 
     if (!script) {
       const apiKey = getRequiredEnv('VITE_VWORLD_API_KEY');
       const sdkUrl = getRequiredEnv('VITE_VWORLD_3D_SDK_URL');
+      const version = getVWorld3DVersion();
 
       script = document.createElement('script');
       script.id = VWORLD_SCRIPT_ID;
       script.async = true;
       script.defer = true;
-      script.src = buildVWorldSdkUrl(sdkUrl, apiKey);
+      script.src = buildVWorldSdkUrl(sdkUrl, apiKey, version);
     }
 
     script.addEventListener('load', handleLoad, { once: true });
