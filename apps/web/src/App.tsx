@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import SafeLocalImage from './components/SafeLocalImage';
 import SolarFeedSection from './components/SolarFeedSection';
 import ServiceIntroSection from './components/ServiceIntroSection';
+import RiskMapPage from './pages/RiskMapPage';
 
 const heroMetrics = [
   {
@@ -29,8 +30,8 @@ const heroMetrics = [
 
 const featureCards = [
   {
-    title: '가상설치 시뮬레이션',
-    description: '우리 아파트에 맞는 최적의 태양광 시스템을 3D로 가상 설치하고 발전량과 절감액을 확인하세요.',
+    title: '전기세 위험 3D 지도',
+    description: '브이월드 3D 지도에서 건물을 선택하고 전기세 상승 위험과 태양광 대응 여지를 먼저 확인하세요.',
     image: '/assets/landing/apartment-isometric.png',
     alt: '태양광 패널이 설치된 아파트 아이콘',
   },
@@ -49,6 +50,9 @@ const featureCards = [
 ];
 
 function App() {
+  const pathname = window.location.pathname.replace(/\/$/, '') || '/';
+  const isRiskMapPage = pathname === '/risk-map';
+
   useEffect(() => {
     if (!window.location.hash) {
       return;
@@ -58,6 +62,10 @@ function App() {
       document.querySelector(window.location.hash)?.scrollIntoView();
     });
   }, []);
+
+  if (isRiskMapPage) {
+    return <RiskMapPage />;
+  }
 
   return (
     <main className="pageShell">
@@ -73,9 +81,9 @@ function App() {
 
           <nav className="desktopNav" aria-label="주요 메뉴">
             <a href="#service-intro">서비스 소개</a>
-            <a href="#service-intro-status">분석 현황</a>
-            <a href="#solar-feed">솔라피드</a>
-            <a href="#service-intro-process">이용 방법</a>
+            <a href="/risk-map">전기세 위험 진단</a>
+            <a href="#service-intro-status">절감 시나리오</a>
+            <a href="#solar-feed">정책 지원</a>
             <a href="#contact">고객센터</a>
           </nav>
 
@@ -83,8 +91,8 @@ function App() {
             <button className="loginButton" type="button">
               로그인
             </button>
-            <a className="primaryButton headerCta" href="#service-intro">
-              시뮬레이션 시작
+            <a className="primaryButton headerCta" href="/risk-map">
+              무료 진단 시작
             </a>
           </div>
         </header>
@@ -93,14 +101,14 @@ function App() {
           <div className="heroCopy">
             <span className="eyebrow">Apartment Solar MVP</span>
             <h1 id="hero-title">
-              우리 아파트 태양광
+              우리 아파트 전기세 위험
               <br />
-              더 쉽게 시작하세요
+              먼저 지도에서 확인하세요
             </h1>
             <p className="heroDescription">
-              주소만 입력하면 예상 절감액, 보조금,
+              3D 지도에서 건물을 선택하면 전기세 상승 위험,
               <br />
-              회수기간을 한 번에 확인합니다.
+              태양광 절감 시나리오, 정책 지원 가능성을 함께 봅니다.
             </p>
             <p className="disclaimer">
               ※ 시뮬레이션 결과는 건축물 정보, 일사량,
@@ -108,11 +116,11 @@ function App() {
               전기사용량, 정책 데이터 기준의 예상값입니다.
             </p>
             <div className="heroActions">
-              <a className="primaryButton" href="#service-intro">
-                우리 아파트 가능성 확인하기
+              <a className="primaryButton" href="/risk-map">
+                3D 지도에서 확인하기
               </a>
-              <a className="secondaryButton" href="#service-intro">
-                무료 맞춤 리포트 보기
+              <a className="secondaryButton" href="#service-intro-status">
+                절감 시나리오 보기
               </a>
             </div>
           </div>

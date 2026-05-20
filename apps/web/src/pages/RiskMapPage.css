@@ -1,0 +1,401 @@
+.riskMapPage {
+  min-height: 100vh;
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at 8% 12%, rgba(39, 160, 255, 0.16), transparent 32%),
+    linear-gradient(180deg, #f7fbff 0%, #eef5fb 100%);
+  color: #102033;
+}
+
+.riskMapHeader {
+  min-height: 86px;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.08);
+}
+
+.riskMapHeader .primaryButton {
+  background: linear-gradient(180deg, #1478ff 0%, #075bd8 100%);
+  color: #ffffff;
+  box-shadow: 0 14px 28px rgba(20, 120, 255, 0.24);
+}
+
+.riskMapIntro {
+  width: min(100%, 1600px);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 28px;
+  align-items: end;
+  padding: 28px 34px 20px;
+}
+
+.riskMapEyebrow {
+  width: fit-content;
+  border: 1px solid rgba(20, 120, 255, 0.2);
+  border-radius: 999px;
+  padding: 9px 15px;
+  background: #ffffff;
+  color: #075bd8;
+  font-size: 14px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.riskMapIntro h1 {
+  margin: 0;
+  color: #0f172a;
+  font-size: clamp(32px, 4vw, 52px);
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+.riskMapIntro p {
+  max-width: 760px;
+  margin: 12px 0 0;
+  color: #506175;
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.riskMapWorkspace {
+  width: min(100%, 1600px);
+  min-height: max(640px, calc(100vh - 170px));
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 7.3fr) minmax(340px, 2.7fr);
+  gap: 22px;
+  padding: 0 34px 34px;
+}
+
+.riskMapCanvasColumn,
+.vworldMapShell,
+.vworldMapCanvas {
+  min-width: 0;
+}
+
+.vworldMapShell {
+  position: relative;
+  min-height: 640px;
+  height: calc(100vh - 180px);
+  overflow: hidden;
+  border: 1px solid rgba(122, 144, 166, 0.26);
+  border-radius: 22px;
+  background:
+    linear-gradient(135deg, rgba(20, 120, 255, 0.12), rgba(255, 255, 255, 0.12)),
+    #dbeafe;
+  box-shadow: 0 28px 60px rgba(15, 23, 42, 0.16);
+}
+
+.vworldMapCanvas {
+  width: 100%;
+  height: 100%;
+}
+
+.mapControlOverlay {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  right: 20px;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: minmax(220px, 1.3fr) minmax(150px, 0.7fr) minmax(150px, 0.7fr);
+  gap: 12px;
+  pointer-events: none;
+}
+
+.mapControlOverlay label {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  border: 1px solid rgba(201, 213, 225, 0.86);
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 16px 28px rgba(15, 23, 42, 0.12);
+  pointer-events: auto;
+}
+
+.mapControlOverlay span {
+  color: #526377;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.mapControlOverlay input,
+.mapControlOverlay select {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #0f172a;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 800;
+  outline: 0;
+}
+
+.mapControlOverlay input::placeholder {
+  color: #93a3b5;
+}
+
+.riskLegend {
+  position: absolute;
+  left: 20px;
+  bottom: 20px;
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  max-width: calc(100% - 40px);
+  border: 1px solid rgba(201, 213, 225, 0.86);
+  border-radius: 999px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 16px 28px rgba(15, 23, 42, 0.12);
+}
+
+.riskLegend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #26364a;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.legendDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.legendDot-low {
+  background: #22c55e;
+}
+
+.legendDot-medium {
+  background: #facc15;
+}
+
+.legendDot-high {
+  background: #fb923c;
+}
+
+.legendDot-critical {
+  background: #ef4444;
+}
+
+.mapStateOverlay {
+  position: absolute;
+  inset: 50%;
+  z-index: 5;
+  width: min(420px, calc(100% - 40px));
+  height: fit-content;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(201, 213, 225, 0.82);
+  border-radius: 18px;
+  padding: 18px 20px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #0f172a;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
+  font-weight: 850;
+  text-align: center;
+}
+
+.mapStateOverlayError {
+  border-color: rgba(239, 68, 68, 0.28);
+  color: #b91c1c;
+}
+
+.riskInfoPanel {
+  position: sticky;
+  top: 106px;
+  align-self: start;
+  max-height: calc(100vh - 126px);
+  overflow: auto;
+  border: 1px solid rgba(199, 213, 229, 0.85);
+  border-radius: 22px;
+  padding: 24px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 24px 52px rgba(15, 23, 42, 0.12);
+}
+
+.riskInfoHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #e6edf5;
+}
+
+.riskInfoHeader span {
+  display: block;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.riskInfoHeader h2 {
+  margin: 5px 0 0;
+  color: #0f172a;
+  font-size: 26px;
+  line-height: 1.16;
+  letter-spacing: 0;
+}
+
+.riskInfoHeader strong {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 9px 12px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.buildingInfoList {
+  display: grid;
+  gap: 0;
+  margin: 18px 0 0;
+}
+
+.buildingInfoList div {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.9fr) minmax(0, 1.1fr);
+  gap: 14px;
+  padding: 13px 0;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.buildingInfoList dt {
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.buildingInfoList dd {
+  min-width: 0;
+  margin: 0;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 850;
+  word-break: keep-all;
+}
+
+.selectionNote,
+.riskDisclaimer,
+.analysisStatus {
+  margin: 16px 0 0;
+  color: #5b6b7d;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.riskScenarioBox {
+  margin-top: 18px;
+  border: 1px solid rgba(20, 120, 255, 0.16);
+  border-radius: 18px;
+  padding: 16px;
+  background: #f1f7ff;
+}
+
+.riskScenarioBox h3 {
+  margin: 0;
+  color: #0f3f88;
+  font-size: 16px;
+  letter-spacing: 0;
+}
+
+.riskScenarioBox p {
+  margin: 8px 0 0;
+  color: #40566e;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.riskAnalysisButton {
+  width: 100%;
+  min-height: 58px;
+  margin-top: 20px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #1478ff 0%, #075bd8 100%);
+  color: #ffffff;
+  box-shadow: 0 16px 30px rgba(20, 120, 255, 0.24);
+  font-size: 17px;
+  font-weight: 950;
+}
+
+.riskDisclaimer {
+  border-top: 1px solid #e6edf5;
+  padding-top: 16px;
+  line-height: 1.65;
+}
+
+@media (max-width: 1100px) {
+  .riskMapIntro {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .riskMapWorkspace {
+    grid-template-columns: 1fr;
+  }
+
+  .riskInfoPanel {
+    position: static;
+    max-height: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .riskMapIntro {
+    padding: 24px 18px 16px;
+  }
+
+  .riskMapIntro h1 {
+    font-size: 34px;
+  }
+
+  .riskMapIntro p {
+    font-size: 16px;
+  }
+
+  .riskMapWorkspace {
+    min-height: 0;
+    padding: 0 18px 28px;
+  }
+
+  .vworldMapShell {
+    min-height: 520px;
+    height: 64vh;
+    border-radius: 18px;
+  }
+
+  .mapControlOverlay {
+    grid-template-columns: 1fr;
+    top: 14px;
+    left: 14px;
+    right: 14px;
+  }
+
+  .riskLegend {
+    left: 14px;
+    right: 14px;
+    bottom: 14px;
+    border-radius: 18px;
+  }
+
+  .riskInfoPanel {
+    border-radius: 18px;
+    padding: 20px;
+  }
+
+  .riskInfoHeader {
+    display: grid;
+  }
+
+  .buildingInfoList div {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+}
