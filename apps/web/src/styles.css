@@ -1062,7 +1062,7 @@ img {
   background:
     linear-gradient(180deg, #ffffff 0%, #f1f7ff 50%, #ffffff 100%);
   color: #111827;
-  padding: 34px 84px 0;
+  padding: 34px 84px 54px;
 }
 
 .serviceIntroInner {
@@ -1075,8 +1075,7 @@ img {
 }
 
 .serviceIntroHeader h2,
-.introReviewHeader h2,
-.solarFeedPreview h2 {
+.introReviewHeader h2 {
   margin: 0;
   color: #05070b;
   font-size: clamp(28px, 3vw, 42px);
@@ -1088,8 +1087,7 @@ img {
 }
 
 .serviceIntroHeader p,
-.introReviewHeader p,
-.solarFeedPreview p {
+.introReviewHeader p {
   margin: 8px 0 0;
   color: #374151;
   font-size: 17px;
@@ -1409,52 +1407,32 @@ img {
   background: rgba(100, 116, 139, 0.24);
 }
 
-.solarFeedPreview {
-  margin-top: 18px;
-  min-height: 128px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 22px 34px;
-  background: linear-gradient(180deg, #eaf5ff 0%, #ffffff 100%);
-  border-top: 1px solid #dce9f7;
-}
-
-.solarFeedTabs {
-  display: flex;
-  gap: 8px;
-  padding: 8px;
-  border-radius: 18px;
-  background: #ffffff;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
-}
-
-.solarFeedTabs button {
-  min-height: 42px;
-  padding: 0 24px;
-  border: 1px solid transparent;
-  border-radius: 12px;
-  background: transparent;
-  color: #334155;
-  font-weight: 900;
-}
-
-.solarFeedTabs button.active {
-  border-color: #bdd7ff;
-  background: #eaf3ff;
-  color: #1268ca;
-}
-
 .solarFeedSection {
-  background: #ffffff;
+  position: relative;
+  overflow: hidden;
+  border-top: 1px solid #d7eeb9;
+  background:
+    linear-gradient(180deg, #d8f4b8 0%, #e4f8ca 18%, #eefbdc 36%, #f7ffef 58%, #ffffff 82%),
+    linear-gradient(135deg, rgba(187, 247, 208, 0.55) 0%, rgba(240, 253, 244, 0.34) 48%, transparent 78%);
   color: #111827;
 }
 
+.solarFeedSection::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(132, 204, 22, 0.18) 0%, rgba(163, 230, 53, 0.12) 24%, rgba(187, 247, 208, 0.07) 48%, transparent 72%),
+    linear-gradient(90deg, rgba(132, 204, 22, 0.08), rgba(74, 222, 128, 0.05), transparent 74%);
+  pointer-events: none;
+}
+
 .solarFeedInner {
+  position: relative;
+  z-index: 1;
   width: min(1440px, calc(100% - 96px));
   margin: 0 auto;
-  padding: 52px 0 22px;
+  padding: 66px 0 22px;
 }
 
 .solarFeedTop {
@@ -1997,7 +1975,7 @@ img {
 
 @media (max-width: 760px) {
   .serviceIntro {
-    padding: 28px 18px 0;
+    padding: 28px 18px 42px;
   }
 
   .introProcessCard {
@@ -2038,11 +2016,6 @@ img {
     grid-template-columns: 1fr;
   }
 
-  .solarFeedPreview,
-  .solarFeedTabs {
-    align-items: stretch;
-    flex-direction: column;
-  }
 }
 
 @media (max-width: 1220px) {
@@ -2253,7 +2226,7 @@ img {
   }
 
   .serviceIntro {
-    padding: 28px 18px 0;
+    padding: 28px 18px 42px;
     background: #ffffff;
   }
 
@@ -2432,10 +2405,6 @@ img {
     text-align: center;
   }
 
-  .solarFeedPreview {
-    display: none;
-  }
-
   .solarFeedInner,
   .solarFooterInner,
   .solarFooterBottom {
@@ -2443,7 +2412,7 @@ img {
   }
 
   .solarFeedInner {
-    padding: 34px 0 18px;
+    padding: 44px 0 18px;
   }
 
   .solarFeedTop {
@@ -2799,7 +2768,6 @@ img {
 .sectionHeading h2,
 .serviceIntroHeader h2,
 .introReviewHeader h2,
-.solarFeedPreview h2,
 .solarFeedIntro h2,
 .feedPanel h2,
 .noticePanel h2,
@@ -2823,7 +2791,6 @@ img {
 .loginButton,
 .primaryButton,
 .secondaryButton,
-.solarFeedTabs button,
 .solarFeedIntro button,
 .noticePanel button,
 .faqRows button,
@@ -2840,7 +2807,6 @@ img {
 .ctaPanel p,
 .serviceIntroHeader p,
 .introReviewHeader p,
-.solarFeedPreview p,
 .introProcessText p,
 .introFeatureText p,
 .solarFeedIntro p,
@@ -3145,7 +3111,7 @@ img {
 
   .serviceIntro {
     margin-top: 30px;
-    padding: 34px 24px 0;
+    padding: 34px 24px 46px;
     background: linear-gradient(180deg, #eef7ff 0%, #ffffff 42%);
   }
 
@@ -3353,7 +3319,7 @@ img {
   }
 
   .serviceIntro {
-    padding: 30px 18px 0;
+    padding: 30px 18px 42px;
   }
 
   .serviceIntroHeader h2 {

@@ -209,19 +209,6 @@ function ServiceIntroSection() {
             </article>
           ))}
         </div>
-
-        <div className="solarFeedPreview" id="solar-feed-preview">
-          <div>
-            <h2>솔라피드</h2>
-            <p>태양광 보조금과 예산 소진 현황을 한눈에 확인하세요.</p>
-          </div>
-          <div className="solarFeedTabs" aria-label="솔라피드 미리보기 탭">
-            <button type="button" className="active">
-              보조금 공고
-            </button>
-            <button type="button">예산 소진 현황</button>
-          </div>
-        </div>
       </div>
     </section>
   );
