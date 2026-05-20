@@ -16,6 +16,7 @@ type MetricCard = {
   image: string;
   alt: string;
   tone: 'blue' | 'green' | 'purple' | 'orange';
+  compactValue?: boolean;
 };
 
 type ReviewCard = {
@@ -68,6 +69,7 @@ const metricCards: MetricCard[] = [
     image: '/assets/landing/intro-savings.png',
     alt: '동전 더미 아이콘',
     tone: 'green',
+    compactValue: true,
   },
   {
     title: '보조금 조건 매칭 항목',
@@ -175,7 +177,7 @@ function ServiceIntroSection() {
               <SafeLocalImage src={metric.image} alt={metric.alt} className="introMetricImage" />
               <div>
                 <h3>{metric.title}</h3>
-                <strong className={`metricValue ${metric.tone}`}>{metric.value}</strong>
+                <strong className={`metricValue ${metric.tone}${metric.compactValue ? ' compact' : ''}`}>{metric.value}</strong>
                 <p>{metric.description}</p>
               </div>
             </article>
