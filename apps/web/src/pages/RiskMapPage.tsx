@@ -55,6 +55,9 @@ const buildingFields = [
 
 function RiskMapPage() {
   const [mapStatus, setMapStatus] = useState<MapLoadStatus>('loading');
+  const [mapErrorMessage, setMapErrorMessage] = useState(
+    '브이월드 3D 지도 로드에 실패했습니다. API 키, SDK URL, 허용 도메인을 확인해주세요.',
+  );
   const [selectedBuilding, setSelectedBuilding] = useState<SelectedBuilding>(demoBuilding);
   const [analysisStatus, setAnalysisStatus] = useState('');
 
@@ -76,6 +79,7 @@ function RiskMapPage() {
     let controller: VWorldMapController | null = null;
 
     setMapStatus('loading');
+    setMapErrorMessage('브이월드 3D 지도 로드에 실패했습니다. API 키, SDK URL, 허용 도메인을 확인해주세요.');
 
     loadVWorldScript()
       .then(() => {
@@ -89,8 +93,13 @@ function RiskMapPage() {
         });
         setMapStatus('ready');
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (isMounted) {
+          setMapErrorMessage(
+            error instanceof Error
+              ? error.message
+              : '브이월드 3D 지도 로드에 실패했습니다. API 키, SDK URL, 허용 도메인을 확인해주세요.',
+          );
           setMapStatus('error');
         }
       });
@@ -181,7 +190,7 @@ function RiskMapPage() {
 
             {mapStatus === 'error' && (
               <div className="mapStateOverlay mapStateOverlayError" role="alert">
-                브이월드 3D 지도 로드에 실패했습니다. API 키, SDK URL, 허용 도메인을 확인해주세요.
+                {mapErrorMessage}
               </div>
             )}
 

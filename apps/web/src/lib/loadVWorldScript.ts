@@ -1,12 +1,47 @@
 const VWORLD_SCRIPT_ID = 'vworld-3d-sdk-script';
 const DEFAULT_VWORLD_3D_VERSION = '3.0';
+const VWORLD_ENGINE_LOAD_FAILURE_MESSAGE =
+  '브이월드 인증은 통과했지만 3D 엔진 스크립트 로드에 실패했습니다. WSViewerStartup, VWViewerStartup, vw.ol3WebGL 요청을 확인해주세요.';
+const VWORLD_ENGINE_SCRIPT_DEFINITIONS = [
+  {
+    id: 'vworld-wsviewer-startup',
+    path: '/js/ws3dmap/WS3DRelease3/WSViewerStartup.js',
+    statusKey: 'wsViewerStartupLoaded',
+  },
+  {
+    id: 'vworld-vwviewer-startup',
+    path: '/js/ws3dmap/WS3DRelease3/VWViewerStartup.v30.min.js?ver=2024061902',
+    statusKey: 'vwViewerStartupLoaded',
+  },
+  {
+    id: 'vworld-ol3-webgl',
+    path: '/js/ws3dmap/WS3DRelease3/vw.ol3WebGL.v30.js?ver=2024061902',
+    statusKey: 'ol3WebglLoaded',
+  },
+] as const;
 
 let vworldScriptPromise: Promise<void> | null = null;
+const scriptLoadPromises = new Map<string, Promise<void>>();
 
 export type VWorldSelection = {
   longitude?: number;
   latitude?: number;
   rawEvent?: unknown;
+};
+
+export type VWorldLoadDiagnostics = {
+  bootstrapLoaded: boolean;
+  wsViewerStartupLoaded: boolean;
+  vwViewerStartupLoaded: boolean;
+  ol3WebglLoaded: boolean;
+  detectedGlobals: {
+    vw: boolean;
+    vwOl3: boolean;
+    vwOl3Map: boolean;
+    ws3d: boolean;
+    VW: boolean;
+    vwRelatedWindowKeys: string[];
+  };
 };
 
 export type VWorldMapController = {
@@ -18,6 +53,18 @@ type InitVWorld3DMapParams = {
   mapId: string;
   onSelect?: (selection: VWorldSelection) => void;
 };
+
+type VWorldLoadStatus = Omit<VWorldLoadDiagnostics, 'detectedGlobals'>;
+
+class VWorldScriptLoadError extends Error {
+  diagnostics: VWorldLoadDiagnostics;
+
+  constructor(message: string, diagnostics: VWorldLoadDiagnostics) {
+    super(message);
+    this.name = 'VWorldScriptLoadError';
+    this.diagnostics = diagnostics;
+  }
+}
 
 function getRequiredEnv(name: 'VITE_VWORLD_API_KEY' | 'VITE_VWORLD_3D_SDK_URL') {
   const value = import.meta.env[name]?.trim();
@@ -41,31 +88,169 @@ function getVWorld3DVersion() {
   return import.meta.env.VITE_VWORLD_3D_VERSION?.trim() || DEFAULT_VWORLD_3D_VERSION;
 }
 
-function buildVWorldSdkUrl(sdkUrl: string, apiKey: string, version: string) {
-  let url: URL;
-
+function createUrlFromSdkUrl(sdkUrl: string) {
   try {
-    url = new URL(sdkUrl);
+    return new URL(sdkUrl);
   } catch {
     throw new Error(
       'VITE_VWORLD_3D_SDK_URL은 절대 URL이어야 합니다. 예: https://map.vworld.kr/js/webglMapInit.js.do 처럼 설정하고 ?version=3.0은 넣지 마세요.',
     );
   }
+}
 
+function buildVWorldSdkUrl(sdkUrl: string, apiKey: string, version: string) {
+  const url = createUrlFromSdkUrl(sdkUrl);
   url.searchParams.set('version', version);
   url.searchParams.set('apiKey', apiKey);
 
   return url.toString();
 }
 
-function assertVWorldReady() {
-  if (!window.vw?.Map) {
-    throw new Error('브이월드 SDK가 로드되었지만 window.vw.Map을 찾을 수 없습니다.');
+function getVWorldBaseUrl(sdkUrl: string) {
+  return createUrlFromSdkUrl(sdkUrl).origin;
+}
+
+function hasExpectedVWorldGlobal() {
+  return Boolean(window.vw?.ol3?.Map || window.vw || window.ws3d || window.VW);
+}
+
+function createVWorldDiagnostics(status: VWorldLoadStatus): VWorldLoadDiagnostics {
+  return {
+    ...status,
+    detectedGlobals: {
+      vw: Boolean(window.vw),
+      vwOl3: Boolean(window.vw?.ol3),
+      vwOl3Map: Boolean(window.vw?.ol3?.Map),
+      ws3d: Boolean(window.ws3d),
+      VW: Boolean(window.VW),
+      vwRelatedWindowKeys: Object.keys(window)
+        .filter((key) => key.toLowerCase().includes('vw'))
+        .sort(),
+    },
+  };
+}
+
+function updateVWorldDiagnostics(status: VWorldLoadStatus) {
+  const diagnostics = createVWorldDiagnostics(status);
+  window.__solarMateMapDiagnostics = diagnostics;
+
+  return diagnostics;
+}
+
+function findExistingScript(id: string, src: string) {
+  const normalizedSrc = new URL(src).toString();
+  const byId = document.getElementById(id) as HTMLScriptElement | null;
+
+  if (byId) {
+    return byId;
   }
+
+  return Array.from(document.scripts).find((script) => script.src === normalizedSrc) ?? null;
+}
+
+function loadScriptOnce(id: string, src: string): Promise<void> {
+  const existingPromise = scriptLoadPromises.get(id) ?? scriptLoadPromises.get(src);
+
+  if (existingPromise) {
+    return existingPromise;
+  }
+
+  const promise = new Promise<void>((resolve, reject) => {
+    const existing = findExistingScript(id, src);
+
+    if (existing) {
+      resolve();
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = id;
+    script.src = src;
+    script.async = false;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error(`${id} failed to load`));
+    document.head.appendChild(script);
+  }).catch((error: unknown) => {
+    scriptLoadPromises.delete(id);
+    scriptLoadPromises.delete(src);
+    throw error;
+  });
+
+  scriptLoadPromises.set(id, promise);
+  scriptLoadPromises.set(src, promise);
+
+  return promise;
+}
+
+function loadBootstrapScript(src: string) {
+  const originalWrite = document.write;
+  const originalWriteln = document.writeln;
+
+  document.write = ((..._text: string[]) => undefined) as typeof document.write;
+  document.writeln = ((..._text: string[]) => undefined) as typeof document.writeln;
+
+  return loadScriptOnce(VWORLD_SCRIPT_ID, src).finally(() => {
+    document.write = originalWrite;
+    document.writeln = originalWriteln;
+  });
+}
+
+function createEngineScriptUrl(baseUrl: string, path: string) {
+  return new URL(path, baseUrl).toString();
+}
+
+async function loadVWorldScriptInternal() {
+  const status: VWorldLoadStatus = {
+    bootstrapLoaded: false,
+    wsViewerStartupLoaded: false,
+    vwViewerStartupLoaded: false,
+    ol3WebglLoaded: false,
+  };
+
+  updateVWorldDiagnostics(status);
+
+  const apiKey = getRequiredEnv('VITE_VWORLD_API_KEY');
+  const sdkUrl = getRequiredEnv('VITE_VWORLD_3D_SDK_URL');
+  const version = getVWorld3DVersion();
+  const bootstrapUrl = buildVWorldSdkUrl(sdkUrl, apiKey, version);
+  const baseUrl = getVWorldBaseUrl(sdkUrl);
+
+  try {
+    await loadBootstrapScript(bootstrapUrl);
+    status.bootstrapLoaded = true;
+    updateVWorldDiagnostics(status);
+  } catch {
+    vworldScriptPromise = null;
+    throw new VWorldScriptLoadError(
+      '브이월드 3D SDK 부트스트랩 스크립트 로드에 실패했습니다. API 키, SDK URL, Vercel 허용 도메인을 확인해주세요.',
+      updateVWorldDiagnostics(status),
+    );
+  }
+
+  try {
+    for (const scriptDefinition of VWORLD_ENGINE_SCRIPT_DEFINITIONS) {
+      await loadScriptOnce(
+        scriptDefinition.id,
+        createEngineScriptUrl(baseUrl, scriptDefinition.path),
+      );
+      status[scriptDefinition.statusKey] = true;
+      updateVWorldDiagnostics(status);
+    }
+  } catch {
+    vworldScriptPromise = null;
+    throw new VWorldScriptLoadError(VWORLD_ENGINE_LOAD_FAILURE_MESSAGE, updateVWorldDiagnostics(status));
+  }
+
+  if (!hasExpectedVWorldGlobal()) {
+    vworldScriptPromise = null;
+    throw new VWorldScriptLoadError(VWORLD_ENGINE_LOAD_FAILURE_MESSAGE, updateVWorldDiagnostics(status));
+  }
+
+  updateVWorldDiagnostics(status);
 }
 
 export function loadVWorldScript() {
-  if (window.vw?.Map) {
+  if (hasExpectedVWorldGlobal()) {
     return Promise.resolve();
   }
 
@@ -73,47 +258,7 @@ export function loadVWorldScript() {
     return vworldScriptPromise;
   }
 
-  vworldScriptPromise = new Promise<void>((resolve, reject) => {
-    let script = document.getElementById(VWORLD_SCRIPT_ID) as HTMLScriptElement | null;
-
-    const handleLoad = () => {
-      try {
-        assertVWorldReady();
-        resolve();
-      } catch (error) {
-        vworldScriptPromise = null;
-        reject(error);
-      }
-    };
-
-    const handleError = () => {
-      vworldScriptPromise = null;
-      reject(
-        new Error(
-          '브이월드 3D SDK 스크립트 로드에 실패했습니다. VITE_VWORLD_3D_SDK_URL, VITE_VWORLD_3D_VERSION, Vercel 허용 도메인 등록 상태를 확인해주세요.',
-        ),
-      );
-    };
-
-    if (!script) {
-      const apiKey = getRequiredEnv('VITE_VWORLD_API_KEY');
-      const sdkUrl = getRequiredEnv('VITE_VWORLD_3D_SDK_URL');
-      const version = getVWorld3DVersion();
-
-      script = document.createElement('script');
-      script.id = VWORLD_SCRIPT_ID;
-      script.async = true;
-      script.defer = true;
-      script.src = buildVWorldSdkUrl(sdkUrl, apiKey, version);
-    }
-
-    script.addEventListener('load', handleLoad, { once: true });
-    script.addEventListener('error', handleError, { once: true });
-
-    if (!script.parentElement) {
-      document.head.appendChild(script);
-    }
-  });
+  vworldScriptPromise = loadVWorldScriptInternal();
 
   return vworldScriptPromise;
 }
@@ -128,28 +273,105 @@ function extractSelectionFromVWorldClick(args: unknown[]): VWorldSelection {
   };
 }
 
-export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWorldMapController {
+function createVWorldCameraPosition() {
   const vw = window.vw;
 
-  if (!vw?.Map || !vw.CameraPosition || !vw.CoordZ || !vw.Direction) {
-    throw new Error('브이월드 3D 지도 생성자를 찾을 수 없습니다.');
+  if (!vw?.CameraPosition || !vw.CoordZ || !vw.Direction) {
+    return undefined;
   }
 
-  const initialPosition = new vw.CameraPosition(
+  return new vw.CameraPosition(
     new vw.CoordZ(127.1086, 37.3825, 2400),
     new vw.Direction(0, -70, 0),
   );
+}
 
-  // TODO: 사용하는 VWorld SDK 버전의 공식 샘플 생성자 시그니처가 다르면 이 블록만 조정합니다.
-  const map = new vw.Map();
-  const options = {
+function createVWorldMapOptions(mapId: string, initialPosition: VWorldCameraPosition | undefined) {
+  const vw = window.vw;
+
+  if (vw?.MapOptions && vw.BasemapType && vw.DensityType && initialPosition) {
+    return new vw.MapOptions(
+      vw.BasemapType.GRAPHIC,
+      '',
+      vw.DensityType.FULL,
+      vw.DensityType.BASIC,
+      false,
+      initialPosition,
+      initialPosition,
+    );
+  }
+
+  return {
     mapId,
     initPosition: initialPosition,
     logo: true,
     navigation: true,
   };
+}
 
-  map.setOption?.(options);
+function createVWorldOl3Map(mapId: string, initialPosition: VWorldCameraPosition | undefined) {
+  const ol3 = window.vw?.ol3;
+
+  if (!ol3?.Map) {
+    return null;
+  }
+
+  const mapOptions = {
+    basemapType: ol3.BasemapType?.GRAPHIC,
+    controlDensity: ol3.DensityType?.FULL,
+    interactionDensity: ol3.DensityType?.BASIC,
+    controlsAutoArrange: true,
+    homePosition: initialPosition,
+    initPosition: initialPosition,
+  };
+
+  return new ol3.Map(mapId, mapOptions);
+}
+
+function createVWorldMap(mapId: string) {
+  const vw = window.vw;
+  const initialPosition = createVWorldCameraPosition();
+
+  if (vw?.ol3?.Map) {
+    return createVWorldOl3Map(mapId, initialPosition);
+  }
+
+  if (vw?.Map) {
+    return new vw.Map(mapId, createVWorldMapOptions(mapId, initialPosition));
+  }
+
+  throw new Error('브이월드 지도 생성자를 찾을 수 없습니다. window.vw.ol3.Map 또는 window.vw.Map 전역을 확인해주세요.');
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : '알 수 없는 오류';
+}
+
+export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWorldMapController {
+  let map: VWorldMapInstance | null = null;
+
+  try {
+    map = createVWorldMap(mapId);
+  } catch (error) {
+    if (!window.vw?.Map) {
+      throw new Error(`브이월드 3D 지도 초기화에 실패했습니다. ${getErrorMessage(error)}`);
+    }
+
+    try {
+      const initialPosition = createVWorldCameraPosition();
+      map = new window.vw.Map(mapId, createVWorldMapOptions(mapId, initialPosition));
+    } catch (fallbackError) {
+      throw new Error(`브이월드 3D 지도 초기화에 실패했습니다. ${getErrorMessage(fallbackError)}`);
+    }
+  }
+
+  if (!map) {
+    throw new Error('브이월드 3D 지도 초기화에 실패했습니다. 지도 인스턴스를 생성하지 못했습니다.');
+  }
+
+  const initialPosition = createVWorldCameraPosition();
+
+  map.setOption?.(createVWorldMapOptions(mapId, initialPosition) as VWorldMapOptions);
   map.setMapId?.(mapId);
   map.setInitPosition?.(initialPosition);
   map.setLogoVisible?.(true);
@@ -166,8 +388,8 @@ export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWo
   return {
     map,
     dispose: () => {
-      map.onClick?.removeEventListener?.(clickHandler);
-      map.destroy?.();
+      map?.onClick?.removeEventListener?.(clickHandler);
+      map?.destroy?.();
       document.getElementById(mapId)?.replaceChildren();
     },
   };
