@@ -743,134 +743,6 @@ img {
     padding-top: 54px;
   }
 
-  .serviceIntro {
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    padding: 22px 84px 28px;
-  }
-
-  .serviceIntroHeader {
-    margin-bottom: 14px;
-  }
-
-  .serviceIntroHeader h2,
-  .introReviewHeader h2 {
-    font-size: 38px;
-  }
-
-  .introProcessGrid {
-    gap: 16px;
-  }
-
-  .introProcessCard {
-    min-height: 158px;
-    grid-template-columns: 160px minmax(0, 1fr);
-    gap: 14px;
-    padding: 14px 22px;
-  }
-
-  .introProcessImage {
-    width: 148px;
-    height: 112px;
-  }
-
-  .introFeatureGrid {
-    margin-top: 16px;
-    gap: 18px;
-  }
-
-  .introFeaturePanel {
-    min-height: 216px;
-    padding: 26px 34px;
-  }
-
-  .introFeatureText h3 {
-    font-size: 29px;
-  }
-
-  .introFeatureText p {
-    margin-top: 14px;
-    font-size: 17px;
-    line-height: 1.58;
-  }
-
-  .introMetricGrid {
-    margin-top: 14px;
-    gap: 14px;
-  }
-
-  .introMetricCard {
-    min-height: 118px;
-    grid-template-columns: 76px minmax(0, 1fr);
-    gap: 14px;
-    padding: 16px 18px;
-  }
-
-  .introMetricImage {
-    width: 66px;
-    height: 66px;
-  }
-
-  .introMetricCard h3 {
-    font-size: 15px;
-  }
-
-  .metricValue {
-    font-size: 25px;
-  }
-
-  .metricValue.compact {
-    font-size: 23px;
-  }
-
-  .introMetricCard p,
-  .introDisclaimer {
-    font-size: 13px;
-    line-height: 1.42;
-  }
-
-  .introDisclaimer {
-    margin-top: 10px;
-    padding: 10px 14px;
-  }
-
-  .introReviewHeader {
-    margin: 18px 0 10px;
-  }
-
-  .introReviewCard {
-    min-height: 148px;
-    grid-template-columns: minmax(0, 1fr) 148px;
-    gap: 14px;
-    padding: 14px;
-  }
-
-  .reviewBadge {
-    min-height: 24px;
-    padding: 3px 12px;
-    font-size: 12px;
-  }
-
-  .reviewCopy p {
-    min-height: 48px;
-    margin: 10px 0 12px;
-    font-size: 15px;
-    line-height: 1.42;
-  }
-
-  .reviewResultBox {
-    padding: 12px;
-  }
-
-  .reviewResultBox strong {
-    font-size: 20px;
-  }
-
-  .reviewResultBox hr {
-    margin: 9px 0;
-  }
-
   .ctaPanel {
     min-height: 100vh;
     margin-top: 0;
@@ -1571,6 +1443,149 @@ img {
   background: rgba(100, 116, 139, 0.24);
 }
 
+@media (min-width: 1600px) and (max-height: 1100px) {
+  .serviceIntro {
+    min-height: 100vh;
+    padding: 14px 84px 16px;
+  }
+
+  .serviceIntroHeader {
+    margin-bottom: 10px;
+  }
+
+  .serviceIntroHeader h2,
+  .introReviewHeader h2 {
+    font-size: 36px;
+  }
+
+  .serviceIntroHeader p,
+  .introReviewHeader p {
+    font-size: 15px;
+  }
+
+  .introProcessGrid {
+    gap: 16px;
+  }
+
+  .introProcessCard {
+    min-height: 142px;
+    grid-template-columns: 142px minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px 20px;
+  }
+
+  .introProcessImage {
+    width: 132px;
+    height: 100px;
+  }
+
+  .introProcessText h3 {
+    font-size: 23px;
+  }
+
+  .introProcessText p {
+    margin-top: 8px;
+    font-size: 15px;
+    line-height: 1.46;
+  }
+
+  .introFeatureGrid {
+    margin-top: 16px;
+    gap: 18px;
+  }
+
+  .introFeaturePanel {
+    min-height: 198px;
+    padding: 22px 30px;
+  }
+
+  .introFeatureText h3 {
+    font-size: 27px;
+  }
+
+  .introFeatureText p {
+    margin-top: 12px;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+
+  .introMetricGrid {
+    margin-top: 14px;
+    gap: 14px;
+  }
+
+  .introMetricCard {
+    min-height: 104px;
+    grid-template-columns: 66px minmax(0, 1fr);
+    gap: 12px;
+    padding: 14px 16px;
+  }
+
+  .introMetricImage {
+    width: 58px;
+    height: 58px;
+  }
+
+  .introMetricCard h3 {
+    font-size: 14px;
+  }
+
+  .metricValue {
+    font-size: 23px;
+  }
+
+  .metricValue.compact {
+    font-size: 21px;
+  }
+
+  .introMetricCard p,
+  .introDisclaimer {
+    font-size: 13px;
+    line-height: 1.42;
+  }
+
+  .introDisclaimer {
+    margin-top: 8px;
+    padding: 8px 14px;
+  }
+
+  .introReviewHeader {
+    margin: 14px 0 8px;
+  }
+
+  .introReviewCard {
+    min-height: 132px;
+    grid-template-columns: minmax(0, 1fr) 136px;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .reviewBadge {
+    min-height: 24px;
+    padding: 3px 12px;
+    font-size: 12px;
+  }
+
+  .reviewCopy p {
+    min-height: 42px;
+    margin: 8px 0 10px;
+    font-size: 14px;
+    line-height: 1.38;
+  }
+
+  .reviewResultBox {
+    padding: 12px;
+  }
+
+  .reviewResultBox strong {
+    font-size: 18px;
+  }
+
+  .reviewResultBox hr {
+    margin: 9px 0;
+  }
+}
+
 @media (max-width: 1760px) and (min-width: 1221px) {
   .introProcessCard {
     grid-template-columns: 1fr;
@@ -1731,15 +1746,15 @@ img {
 .solarFeedContentGrid {
   margin-top: 22px;
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(360px, 1fr);
+  grid-template-columns: 1fr;
   gap: 18px;
 }
 
-.solarFeedLeftColumn,
-.solarFeedRightColumn {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+.solarFeedSupportRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: stretch;
 }
 
 .feedPanel,
@@ -2169,6 +2184,10 @@ img {
 @media (max-width: 760px) {
   .serviceIntro {
     padding: 28px 18px 42px;
+  }
+
+  .solarFeedSupportRow {
+    grid-template-columns: 1fr;
   }
 
   .introProcessCard {
@@ -2669,6 +2688,10 @@ img {
   }
 
   .solarFeedContentGrid {
+    gap: 14px;
+  }
+
+  .solarFeedSupportRow {
     gap: 14px;
   }
 

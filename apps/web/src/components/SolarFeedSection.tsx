@@ -105,41 +105,39 @@ function SolarFeedSection() {
         </div>
 
         <div className="solarFeedContentGrid">
-          <div className="solarFeedLeftColumn">
-            <section className="feedPanel policyNewsPanel" aria-labelledby="policy-news-title">
-              <div className="feedPanelTitleRow">
-                <h2 id="policy-news-title">태양광 정책 소식</h2>
-                <span>정책 업데이트</span>
-              </div>
+          <section className="feedPanel policyNewsPanel" aria-labelledby="policy-news-title">
+            <div className="feedPanelTitleRow">
+              <h2 id="policy-news-title">태양광 정책 소식</h2>
+              <span>정책 업데이트</span>
+            </div>
 
-              <ul className="policyNewsList">
-                {policyNewsItems.map((item) => (
-                  <li key={item.title}>
-                    <span className="policyDot" aria-hidden="true" />
-                    <p>{item.title}</p>
-                    <time>{item.date}</time>
-                    <button type="button" aria-label={`${item.title} 자세히 보기`}>
-                      ›
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-
-            <section className="feedPanel faqPanel" aria-labelledby="faq-title">
-              <h2 id="faq-title">자주 묻는 질문</h2>
-              <div className="faqRows">
-                {faqItems.map((item) => (
-                  <button type="button" key={item}>
-                    <span>{item}</span>
-                    <strong aria-hidden="true">⌄</strong>
+            <ul className="policyNewsList">
+              {policyNewsItems.map((item) => (
+                <li key={item.title}>
+                  <span className="policyDot" aria-hidden="true" />
+                  <p>{item.title}</p>
+                  <time>{item.date}</time>
+                  <button type="button" aria-label={`${item.title} 자세히 보기`}>
+                    ›
                   </button>
-                ))}
-              </div>
-            </section>
-          </div>
+                </li>
+              ))}
+            </ul>
+          </section>
 
-          <div className="solarFeedRightColumn">
+          <section className="feedPanel faqPanel" aria-labelledby="faq-title">
+            <h2 id="faq-title">자주 묻는 질문</h2>
+            <div className="faqRows">
+              {faqItems.map((item) => (
+                <button type="button" key={item}>
+                  <span>{item}</span>
+                  <strong aria-hidden="true">⌄</strong>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <div className="solarFeedSupportRow">
             <section className="noticePanel" aria-labelledby="notice-title">
               <SafeLocalImage
                 src="/assets/landing/notice-alert.png"
