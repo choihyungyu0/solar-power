@@ -3,7 +3,10 @@ import VWorldSelectableBuildingLayer, {
   type VWorldSelectableBuildingLayerStatus,
 } from '../components/VWorldSelectableBuildingLayer';
 import VWorldSelectedBuildingLayer from '../components/VWorldSelectedBuildingLayer';
-import VWorldSolarRoofLayer, { type VWorldSolarLayerStatus } from '../components/VWorldSolarRoofLayer';
+import VWorldSolarPanelLayer, {
+  deriveRoofHeightMFromFeature,
+  type VWorldSolarPanelLayerStatus,
+} from '../components/VWorldSolarPanelLayer';
 import {
   focusVWorldMapOnCoordinate,
   initVWorld3DMap,
@@ -61,6 +64,8 @@ const PV_DEFAULT_PANEL_ANGLE = 30;
 const PV_DEFAULT_PANEL_CAPACITY_W = 500;
 const PV_DEFAULT_PANEL_TYPE = 1;
 const PV_DEFAULT_PANEL_COUNT = 204;
+const NEARBY_BUILDING_OUTLINE_RADIUS_M = 130;
+const MAX_NEARBY_BUILDING_OUTLINES = 220;
 
 type MapLoadStatus = 'loading' | 'ready' | 'error';
 type RiskPanelTab = 'risk' | 'solar' | 'policy';
@@ -281,6 +286,17 @@ function formatDiagnosticNumber(value: number | null) {
   return typeof value === 'number' ? value.toFixed(7) : '-';
 }
 
+function formatPanelCoordinates(polygon: PolygonCoordinates | null) {
+  if (!polygon || polygon.length === 0) {
+    return '-';
+  }
+
+  return polygon
+    .slice(0, 4)
+    .map(([longitude, latitude]) => `[${longitude.toFixed(7)}, ${latitude.toFixed(7)}]`)
+    .join(' ');
+}
+
 function getGeoJsonDiagnosticSourceStatus(loadState: BuildingFootprintLoadState) {
   if (loadState.status === 'index_loaded' || loadState.status === 'selected' || loadState.diagnostics.indexLoaded) {
     return 'loaded';
@@ -331,6 +347,31 @@ function createSelectableBuildingPolygons(features: SelectableBuildingFeature[])
 
     return polygon ? [polygon] : [];
   });
+}
+
+function getDistanceMeters(from: Coordinate, to: Coordinate) {
+  const metersPerDegreeLat = 111_320;
+  const metersPerDegreeLon = metersPerDegreeLat * Math.cos((from[1] * Math.PI) / 180);
+  const deltaX = (to[0] - from[0]) * metersPerDegreeLon;
+  const deltaY = (to[1] - from[1]) * metersPerDegreeLat;
+
+  return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+}
+
+function getNearbyBuildingPolygons(polygons: PolygonCoordinates[], coordinate: Coordinate | null) {
+  if (!coordinate) {
+    return [];
+  }
+
+  return polygons
+    .map((polygon) => ({
+      polygon,
+      distanceMeters: getDistanceMeters(coordinate, getPolygonCentroid(polygon)),
+    }))
+    .filter((item) => item.distanceMeters <= NEARBY_BUILDING_OUTLINE_RADIUS_M)
+    .sort((a, b) => a.distanceMeters - b.distanceMeters)
+    .slice(0, MAX_NEARBY_BUILDING_OUTLINES)
+    .map((item) => item.polygon);
 }
 
 function getGeometryStatusText(status: GeometryQueryStatus) {
@@ -486,7 +527,8 @@ function RiskMapPage() {
   const [pvAnalysisStatus, setPvAnalysisStatus] = useState<PvAnalysisStatus>('idle');
   const [pvAnalysisMessage, setPvAnalysisMessage] = useState('');
   const [pvAnalysisResponse, setPvAnalysisResponse] = useState<PvAnalysisProxyResponse | null>(null);
-  const [isSolarSimulationVisible, setIsSolarSimulationVisible] = useState(false);
+  const [isSolarPanelLayerVisible, setIsSolarPanelLayerVisible] = useState(false);
+  const panelVisibilityUserOverrideRef = useRef(false);
   const [vworldMap, setVworldMap] = useState<VWorldMapInstance | null>(null);
   const vworldMapRef = useRef<VWorldMapInstance | null>(null);
   const [selectedCoordinate, setSelectedCoordinate] = useState<Coordinate | null>(null);
@@ -507,6 +549,7 @@ function RiskMapPage() {
     createInitialBuildingFootprintLoadState,
   );
   const [selectedBuildingFootprint, setSelectedBuildingFootprint] = useState<SelectedBuildingFootprint>(null);
+  const [selectedBuildingFeature, setSelectedBuildingFeature] = useState<SelectableBuildingFeature | null>(null);
   const [selectedBuildingGeometry, setSelectedBuildingGeometry] = useState<PolygonCoordinates | null>(null);
   const [selectedRoofPolygon, setSelectedRoofPolygon] = useState<PolygonCoordinates | null>(null);
   const [selectableBuildingPolygons, setSelectableBuildingPolygons] = useState<PolygonCoordinates[]>([]);
@@ -515,9 +558,13 @@ function RiskMapPage() {
     state: 'idle',
     message: '선택 가능한 건물 테두리는 후보 파일 로드 후 표시됩니다.',
   });
-  const [solarLayerStatus, setSolarLayerStatus] = useState<VWorldSolarLayerStatus>({
+  const [panelLayerStatus, setPanelLayerStatus] = useState<VWorldSolarPanelLayerStatus>({
     state: 'idle',
-    message: '태양광 지도 레이어가 꺼져 있습니다.',
+    message: '태양광 패널 지도 레이어가 꺼져 있습니다.',
+    panelPolygonCount: 0,
+    firstPanelCoordinates: null,
+    roofHeightM: 20,
+    renderMethod: '-',
   });
   const hasMapAnchoredGeometry =
     selectionMode === 'geometry' || selectionMode === 'parcel-fallback' || selectionMode === 'building_footprint';
@@ -531,6 +578,15 @@ function RiskMapPage() {
     () => summarizeBuildingFootprintCoordinates(buildingFootprints),
     [buildingFootprints],
   );
+  const nearbySelectableBuildingPolygons = useMemo(
+    () => getNearbyBuildingPolygons(selectableBuildingPolygons, selectedCoordinate),
+    [selectableBuildingPolygons, selectedCoordinate],
+  );
+  const roofHeightEstimate = useMemo(
+    () => deriveRoofHeightMFromFeature(selectedBuildingFeature),
+    [selectedBuildingFeature],
+  );
+  const selectedBuildingId = selectedBuildingFootprint?.buildingId ?? null;
   const geoJsonDiagnosticSourceStatus = getGeoJsonDiagnosticSourceStatus(buildingFootprintLoadState);
   const buildingFootprintDiagnostics = buildingFootprintLoadState.diagnostics;
   const buildingPolygonSource = getConfiguredBuildingPolygonSource();
@@ -584,6 +640,17 @@ function RiskMapPage() {
     },
   ];
 
+  useEffect(() => {
+    if (
+      activeTab === 'solar' &&
+      hasSelectedBuildingPolygon &&
+      solarPanelPolygons.length > 0 &&
+      !panelVisibilityUserOverrideRef.current
+    ) {
+      setIsSolarPanelLayerVisible(true);
+    }
+  }, [activeTab, hasSelectedBuildingPolygon, solarPanelPolygons.length]);
+
   const applyBuildingFootprintSelection = useCallback(
     (match: BuildingFootprintMatch, coordinate: Coordinate) => {
       const polygon = normalizeGeoJsonPolygon(match.feature);
@@ -592,6 +659,7 @@ function RiskMapPage() {
         setGeometryQueryStatus('not-found');
         setGeometryQueryMessage('선택 좌표에서 건물 polygon을 찾았지만 표시 가능한 Polygon/MultiPolygon 좌표가 없습니다.');
         setSelectedBuildingFootprint(null);
+        setSelectedBuildingFeature(null);
         setSelectedBuildingGeometry(null);
         setSelectedRoofPolygon(null);
         setSelectableBuildingPolygons([]);
@@ -618,9 +686,12 @@ function RiskMapPage() {
       });
 
       setSelectedBuildingFootprint(match.metadata);
+      setSelectedBuildingFeature(match.feature);
       setSelectedBuildingGeometry(polygon);
       setSelectedRoofPolygon(roofPolygon);
       setSolarPanelPolygons(panelPolygons);
+      panelVisibilityUserOverrideRef.current = false;
+      setIsSolarPanelLayerVisible(activeTab === 'solar' && panelPolygons.length > 0);
       setMapFocusStatus({
         message: refinedFocusResult.message,
         method: refinedFocusResult.method,
@@ -661,7 +732,7 @@ function RiskMapPage() {
         simulationNote: `건물 footprint 기반 옥상 추정입니다. ${layoutResult.reason ?? ''} 실제 설치 가능 여부는 옥상 장애물, 음영, 구조안전성, 관리주체 협의, 현장조사에 따라 달라질 수 있습니다.`,
       });
     },
-    [buildingFootprintLoadState.url, buildingFootprints?.features.length, buildingPolygonSource],
+    [activeTab, buildingFootprintLoadState.url, buildingFootprints?.features.length, buildingPolygonSource],
   );
 
   const handleMapSelection = useCallback(async (selection?: VWorldSelection) => {
@@ -680,10 +751,13 @@ function RiskMapPage() {
       setGeometryQueryStatus('idle');
       setGeometryQueryMessage('지도 좌표가 없어 화면 기준 예시 배치를 표시합니다.');
       setSelectedBuildingFootprint(null);
+      setSelectedBuildingFeature(null);
       setSelectedBuildingGeometry(null);
       setSelectedRoofPolygon(null);
       setSelectableBuildingPolygons([]);
       setSolarPanelPolygons([]);
+      setIsSolarPanelLayerVisible(false);
+      panelVisibilityUserOverrideRef.current = false;
       setMapFocusStatus({
         message: '지도 좌표가 없어 시점 이동을 실행하지 못했습니다.',
         moved: false,
@@ -698,6 +772,7 @@ function RiskMapPage() {
 
     setSelectedCoordinate(coordinate);
     setSelectedBuildingFootprint(null);
+    setSelectedBuildingFeature(null);
     const dataId = getConfiguredVWorldBuildingDataId();
     const buffer = 10;
     const requestPath = buildVWorldFeatureProxyPath({
@@ -764,6 +839,8 @@ function RiskMapPage() {
     setSelectedRoofPolygon(null);
     setSelectableBuildingPolygons([]);
     setSolarPanelPolygons([]);
+    setIsSolarPanelLayerVisible(false);
+    panelVisibilityUserOverrideRef.current = false;
 
     const buildingPolygonResult = await requestSelectedBuildingPolygon({
       longitude: coordinate[0],
@@ -1167,7 +1244,7 @@ function RiskMapPage() {
       <section className="riskMapWorkspace" aria-label="전기세 위험 지도 작업 영역">
         <div className="riskMapCanvasColumn">
           <div
-            className={`vworldMapShell ${isSolarSimulationVisible ? 'isSolarMode' : ''}`}
+            className={`vworldMapShell ${isSolarPanelLayerVisible ? 'isSolarMode' : ''}`}
             onClick={(event) => {
               if (event.target === event.currentTarget) {
                 void handleMapSelection();
@@ -1212,7 +1289,7 @@ function RiskMapPage() {
             <VWorldSelectableBuildingLayer
               map={vworldMap}
               isActive={buildingPolygonSource === 'admdong_index'}
-              polygons={selectableBuildingPolygons}
+              polygons={nearbySelectableBuildingPolygons}
               onStatusChange={setSelectableLayerStatus}
             />
 
@@ -1222,14 +1299,14 @@ function RiskMapPage() {
               polygon={selectedBuildingGeometry ?? selectedRoofPolygon}
             />
 
-            <VWorldSolarRoofLayer
+            <VWorldSolarPanelLayer
               map={vworldMap}
-              isActive={isSolarSimulationVisible && hasMapAnchoredGeometry}
-              buildingPolygon={selectedBuildingGeometry}
-              roofPolygon={selectedRoofPolygon}
+              visible={isSolarPanelLayerVisible && hasMapAnchoredGeometry}
+              selectedBuildingFeature={selectedBuildingFeature}
+              selectedBuildingId={selectedBuildingId}
               panelPolygons={solarPanelPolygons}
-              estimatedCapacityKw={selectedBuilding.estimatedCapacityKw}
-              onStatusChange={setSolarLayerStatus}
+              roofHeightM={roofHeightEstimate.roofHeightM}
+              onStatusChange={setPanelLayerStatus}
             />
 
             {mapStatus === 'loading' && (
@@ -1386,6 +1463,10 @@ function RiskMapPage() {
                   <strong>{selectedBuildingFootprint?.buildingId ?? '-'}</strong>
                 </div>
                 <div>
+                  <span>selectedBuildingId</span>
+                  <strong>{selectedBuildingId ?? '-'}</strong>
+                </div>
+                <div>
                   <span>건물명</span>
                   <strong>{selectedBuildingFootprint?.name ?? '-'}</strong>
                 </div>
@@ -1425,25 +1506,37 @@ function RiskMapPage() {
                   <strong>{getRoofPolygonStatusText(selectionMode, selectedRoofPolygon)}</strong>
                 </div>
                 <div>
-                  <span>패널 배치 상태</span>
+                  <span>패널 polygon 수</span>
+                  <strong>{panelLayerStatus.panelPolygonCount.toLocaleString('ko-KR')}개</strong>
+                </div>
+                <div>
+                  <span>첫 패널 좌표</span>
+                  <strong>{formatPanelCoordinates(panelLayerStatus.firstPanelCoordinates)}</strong>
+                </div>
+                <div>
+                  <span>패널 레이어 상태</span>
                   <strong>
-                    {solarLayerStatus.state === 'rendered'
-                      ? `브이월드 좌표 기반 ${solarPanelPolygons.length.toLocaleString('ko-KR')}개 표시`
-                      : solarLayerStatus.message}
+                    {panelLayerStatus.state === 'rendered'
+                      ? `좌표 고정 지도 객체 ${panelLayerStatus.panelPolygonCount.toLocaleString('ko-KR')}개 표시`
+                      : panelLayerStatus.message}
                   </strong>
                 </div>
                 <div>
-                  <span>선택 표시/시점 이동</span>
+                  <span>지도 객체 렌더링 방식</span>
+                  <strong>{panelLayerStatus.renderMethod}</strong>
+                </div>
+                <div>
+                  <span>roofHeightM</span>
                   <strong>
-                    {solarLayerStatus.state === 'rendered'
-                      ? solarLayerStatus.viewMoved
-                        ? `빨간 선택 표시 · 시점 이동 시도(${solarLayerStatus.viewMoveMethod})`
-                        : '빨간 선택 표시 · 카메라 메서드 연결 필요'
-                      : '도형 조회 후 표시'}
+                    {panelLayerStatus.roofHeightM.toLocaleString('ko-KR')}m
+                    {panelLayerStatus.heightMessage ? ` · ${panelLayerStatus.heightMessage}` : ''}
                   </strong>
                 </div>
                 <p>{geometryQueryMessage}</p>
                 <p>{featureDataInfo.dataTypeNote}</p>
+                {hasSelectedBuildingPolygon && solarPanelPolygons.length === 0 && (
+                  <p role="status">선택 건물에서 배치 가능한 패널을 계산하지 못했습니다.</p>
+                )}
               </div>
 
               {shouldShowDevDiagnostics && (
@@ -1649,11 +1742,14 @@ function RiskMapPage() {
               )}
 
               <label className="panelToggleRow">
-                <span>지도에 패널 표시</span>
+                <span>지도에 태양광 패널 표시</span>
                 <input
                   type="checkbox"
-                  checked={isSolarSimulationVisible}
-                  onChange={(event) => setIsSolarSimulationVisible(event.target.checked)}
+                  checked={isSolarPanelLayerVisible}
+                  onChange={(event) => {
+                    panelVisibilityUserOverrideRef.current = true;
+                    setIsSolarPanelLayerVisible(event.target.checked);
+                  }}
                 />
               </label>
 

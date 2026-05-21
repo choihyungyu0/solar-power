@@ -18,7 +18,8 @@ type AddedVWorldObject = {
   object: unknown;
 };
 
-const CONSTRUCTOR_ERROR_MESSAGE = '선택 가능한 건물 테두리를 표시하려면 브이월드 polygon 생성자 연결이 필요합니다.';
+const CONSTRUCTOR_ERROR_MESSAGE =
+  '선택 가능한 건물 테두리를 지도 좌표 레이어로 표시하려면 VWorld polygon 객체 생성 연결이 필요합니다.';
 
 function createVWorldPolygonGeometry(polygon: PolygonCoordinates) {
   const vw = window.vw;
@@ -44,10 +45,10 @@ function createVWorldStyle() {
   }
 
   const style = new vw.style.Style();
-  const fill = new vw.style.Fill('rgba(14, 165, 233, 0.05)');
-  const stroke = new vw.style.Stroke('#0ea5e9');
+  const fill = new vw.style.Fill('rgba(14, 165, 233, 0.12)');
+  const stroke = new vw.style.Stroke('#22d3ee');
 
-  stroke.setWidth?.(2);
+  stroke.setWidth?.(3);
   fill.setStroke?.(stroke);
   style.fill = fill;
   style.stroke = stroke;
@@ -151,12 +152,12 @@ function VWorldSelectableBuildingLayer({
 }: VWorldSelectableBuildingLayerProps) {
   useEffect(() => {
     if (!isActive || polygons.length === 0) {
-      onStatusChange({ state: 'idle', message: '선택 가능한 건물 테두리는 후보 파일 로드 후 표시됩니다.' });
+      onStatusChange({ state: 'idle', message: '건물에 가까이 접근하거나 건물을 선택하면 주변 건물 테두리를 표시합니다.' });
       return undefined;
     }
 
     if (!map) {
-      onStatusChange({ state: 'fallback', message: '지도가 준비되면 선택 가능한 건물 테두리를 표시합니다.' });
+      onStatusChange({ state: 'fallback', message: '지도가 준비되면 주변 건물 테두리를 지도 좌표에 맞춰 표시합니다.' });
       return undefined;
     }
 
@@ -170,7 +171,7 @@ function VWorldSelectableBuildingLayer({
 
       onStatusChange({
         state: 'rendered',
-        message: `후보 건물 ${addedCount.toLocaleString('ko-KR')}개를 얇은 파란 테두리로 표시했습니다.`,
+        message: `근접 후보 건물 ${addedCount.toLocaleString('ko-KR')}개를 지도 좌표 테두리로 표시했습니다.`,
       });
 
       return cleanup;

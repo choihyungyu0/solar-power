@@ -140,8 +140,24 @@ function createPanelRectangle(center: LocalPoint, width: number, height: number)
   ];
 }
 
+function getRectangleCentroid(rectangle: LocalPoint[]) {
+  const vertices = rectangle.slice(0, 4);
+  const summed = vertices.reduce(
+    (accumulator, point) => ({
+      x: accumulator.x + point.x,
+      y: accumulator.y + point.y,
+    }),
+    { x: 0, y: 0 },
+  );
+
+  return {
+    x: summed.x / vertices.length,
+    y: summed.y / vertices.length,
+  };
+}
+
 function canPlacePanel(rectangle: LocalPoint[], roofPolygon: LocalPoint[]) {
-  return rectangle.every((corner) => isPointInsidePolygon(corner, roofPolygon));
+  return isPointInsidePolygon(getRectangleCentroid(rectangle), roofPolygon);
 }
 
 export function createPanelRectanglesInsideRoof(
@@ -166,7 +182,7 @@ export function createPanelRectanglesInsideRoof(
     return panelRectangles;
   }
 
-  // MVP layout: align panels to the local bounding box and keep panels fully inside the footprint-based roof estimate.
+  // MVP layout: align panels to the local bounding box and keep panel centroids inside the footprint-based roof estimate.
   // Exact clipping/rotation should later use real roof edge orientation and obstacle polygons.
   for (let y = minY + mergedOptions.panelHeightM / 2; y <= maxY - mergedOptions.panelHeightM / 2; y += stepY) {
     for (let x = minX + mergedOptions.panelWidthM / 2; x <= maxX - mergedOptions.panelWidthM / 2; x += stepX) {

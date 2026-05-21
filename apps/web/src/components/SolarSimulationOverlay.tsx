@@ -11,6 +11,8 @@ function SolarSimulationOverlay({ isActive, estimatedCapacityKw, fallbackMessage
     return null;
   }
 
+  const explicitFallbackMessage = fallbackMessage || '지도 객체 렌더링 실패 시 임시 화면 표시입니다.';
+
   return (
     <div className="solarSimulationOverlay" aria-label="태양광 가상 설치 시각화">
       <div className="selectedRoofOverlay">
@@ -26,7 +28,7 @@ function SolarSimulationOverlay({ isActive, estimatedCapacityKw, fallbackMessage
         <span>예상 {estimatedCapacityKw.toLocaleString('ko-KR')}kW</span>
       </div>
 
-      <div className="solarMapDisclaimer">{fallbackMessage}</div>
+      <div className="solarMapDisclaimer">{explicitFallbackMessage}</div>
     </div>
   );
 }

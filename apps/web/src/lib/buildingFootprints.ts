@@ -107,6 +107,7 @@ const BUILDING_POLYGON_UNCONFIGURED_MESSAGE = '화성시 건물 polygon 데이�
 const ADMDONG_SOURCE_LABEL = 'VWorld GIS건물통합정보 AL_D010, 화성시 필터, 행정동 분할';
 const PROJECTED_COORDINATE_MIN = 100_000;
 const PROJECTED_COORDINATE_MAX = 1_000_000;
+const NEAREST_FOOTPRINT_SELECTION_DISTANCE_M = 55;
 
 type TurfPolygonInput = Parameters<typeof booleanPointInPolygon>[1];
 
@@ -293,6 +294,141 @@ function isPointInsideFeature(feature: BuildingFootprintFeature, coordinate: [lo
   } catch {
     return false;
   }
+}
+
+function getDistanceMeters(from: [longitude: number, latitude: number], to: [longitude: number, latitude: number]) {
+  const metersPerDegreeLat = 111_320;
+  const metersPerDegreeLon = metersPerDegreeLat * Math.cos((from[1] * Math.PI) / 180);
+  const deltaX = (to[0] - from[0]) * metersPerDegreeLon;
+  const deltaY = (to[1] - from[1]) * metersPerDegreeLat;
+
+  return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+}
+
+function getPointToSegmentDistanceMeters(
+  coordinate: [longitude: number, latitude: number],
+  start: [longitude: number, latitude: number],
+  end: [longitude: number, latitude: number],
+) {
+  const metersPerDegreeLat = 111_320;
+  const metersPerDegreeLon = metersPerDegreeLat * Math.cos((coordinate[1] * Math.PI) / 180);
+  const startX = (start[0] - coordinate[0]) * metersPerDegreeLon;
+  const startY = (start[1] - coordinate[1]) * metersPerDegreeLat;
+  const endX = (end[0] - coordinate[0]) * metersPerDegreeLon;
+  const endY = (end[1] - coordinate[1]) * metersPerDegreeLat;
+  const segmentX = endX - startX;
+  const segmentY = endY - startY;
+  const segmentLengthSquared = segmentX * segmentX + segmentY * segmentY;
+
+  if (segmentLengthSquared === 0) {
+    return getDistanceMeters(coordinate, start);
+  }
+
+  const projection = Math.max(0, Math.min(1, -(startX * segmentX + startY * segmentY) / segmentLengthSquared));
+  const closestX = startX + projection * segmentX;
+  const closestY = startY + projection * segmentY;
+
+  return Math.sqrt(closestX * closestX + closestY * closestY);
+}
+
+type LonLat = [longitude: number, latitude: number];
+
+function getRingDistanceMeters(coordinate: LonLat, ring: LonLat[]) {
+  if (ring.length === 0) {
+    return Infinity;
+  }
+
+  let minimumDistance = Infinity;
+
+  for (let index = 0; index < ring.length; index += 1) {
+    const start = ring[index];
+    const end = ring[(index + 1) % ring.length];
+    minimumDistance = Math.min(minimumDistance, getPointToSegmentDistanceMeters(coordinate, start, end));
+  }
+
+  return minimumDistance;
+}
+
+function readCoordinateRing(ring: unknown): LonLat[] {
+  const coordinates: LonLat[] = [];
+
+  if (!Array.isArray(ring)) {
+    return coordinates;
+  }
+
+  ring.forEach((position) => {
+    visitPosition(position, (longitude, latitude) => coordinates.push([longitude, latitude]));
+  });
+
+  return coordinates.length >= 2 ? coordinates : [];
+}
+
+function readPolygonCoordinateRings(coordinates: unknown): LonLat[][] {
+  if (!Array.isArray(coordinates)) {
+    return [];
+  }
+
+  return coordinates.flatMap((ring) => {
+    const coordinateRing = readCoordinateRing(ring);
+
+    return coordinateRing.length > 0 ? [coordinateRing] : [];
+  });
+}
+
+function readFeatureRings(feature: BuildingFootprintFeature): LonLat[][] {
+  if (feature.geometry.type === 'Polygon') {
+    return readPolygonCoordinateRings(feature.geometry.coordinates);
+  }
+
+  if (!Array.isArray(feature.geometry.coordinates)) {
+    return [];
+  }
+
+  return feature.geometry.coordinates.flatMap((polygonCoordinates) => readPolygonCoordinateRings(polygonCoordinates));
+}
+
+function getDistanceToFeatureMeters(
+  feature: BuildingFootprintFeature,
+  coordinate: [longitude: number, latitude: number],
+) {
+  if (isPointInsideFeature(feature, coordinate)) {
+    return 0;
+  }
+
+  return readFeatureRings(feature).reduce(
+    (minimumDistance, ring) => Math.min(minimumDistance, getRingDistanceMeters(coordinate, ring)),
+    Infinity,
+  );
+}
+
+function findNearestBuildingFootprint(
+  features: BuildingFootprintFeature[],
+  coordinate: [longitude: number, latitude: number],
+) {
+  let nearestFeature: BuildingFootprintFeature | null = null;
+  let nearestDistanceMeters = Infinity;
+
+  for (const feature of features) {
+    const distanceMeters = getDistanceToFeatureMeters(feature, coordinate);
+
+    if (!Number.isFinite(distanceMeters)) {
+      continue;
+    }
+
+    if (distanceMeters < nearestDistanceMeters) {
+      nearestFeature = feature;
+      nearestDistanceMeters = distanceMeters;
+    }
+  }
+
+  if (!nearestFeature || nearestDistanceMeters > NEAREST_FOOTPRINT_SELECTION_DISTANCE_M) {
+    return null;
+  }
+
+  return {
+    feature: nearestFeature,
+    distanceMeters: nearestDistanceMeters,
+  };
 }
 
 function containsCoordinate(entry: BuildingAdmdongIndexEntry, coordinate: [longitude: number, latitude: number]) {
@@ -616,6 +752,36 @@ export async function findBuildingFootprintInAdmdongIndex(
         };
       }
     }
+  }
+
+  const nearestMatch = findNearestBuildingFootprint(candidateFeatures, coordinate);
+
+  if (nearestMatch) {
+    const match = createMatch(nearestMatch.feature);
+    const message = `클릭 좌표에서 약 ${Math.round(nearestMatch.distanceMeters).toLocaleString(
+      'ko-KR',
+    )}m 이내의 가장 가까운 건물 footprint를 선택했습니다.`;
+
+    return {
+      status: 'selected',
+      match,
+      message,
+      candidateFeatures,
+      diagnostics: createBuildingFootprintDiagnostics({
+        status: 'selected',
+        indexLoaded: true,
+        indexEntryCount: index.entries.length,
+        candidateFileCount: candidates.length,
+        loadedFileNames: getLoadedAdmdongFileNames(),
+        searchedFeatureCount,
+        matchedBuildingId: match.metadata.buildingId,
+        matchedAddress: match.metadata.address,
+        selectedGeometryType: match.metadata.geometryType,
+        indexUrl,
+        metaUrl,
+        message,
+      }),
+    };
   }
 
   if (loadedCollectionsForSearch.length === 0 && fileErrors.length > 0) {
