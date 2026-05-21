@@ -1,6 +1,6 @@
 import { booleanPointInPolygon, point } from '@turf/turf';
-import type { VWorldFeature } from './vworldFeatureQuery';
 import type { BuildingPolygonFeatureCollection, BuildingPolygonSourceMode } from '../types/buildingPolygon';
+import type { VWorldFeature } from './vworldFeatureQuery';
 
 export type BuildingFootprintFeature = VWorldFeature & {
   geometry: {
@@ -31,8 +31,20 @@ export type BuildingFootprintMatch = {
   };
 };
 
+export type BuildingFootprintCoordinateSummary = {
+  minLon: number | null;
+  maxLon: number | null;
+  minLat: number | null;
+  maxLat: number | null;
+  coordinateCount: number;
+  projectedLikeCoordinateCount: number;
+  hasProjectedCoordinateWarning: boolean;
+};
+
 const DEFAULT_GEOJSON_URL = '/data/buildings/hwaseong-buildings.geojson';
 const BUILDING_POLYGON_UNCONFIGURED_MESSAGE = '화성시 건물 polygon 데이터가 아직 연결되지 않았습니다.';
+const PROJECTED_COORDINATE_MIN = 100_000;
+const PROJECTED_COORDINATE_MAX = 1_000_000;
 
 function getStringProperty(properties: Record<string, unknown>, keys: string[], fallback: string) {
   for (const key of keys) {
@@ -62,6 +74,51 @@ function isBuildingFootprintFeature(value: unknown): value is BuildingFootprintF
     Boolean(feature.geometry) &&
     (feature.geometry?.type === 'Polygon' || feature.geometry?.type === 'MultiPolygon')
   );
+}
+
+function isProjectedLikeValue(value: number) {
+  const absolute = Math.abs(value);
+  return absolute >= PROJECTED_COORDINATE_MIN && absolute <= PROJECTED_COORDINATE_MAX;
+}
+
+function visitPosition(position: unknown, visitor: (longitude: number, latitude: number) => void) {
+  if (!Array.isArray(position) || position.length < 2) {
+    return false;
+  }
+
+  const [longitude, latitude] = position;
+
+  if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+    return false;
+  }
+
+  visitor(longitude, latitude);
+  return true;
+}
+
+function visitPolygonCoordinates(coordinates: unknown, visitor: (longitude: number, latitude: number) => void) {
+  if (!Array.isArray(coordinates)) {
+    return;
+  }
+
+  coordinates.forEach((ring) => {
+    if (!Array.isArray(ring)) {
+      return;
+    }
+
+    ring.forEach((position) => visitPosition(position, visitor));
+  });
+}
+
+function visitFeatureCoordinates(feature: BuildingFootprintFeature, visitor: (longitude: number, latitude: number) => void) {
+  if (feature.geometry.type === 'Polygon') {
+    visitPolygonCoordinates(feature.geometry.coordinates, visitor);
+    return;
+  }
+
+  if (Array.isArray(feature.geometry.coordinates)) {
+    feature.geometry.coordinates.forEach((polygonCoordinates) => visitPolygonCoordinates(polygonCoordinates, visitor));
+  }
 }
 
 export function getBuildingFootprintGeoJsonUrl() {
@@ -132,7 +189,7 @@ export async function loadBuildingFootprints(url = getBuildingFootprintGeoJsonUr
   const response = await fetch(url);
 
   if (!response.ok) {
-    throw new Error(BUILDING_POLYGON_UNCONFIGURED_MESSAGE);
+    throw new Error(response.status === 404 ? `건물 footprint GeoJSON 파일을 찾지 못했습니다: ${url}` : BUILDING_POLYGON_UNCONFIGURED_MESSAGE);
   }
 
   return validateBuildingFootprintCollection(await response.json());
@@ -144,6 +201,41 @@ export function normalizeBuildingFeatureCollection(value: unknown): BuildingPoly
   } catch {
     return null;
   }
+}
+
+export function summarizeBuildingFootprintCoordinates(
+  collection: BuildingFootprintCollection | null,
+): BuildingFootprintCoordinateSummary {
+  let minLon = Infinity;
+  let maxLon = -Infinity;
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  let coordinateCount = 0;
+  let projectedLikeCoordinateCount = 0;
+
+  collection?.features.forEach((feature) => {
+    visitFeatureCoordinates(feature, (longitude, latitude) => {
+      minLon = Math.min(minLon, longitude);
+      maxLon = Math.max(maxLon, longitude);
+      minLat = Math.min(minLat, latitude);
+      maxLat = Math.max(maxLat, latitude);
+      coordinateCount += 1;
+
+      if (isProjectedLikeValue(longitude) || isProjectedLikeValue(latitude)) {
+        projectedLikeCoordinateCount += 1;
+      }
+    });
+  });
+
+  return {
+    minLon: Number.isFinite(minLon) ? minLon : null,
+    maxLon: Number.isFinite(maxLon) ? maxLon : null,
+    minLat: Number.isFinite(minLat) ? minLat : null,
+    maxLat: Number.isFinite(maxLat) ? maxLat : null,
+    coordinateCount,
+    projectedLikeCoordinateCount,
+    hasProjectedCoordinateWarning: projectedLikeCoordinateCount > 0,
+  };
 }
 
 export function findBuildingFootprintAtCoordinate(

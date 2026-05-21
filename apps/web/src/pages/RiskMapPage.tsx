@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import VWorldSelectedBuildingLayer from '../components/VWorldSelectedBuildingLayer';
 import VWorldSolarRoofLayer, { type VWorldSolarLayerStatus } from '../components/VWorldSolarRoofLayer';
 import {
@@ -27,10 +27,10 @@ import { generateSolarPanelGrid } from '../lib/solarPanelLayout';
 import { requestPvAnalysis } from '../lib/pvAnalysisClient';
 import { requestSelectedBuildingPolygon } from '../lib/buildingPolygonClient';
 import {
-  findBuildingFootprintAtCoordinate,
   getBuildingFootprintGeoJsonUrl,
   isBuildingFootprintGeoJsonEnabled,
   loadBuildingFootprints,
+  summarizeBuildingFootprintCoordinates,
   type BuildingFootprintCollection,
   type BuildingFootprintLoadState,
   type BuildingFootprintMatch,
@@ -250,6 +250,22 @@ function formatCoordinate(coordinate: Coordinate | null) {
   return `${coordinate[1].toFixed(6)}, ${coordinate[0].toFixed(6)}`;
 }
 
+function formatDiagnosticNumber(value: number | null) {
+  return typeof value === 'number' ? value.toFixed(7) : '-';
+}
+
+function getGeoJsonDiagnosticSourceStatus(loadState: BuildingFootprintLoadState) {
+  if (loadState.status === 'loaded') {
+    return 'loaded';
+  }
+
+  if (loadState.status === 'error' && !loadState.message.includes('찾지 못했습니다')) {
+    return 'failed';
+  }
+
+  return 'missing';
+}
+
 function createSolarEstimateFromRoofArea(roofAreaM2: number) {
   const installableArea = Math.round(estimateInstallableArea(roofAreaM2));
   const capacity = Math.round(estimateCapacityKw(installableArea));
@@ -416,6 +432,11 @@ function RiskMapPage() {
     1,
     ...(pvAnalysisResult?.monthlyGenerationSeries.map((item) => item.generationKwh) ?? [0]),
   );
+  const buildingFootprintCoordinateSummary = useMemo(
+    () => summarizeBuildingFootprintCoordinates(buildingFootprints),
+    [buildingFootprints],
+  );
+  const geoJsonDiagnosticSourceStatus = getGeoJsonDiagnosticSourceStatus(buildingFootprintLoadState);
 
   const applyBuildingFootprintSelection = useCallback(
     (match: BuildingFootprintMatch, coordinate: Coordinate) => {
@@ -1084,9 +1105,21 @@ function RiskMapPage() {
               </div>
 
               {shouldShowDevDiagnostics && (
-                <div className="devDiagnosticsPanel" aria-label="개발용 브이월드 조회 진단">
-                  <strong>개발용 VWorld 진단</strong>
+                <div className="devDiagnosticsPanel" aria-label="개발용 건물 polygon 매칭 진단">
+                  <strong>개발용 건물 polygon 매칭 진단</strong>
                   <dl>
+                    <div>
+                      <dt>GeoJSON URL</dt>
+                      <dd>{buildingFootprintLoadState.url || '-'}</dd>
+                    </div>
+                    <div>
+                      <dt>source status</dt>
+                      <dd>{geoJsonDiagnosticSourceStatus}</dd>
+                    </div>
+                    <div>
+                      <dt>GeoJSON feature count</dt>
+                      <dd>{(buildingFootprints?.features.length ?? 0).toLocaleString('ko-KR')}</dd>
+                    </div>
                     <div>
                       <dt>selected lat</dt>
                       <dd>{featureQueryDiagnostics.requestedLat?.toFixed(6) ?? '-'}</dd>
@@ -1095,6 +1128,46 @@ function RiskMapPage() {
                       <dt>selected lon</dt>
                       <dd>{featureQueryDiagnostics.requestedLon?.toFixed(6) ?? '-'}</dd>
                     </div>
+                    <div>
+                      <dt>selected geometry type</dt>
+                      <dd>{selectedBuildingFootprint?.geometryType ?? '-'}</dd>
+                    </div>
+                    <div>
+                      <dt>matched building id</dt>
+                      <dd>{selectedBuildingFootprint?.buildingId ?? '-'}</dd>
+                    </div>
+                    <div>
+                      <dt>matched building address</dt>
+                      <dd>{selectedBuildingFootprint?.address ?? '-'}</dd>
+                    </div>
+                    {selectedCoordinate && !selectedBuildingFootprint && (
+                      <div>
+                        <dt>match result</dt>
+                        <dd>클릭 좌표를 포함하는 건물 polygon이 없습니다.</dd>
+                      </div>
+                    )}
+                    <div>
+                      <dt>minLon</dt>
+                      <dd>{formatDiagnosticNumber(buildingFootprintCoordinateSummary.minLon)}</dd>
+                    </div>
+                    <div>
+                      <dt>maxLon</dt>
+                      <dd>{formatDiagnosticNumber(buildingFootprintCoordinateSummary.maxLon)}</dd>
+                    </div>
+                    <div>
+                      <dt>minLat</dt>
+                      <dd>{formatDiagnosticNumber(buildingFootprintCoordinateSummary.minLat)}</dd>
+                    </div>
+                    <div>
+                      <dt>maxLat</dt>
+                      <dd>{formatDiagnosticNumber(buildingFootprintCoordinateSummary.maxLat)}</dd>
+                    </div>
+                    {buildingFootprintCoordinateSummary.hasProjectedCoordinateWarning && (
+                      <div>
+                        <dt>coordinate system warning</dt>
+                        <dd>좌표가 EPSG:4326 경도/위도 형식이 아닐 수 있습니다.</dd>
+                      </div>
+                    )}
                     <div>
                       <dt>API request path</dt>
                       <dd>{featureQueryDiagnostics.requestPath}</dd>

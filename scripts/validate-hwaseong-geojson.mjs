@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,6 +12,7 @@ const PROJECTED_COORDINATE_MAX = 1_000_000;
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '..');
 const targetPath = path.resolve(repoRoot, TARGET_RELATIVE_PATH);
+const requireFromWebApp = createRequire(path.join(repoRoot, 'apps/web/package.json'));
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -96,6 +98,26 @@ function formatRangeValue(value) {
   return Number.isFinite(value) ? value.toFixed(7) : 'n/a';
 }
 
+function formatAreaValue(value) {
+  return Number.isFinite(value) ? `${Math.round(value).toLocaleString('en-US')} m2` : 'n/a';
+}
+
+function getLikelyCrs({ totalCoordinateCount, projectedLikeCoordinateCount, outOfRangeCoordinateCount }) {
+  if (totalCoordinateCount === 0) {
+    return 'unknown';
+  }
+
+  if (projectedLikeCoordinateCount > 0) {
+    return 'projected CRS likely';
+  }
+
+  if (outOfRangeCoordinateCount === 0) {
+    return 'EPSG:4326 likely';
+  }
+
+  return 'unknown';
+}
+
 function printList(title, items) {
   if (items.length === 0) {
     return;
@@ -104,6 +126,19 @@ function printList(title, items) {
   console.log(`\n${title}`);
   for (const item of items) {
     console.log(`- ${item}`);
+  }
+}
+
+async function loadOptionalTurfArea() {
+  try {
+    const turf = await import('@turf/turf');
+    return turf.area;
+  } catch {
+    try {
+      return requireFromWebApp('@turf/turf').area;
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -130,12 +165,14 @@ async function readJsonFile() {
 async function main() {
   const errors = [];
   const warnings = [];
+  const turfArea = await loadOptionalTurfArea();
   const geometryTypeCounts = {
     Polygon: 0,
     MultiPolygon: 0,
   };
   const coordinateRange = createCoordinateRange();
   const missingIdExamples = [];
+  const areaValues = [];
   let totalCoordinateCount = 0;
   let projectedLikeCoordinateCount = 0;
   let outOfRangeCoordinateCount = 0;
@@ -185,6 +222,24 @@ async function main() {
     }
 
     geometryTypeCounts[geometry.type] += 1;
+
+    if (turfArea) {
+      try {
+        const featureAreaM2 = turfArea({
+          type: 'Feature',
+          properties: feature.properties ?? {},
+          geometry,
+        });
+
+        if (isFiniteNumber(featureAreaM2)) {
+          areaValues.push(featureAreaM2);
+        }
+      } catch {
+        if (areaValues.length === 0) {
+          warnings.push('turf.area could not calculate area for at least one feature.');
+        }
+      }
+    }
 
     const coordinateCount = visitGeometryCoordinates(geometry, (lon, lat) => {
       updateCoordinateRange(coordinateRange, lon, lat);
@@ -243,6 +298,21 @@ async function main() {
 
   const firstFeatureProperties = isPlainObject(features[0]?.properties) ? features[0].properties : {};
   const firstFeaturePropertyKeys = Object.keys(firstFeatureProperties);
+  const likelyCrs = getLikelyCrs({
+    totalCoordinateCount,
+    projectedLikeCoordinateCount,
+    outOfRangeCoordinateCount,
+  });
+  const areaSummary =
+    areaValues.length > 0
+      ? {
+          count: areaValues.length,
+          total: areaValues.reduce((sum, value) => sum + value, 0),
+          min: Math.min(...areaValues),
+          max: Math.max(...areaValues),
+          average: areaValues.reduce((sum, value) => sum + value, 0) / areaValues.length,
+        }
+      : null;
 
   console.log('Hwaseong building GeoJSON validation summary');
   console.log(`Target: ${TARGET_RELATIVE_PATH}`);
@@ -253,8 +323,18 @@ async function main() {
       coordinateRange.lonMax,
     )}, lat ${formatRangeValue(coordinateRange.latMin)} to ${formatRangeValue(coordinateRange.latMax)}`,
   );
+  console.log(`Likely CRS: ${likelyCrs}`);
   console.log(
     `First feature property keys: ${firstFeaturePropertyKeys.length > 0 ? firstFeaturePropertyKeys.join(', ') : '(none)'}`,
+  );
+  console.log(
+    areaSummary
+      ? `Area summary: count=${areaSummary.count.toLocaleString('en-US')}, total=${formatAreaValue(
+          areaSummary.total,
+        )}, min=${formatAreaValue(areaSummary.min)}, max=${formatAreaValue(areaSummary.max)}, average=${formatAreaValue(
+          areaSummary.average,
+        )}`
+      : `Area summary: unavailable${turfArea ? ' (no valid polygon area)' : ' (turf.area not available)'}`,
   );
 
   printList('Warnings', warnings);
