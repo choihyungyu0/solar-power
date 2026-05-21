@@ -67,26 +67,49 @@ function addSelectedPolygonToMap(map: VWorldMapInstance, polygon: PolygonCoordin
     featureLayer.setName?.('solarmate-click-selected-building-layer');
     featureLayer.setFeature(feature);
     featureLayer.setStyle?.(style);
-    map.addElement?.(featureLayer);
 
-    return {
-      id: 'solarmate-click-selected-building-layer',
-      object: featureLayer,
-    };
+    try {
+      map.addElement?.(featureLayer);
+
+      return {
+        id: 'solarmate-click-selected-building-layer',
+        object: featureLayer,
+      };
+    } catch {
+      // Some VWorld 3D builds reject layer.Feature in addElement. Try the raw feature below.
+    }
   }
 
-  map.addElement?.(feature);
+  try {
+    map.addElement?.(feature);
 
-  return {
-    id: 'solarmate-click-selected-building',
-    object: feature,
-  };
+    return {
+      id: 'solarmate-click-selected-building',
+      object: feature,
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 function removeVWorldObject(map: VWorldMapInstance, addedObject: AddedVWorldObject) {
-  map.removeObject?.(addedObject.object);
-  map.removeObjectById?.(addedObject.id);
-  map.removeLayerElement?.(addedObject.id);
+  try {
+    map.removeObject?.(addedObject.object);
+  } catch {
+    // VWorld object removal APIs differ by SDK build.
+  }
+
+  try {
+    map.removeObjectById?.(addedObject.id);
+  } catch {
+    // Keep cleanup best-effort.
+  }
+
+  try {
+    map.removeLayerElement?.(addedObject.id);
+  } catch {
+    // Keep cleanup best-effort.
+  }
 }
 
 function VWorldSelectedBuildingLayer({ map, isActive, polygon }: VWorldSelectedBuildingLayerProps) {
@@ -102,8 +125,12 @@ function VWorldSelectedBuildingLayer({ map, isActive, polygon }: VWorldSelectedB
         removeVWorldObject(map, addedObject);
       }
 
-      map.removeObjectById?.('solarmate-click-selected-building');
-      map.removeObjectById?.('solarmate-click-selected-building-layer');
+      try {
+        map.removeObjectById?.('solarmate-click-selected-building');
+        map.removeObjectById?.('solarmate-click-selected-building-layer');
+      } catch {
+        // Cleanup should not break React rendering.
+      }
     };
   }, [isActive, map, polygon]);
 

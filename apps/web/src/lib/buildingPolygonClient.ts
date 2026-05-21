@@ -1,4 +1,5 @@
 import {
+  findBuildingFootprintInAdmdongIndex,
   getBuildingFootprintGeoJsonUrl,
   getBuildingPolygonSourceLabel,
   getBuildingPolygonUnconfiguredMessage,
@@ -119,6 +120,49 @@ async function requestBuildingPolygonFromGeoJson({
   }
 }
 
+async function requestBuildingPolygonFromAdmdongIndex({
+  longitude,
+  latitude,
+}: BuildingPolygonRequestInput): Promise<BuildingPolygonSelectionResult> {
+  const sourceLabel = getBuildingPolygonSourceLabel('admdong_index');
+  const result = await findBuildingFootprintInAdmdongIndex([longitude, latitude]);
+
+  if (result.status !== 'selected') {
+    return {
+      status: result.status === 'error' ? 'error' : 'not_found',
+      source: 'admdong_index',
+      sourceLabel,
+      message: result.message,
+      diagnostics: result.diagnostics,
+      candidateFeatures: result.candidateFeatures as BuildingPolygonFeature[],
+    };
+  }
+
+  const building = createBuildingPolygonRecord({
+    feature: result.match.feature as BuildingPolygonFeature,
+    source: 'admdong_index',
+    sourceLabel,
+  });
+
+  if (!building) {
+    return {
+      status: 'error',
+      source: 'admdong_index',
+      sourceLabel,
+      message: '행정동 분할 건물 GeoJSON에서 사용할 수 있는 footprint polygon을 찾지 못했습니다.',
+      diagnostics: result.diagnostics,
+      candidateFeatures: result.candidateFeatures as BuildingPolygonFeature[],
+    };
+  }
+
+  return {
+    status: 'found',
+    building,
+    diagnostics: result.diagnostics,
+    candidateFeatures: result.candidateFeatures as BuildingPolygonFeature[],
+  };
+}
+
 export async function requestSelectedBuildingPolygon(
   input: BuildingPolygonRequestInput,
 ): Promise<BuildingPolygonSelectionResult> {
@@ -130,6 +174,10 @@ export async function requestSelectedBuildingPolygon(
 
   if (source === 'geojson') {
     return requestBuildingPolygonFromGeoJson(input);
+  }
+
+  if (source === 'admdong_index') {
+    return requestBuildingPolygonFromAdmdongIndex(input);
   }
 
   return {

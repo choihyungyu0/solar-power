@@ -25,6 +25,9 @@ const VWORLD_ENGINE_SCRIPT_DEFINITIONS = [
     statusKey: 'ol3WebglLoaded',
   },
 ] as const;
+const HWASEONG_INITIAL_LONGITUDE = 127.073;
+const HWASEONG_INITIAL_LATITUDE = 37.1995;
+const HWASEONG_INITIAL_HEIGHT = 8_000;
 
 let vworldScriptPromise: Promise<void> | null = null;
 const scriptLoadPromises = new Map<string, Promise<void>>();
@@ -326,9 +329,9 @@ function extractSelectionFromVWorldClick(args: unknown[]): VWorldSelection {
 }
 
 function createVWorldCameraPosition(
-  longitude = 127.1086,
-  latitude = 37.3825,
-  height = 2400,
+  longitude = HWASEONG_INITIAL_LONGITUDE,
+  latitude = HWASEONG_INITIAL_LATITUDE,
+  height = HWASEONG_INITIAL_HEIGHT,
   heading = 0,
   pitch = -70,
   roll = 0,
@@ -553,6 +556,12 @@ export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWo
   map.setLogoVisible?.(true);
   map.setNavigationZoomVisible?.(true);
   map.start?.();
+  focusVWorldMapOnCoordinate(map, {
+    longitude: HWASEONG_INITIAL_LONGITUDE,
+    latitude: HWASEONG_INITIAL_LATITUDE,
+    height: HWASEONG_INITIAL_HEIGHT,
+    pitch: -70,
+  });
 
   // 건물 피처 선택 API 연결 전까지는 클릭 좌표 기반의 1차 선택 흐름을 사용합니다.
   const clickHandler = (...args: unknown[]) => {

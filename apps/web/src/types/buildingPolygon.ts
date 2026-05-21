@@ -1,4 +1,6 @@
-export type BuildingPolygonSource = 'api' | 'geojson';
+import type { BuildingFootprintDiagnostics } from '../lib/buildingFootprints';
+
+export type BuildingPolygonSource = 'api' | 'geojson' | 'admdong_index';
 
 export type BuildingPolygonSourceMode = BuildingPolygonSource | 'none';
 
@@ -61,11 +63,15 @@ export type BuildingPolygonSelectionResult =
   | {
       status: 'found';
       building: BuildingPolygonRecord;
+      diagnostics?: BuildingFootprintDiagnostics;
+      candidateFeatures?: BuildingPolygonFeature[];
     }
   | {
       status: 'unconfigured' | 'not_found' | 'error';
       source: BuildingPolygonSourceMode;
       sourceLabel: string;
       message: string;
+      diagnostics?: BuildingFootprintDiagnostics;
+      candidateFeatures?: BuildingPolygonFeature[];
     };
 

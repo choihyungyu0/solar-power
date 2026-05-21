@@ -180,7 +180,7 @@ function createFeature(id: string, polygon: PolygonCoordinates, style: unknown) 
   return feature;
 }
 
-function addFeatureToMap(map: VWorldMapInstance, id: string, feature: unknown, style: unknown): AddedVWorldObject {
+function addFeatureToMap(map: VWorldMapInstance, id: string, feature: unknown, style: unknown): AddedVWorldObject | null {
   const vw = window.vw;
   const featureLayer = vw?.layer?.Feature ? new vw.layer.Feature() : null;
 
@@ -188,20 +188,43 @@ function addFeatureToMap(map: VWorldMapInstance, id: string, feature: unknown, s
     featureLayer.setName?.(id);
     featureLayer.setFeature(feature);
     featureLayer.setStyle?.(style);
-    map.addElement?.(featureLayer);
 
-    return { id, object: featureLayer };
+    try {
+      map.addElement?.(featureLayer);
+
+      return { id, object: featureLayer };
+    } catch {
+      // Some VWorld 3D builds reject layer.Feature in addElement. Try the raw feature below.
+    }
   }
 
-  map.addElement?.(feature);
+  try {
+    map.addElement?.(feature);
 
-  return { id, object: feature };
+    return { id, object: feature };
+  } catch {
+    return null;
+  }
 }
 
 function removeVWorldObject(map: VWorldMapInstance, addedObject: AddedVWorldObject) {
-  map.removeObject?.(addedObject.object);
-  map.removeObjectById?.(addedObject.id);
-  map.removeLayerElement?.(addedObject.id);
+  try {
+    map.removeObject?.(addedObject.object);
+  } catch {
+    // VWorld object removal APIs differ by SDK build.
+  }
+
+  try {
+    map.removeObjectById?.(addedObject.id);
+  } catch {
+    // Keep cleanup best-effort.
+  }
+
+  try {
+    map.removeLayerElement?.(addedObject.id);
+  } catch {
+    // Keep cleanup best-effort.
+  }
 }
 
 function addSolarPanelsToVWorldMap({
@@ -224,16 +247,27 @@ function addSolarPanelsToVWorldMap({
 
   if (buildingPolygon) {
     const buildingFeature = createFeature('solarmate-selected-building', buildingPolygon, buildingStyle);
-    addedObjects.push(addFeatureToMap(map, 'solarmate-selected-building-layer', buildingFeature, buildingStyle));
+    const addedBuilding = addFeatureToMap(map, 'solarmate-selected-building-layer', buildingFeature, buildingStyle);
+
+    if (addedBuilding) {
+      addedObjects.push(addedBuilding);
+    }
   }
 
   const roofFeature = createFeature('solarmate-selected-roof', roofPolygon, roofStyle);
+  const addedRoof = addFeatureToMap(map, 'solarmate-selected-roof-layer', roofFeature, roofStyle);
 
-  addedObjects.push(addFeatureToMap(map, 'solarmate-selected-roof-layer', roofFeature, roofStyle));
+  if (addedRoof) {
+    addedObjects.push(addedRoof);
+  }
 
   panelPolygons.forEach((panelPolygon, index) => {
     const panelFeature = createFeature(`solarmate-panel-${index}`, panelPolygon, panelStyle);
-    addedObjects.push(addFeatureToMap(map, `solarmate-panel-layer-${index}`, panelFeature, panelStyle));
+    const addedPanel = addFeatureToMap(map, `solarmate-panel-layer-${index}`, panelFeature, panelStyle);
+
+    if (addedPanel) {
+      addedObjects.push(addedPanel);
+    }
   });
 
   const centroid = getPolygonCentroid(roofPolygon);
@@ -249,9 +283,13 @@ function addSolarPanelsToVWorldMap({
     focusResult: moveMapViewToRoof(map, roofPolygon),
     cleanup: () => {
       addedObjects.forEach((addedObject) => removeVWorldObject(map, addedObject));
-      map.removeObjectById?.('solarmate-solar-label');
-      map.removeObjectById?.('solarmate-selected-building');
-      map.removeObjectById?.('solarmate-selected-roof');
+      try {
+        map.removeObjectById?.('solarmate-solar-label');
+        map.removeObjectById?.('solarmate-selected-building');
+        map.removeObjectById?.('solarmate-selected-roof');
+      } catch {
+        // Cleanup should not break React rendering.
+      }
     },
   };
 }

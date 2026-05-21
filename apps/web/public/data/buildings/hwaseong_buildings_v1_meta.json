@@ -1,0 +1,110 @@
+{
+  "generated_at": "2026-05-21T21:14:38",
+  "source": "VWorld GIS건물통합정보 AL_D010 (경기도 다운로드, 2026-05-09)",
+  "sigungu_code": "41590",
+  "sigungu_name": "화성시",
+  "feature_count": 242346,
+  "crs": "EPSG:4326",
+  "coordinate_order": "[lon, lat]",
+  "filter_rule": "A23(원천시도시군구코드) == '41590'",
+  "fields": [
+    {
+      "key": "bld_id",
+      "korean": "GIS건물통합식별번호",
+      "origin_code": "A1"
+    },
+    {
+      "key": "pnu",
+      "korean": "고유번호",
+      "origin_code": "A2"
+    },
+    {
+      "key": "admdong_code",
+      "korean": "법정동코드",
+      "origin_code": "A3"
+    },
+    {
+      "key": "admdong_name",
+      "korean": "법정동명",
+      "origin_code": "A4"
+    },
+    {
+      "key": "jibun",
+      "korean": "지번",
+      "origin_code": "A5"
+    },
+    {
+      "key": "usage_code",
+      "korean": "건축물용도코드",
+      "origin_code": "A8"
+    },
+    {
+      "key": "usage_name",
+      "korean": "건축물용도명",
+      "origin_code": "A9"
+    },
+    {
+      "key": "building_area_m2",
+      "korean": "건축물면적(㎡)",
+      "origin_code": "A12"
+    },
+    {
+      "key": "total_floor_area_m2",
+      "korean": "연면적",
+      "origin_code": "A14"
+    },
+    {
+      "key": "site_area_m2",
+      "korean": "대지면적(㎡)",
+      "origin_code": "A15"
+    },
+    {
+      "key": "height_m",
+      "korean": "높이(m)",
+      "origin_code": "A16"
+    },
+    {
+      "key": "bdmgt_sn",
+      "korean": "건축물ID",
+      "origin_code": "A19"
+    },
+    {
+      "key": "data_ref_date",
+      "korean": "데이터기준일자",
+      "origin_code": "A22"
+    },
+    {
+      "key": "name",
+      "korean": "건물명",
+      "origin_code": "A24"
+    },
+    {
+      "key": "dong_name",
+      "korean": "건물동명",
+      "origin_code": "A25"
+    },
+    {
+      "key": "floors_above",
+      "korean": "지상층_수",
+      "origin_code": "A26"
+    },
+    {
+      "key": "floors_below",
+      "korean": "지하층_수",
+      "origin_code": "A27"
+    },
+    {
+      "key": "address",
+      "korean": "주소 (법정동명+지번)",
+      "origin_code": "A4+A5"
+    }
+  ],
+  "files": {
+    "split_dir": "data/processed/hwaseong_buildings_v1_by_admdong"
+  },
+  "notes": [
+    "용도(usage_name) 가 옥상형 PV 비대상(차고·창고 등) 인 행도 포함. 필요 시 클라이언트에서 필터.",
+    "아파트 단지는 bld_id 같고 dong_name 다른 여러 행으로 분리됨.",
+    "MultiPolygon 케이스 일부 있을 수 있음 — 매칭 로직 대응 필요할 수도?."
+  ]
+}
