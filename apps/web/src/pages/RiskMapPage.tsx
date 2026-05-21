@@ -27,6 +27,15 @@ import {
 import { generateSolarPanelGrid } from '../lib/solarPanelLayout';
 import { requestPvAnalysis } from '../lib/pvAnalysisClient';
 import {
+  findBuildingFootprintAtCoordinate,
+  getBuildingFootprintGeoJsonUrl,
+  isBuildingFootprintGeoJsonEnabled,
+  loadBuildingFootprints,
+  type BuildingFootprintCollection,
+  type BuildingFootprintLoadState,
+  type BuildingFootprintMatch,
+} from '../lib/buildingFootprints';
+import {
   buildVWorldFeatureProxyPath,
   getConfiguredVWorldBuildingDataId,
   getVWorldFeatureDataTypeInfo,
@@ -45,7 +54,7 @@ const PV_DEFAULT_PANEL_COUNT = 204;
 
 type MapLoadStatus = 'loading' | 'ready' | 'error';
 type RiskPanelTab = 'risk' | 'solar' | 'policy';
-type SelectionMode = 'screen-fallback' | 'coordinate-fallback' | 'parcel-fallback' | 'geometry';
+type SelectionMode = 'screen-fallback' | 'coordinate-fallback' | 'parcel-fallback' | 'geometry' | 'building_footprint';
 type PvAnalysisStatus = 'idle' | 'loading' | 'success' | 'fallback' | 'error';
 type GeometryQueryStatus =
   | 'idle'
@@ -77,6 +86,13 @@ type FeatureQueryDiagnostics = {
   buffer: number;
   requestPath: string;
 };
+
+type SelectedBuildingFootprint = {
+  buildingId: string;
+  address: string;
+  name: string;
+  geometryType: 'Polygon' | 'MultiPolygon';
+} | null;
 
 type SelectedBuilding = {
   apartmentName: string;
@@ -275,6 +291,10 @@ function getGeometryStatusText(status: GeometryQueryStatus) {
 }
 
 function getSelectionModeText(mode: SelectionMode) {
+  if (mode === 'building_footprint') {
+    return '건물 footprint 기반 옥상 추정';
+  }
+
   if (mode === 'geometry') {
     return '실제 건물 도형 기반';
   }
@@ -299,6 +319,10 @@ function getRoofPolygonStatusText(mode: SelectionMode, roofPolygon: PolygonCoord
     return '필지 polygon 기반 roof 근사';
   }
 
+  if (mode === 'building_footprint') {
+    return '건물 footprint 기반 옥상 추정';
+  }
+
   return '건물 footprint 기반 1차 근사';
 }
 
@@ -320,6 +344,15 @@ function createInitialFeatureQueryDiagnostics(): FeatureQueryDiagnostics {
     dataId,
     buffer: 10,
     requestPath: '/api/vworld-feature',
+  };
+}
+
+function createInitialBuildingFootprintLoadState(): BuildingFootprintLoadState {
+  return {
+    status: 'idle',
+    url: getBuildingFootprintGeoJsonUrl(),
+    collection: null,
+    message: '건물 footprint GeoJSON 로드 대기 중',
   };
 }
 
@@ -358,6 +391,11 @@ function RiskMapPage() {
   const [featureQueryDiagnostics, setFeatureQueryDiagnostics] = useState<FeatureQueryDiagnostics>(
     createInitialFeatureQueryDiagnostics,
   );
+  const [buildingFootprints, setBuildingFootprints] = useState<BuildingFootprintCollection | null>(null);
+  const [buildingFootprintLoadState, setBuildingFootprintLoadState] = useState<BuildingFootprintLoadState>(
+    createInitialBuildingFootprintLoadState,
+  );
+  const [selectedBuildingFootprint, setSelectedBuildingFootprint] = useState<SelectedBuildingFootprint>(null);
   const [selectedBuildingGeometry, setSelectedBuildingGeometry] = useState<PolygonCoordinates | null>(null);
   const [selectedRoofPolygon, setSelectedRoofPolygon] = useState<PolygonCoordinates | null>(null);
   const [solarPanelPolygons, setSolarPanelPolygons] = useState<PolygonCoordinates[]>([]);
@@ -365,7 +403,8 @@ function RiskMapPage() {
     state: 'idle',
     message: '태양광 지도 레이어가 꺼져 있습니다.',
   });
-  const hasMapAnchoredGeometry = selectionMode === 'geometry' || selectionMode === 'parcel-fallback';
+  const hasMapAnchoredGeometry =
+    selectionMode === 'geometry' || selectionMode === 'parcel-fallback' || selectionMode === 'building_footprint';
   const shouldShowScreenFallback =
     isSolarSimulationVisible && (!hasMapAnchoredGeometry || solarLayerStatus.state !== 'rendered');
   const shouldShowDevDiagnostics = import.meta.env.DEV;
@@ -373,6 +412,88 @@ function RiskMapPage() {
   const monthlyGenerationMaxKwh = Math.max(
     1,
     ...(pvAnalysisResult?.monthlyGenerationSeries.map((item) => item.generationKwh) ?? [0]),
+  );
+
+  const applyBuildingFootprintSelection = useCallback(
+    (match: BuildingFootprintMatch, coordinate: Coordinate) => {
+      const polygon = normalizeGeoJsonPolygon(match.feature);
+
+      if (!polygon) {
+        setGeometryQueryStatus('not-found');
+        setGeometryQueryMessage('선택 좌표에서 건물 polygon을 찾았지만 표시 가능한 Polygon/MultiPolygon 좌표가 없습니다.');
+        setSelectedBuildingFootprint(null);
+        setSelectedBuildingGeometry(null);
+        setSelectedRoofPolygon(null);
+        setSolarPanelPolygons([]);
+        return;
+      }
+
+      const roofPolygon = estimateRoofPolygonFromFootprint(polygon);
+      const roofCentroid = getPolygonCentroid(roofPolygon);
+      const roofAreaM2 = calculatePolygonAreaM2(roofPolygon);
+      const panelPolygons = generateSolarPanelGrid(roofPolygon);
+      const panelBasedCapacityKw = Number(((panelPolygons.length * PV_DEFAULT_PANEL_CAPACITY_W) / 1000).toFixed(1));
+      const solarEstimate = createSolarEstimateFromRoofArea(roofAreaM2);
+      const refinedFocusResult = focusVWorldMapOnCoordinate(vworldMapRef.current, {
+        longitude: roofCentroid[0],
+        latitude: roofCentroid[1],
+        height: 160,
+        pitch: -82,
+      });
+      const refinedMarkerAdded = markVWorldMapSelection(vworldMapRef.current, {
+        longitude: coordinate[0],
+        latitude: coordinate[1],
+        label: '선택 건물',
+      });
+
+      setSelectedBuildingFootprint(match.metadata);
+      setSelectedBuildingGeometry(polygon);
+      setSelectedRoofPolygon(roofPolygon);
+      setSolarPanelPolygons(panelPolygons);
+      setMapFocusStatus({
+        message: refinedFocusResult.message,
+        method: refinedFocusResult.method,
+        moved: refinedFocusResult.moved,
+        markerAdded: refinedMarkerAdded,
+      });
+      setSelectionMode('building_footprint');
+      setGeometryQueryStatus('found');
+      setGeometryQueryMessage(
+        `건물 footprint 기반 옥상 추정: ${match.metadata.geometryType} geometry에서 ${panelPolygons.length.toLocaleString(
+          'ko-KR',
+        )}개 패널 후보를 배치했습니다.`,
+      );
+      setFeatureDataInfo({
+        dataId: 'local-hwaseong-buildings.geojson',
+        dataTypeLabel: '건물 footprint GeoJSON',
+        isActualRoofPolygon: false,
+        dataTypeNote:
+          '건물 footprint 기반 옥상 추정입니다. 정확한 옥상 polygon 또는 장애물 데이터가 아니므로 현장조사가 필요합니다.',
+        sourceKind: 'building-or-roof',
+      });
+      setFeatureQueryDiagnostics({
+        queryStatus: 'success',
+        featureCount: buildingFootprints?.features.length ?? 0,
+        requestedLon: coordinate[0],
+        requestedLat: coordinate[1],
+        dataId: 'local-hwaseong-buildings.geojson',
+        buffer: 0,
+        requestPath: buildingFootprintLoadState.url,
+      });
+      setSelectedBuilding({
+        ...demoBuilding,
+        apartmentName: match.metadata.name,
+        address: match.metadata.address,
+        ...solarEstimate,
+        estimatedCapacityKw: panelBasedCapacityKw,
+        estimatedPanelCount: panelPolygons.length,
+        selectionNote: `building_id ${match.metadata.buildingId} / ${match.metadata.geometryType} 기반으로 선택했습니다.`,
+        simulationConfidence: '건물 footprint 기반 옥상 추정',
+        simulationNote:
+          '실제 설치 가능 여부는 옥상 장애물, 음영, 구조안전성, 관리주체 협의, 현장조사에 따라 달라질 수 있습니다.',
+      });
+    },
+    [buildingFootprintLoadState.url, buildingFootprints?.features.length],
   );
 
   const handleMapSelection = useCallback(async (selection?: VWorldSelection) => {
@@ -390,6 +511,7 @@ function RiskMapPage() {
       setSelectionMode('screen-fallback');
       setGeometryQueryStatus('idle');
       setGeometryQueryMessage('지도 좌표가 없어 화면 기준 예시 배치를 표시합니다.');
+      setSelectedBuildingFootprint(null);
       setSelectedBuildingGeometry(null);
       setSelectedRoofPolygon(null);
       setSolarPanelPolygons([]);
@@ -406,6 +528,7 @@ function RiskMapPage() {
     }
 
     setSelectedCoordinate(coordinate);
+    setSelectedBuildingFootprint(null);
     const dataId = getConfiguredVWorldBuildingDataId();
     const buffer = 10;
     const requestPath = buildVWorldFeatureProxyPath({
@@ -446,6 +569,40 @@ function RiskMapPage() {
     setSelectedBuildingGeometry(null);
     setSelectedRoofPolygon(null);
     setSolarPanelPolygons([]);
+
+    if (isBuildingFootprintGeoJsonEnabled() && buildingFootprints) {
+      const footprintMatch = findBuildingFootprintAtCoordinate(buildingFootprints, coordinate);
+
+      if (footprintMatch) {
+        applyBuildingFootprintSelection(footprintMatch, coordinate);
+        return;
+      }
+
+      setGeometryQueryStatus('not-found');
+      setGeometryQueryMessage('선택 좌표에서 건물 polygon을 찾지 못했습니다.');
+      setFeatureDataInfo({
+        dataId: 'local-hwaseong-buildings.geojson',
+        dataTypeLabel: '건물 footprint GeoJSON',
+        isActualRoofPolygon: false,
+        dataTypeNote:
+          '건물 footprint 기반 옥상 추정입니다. 정확한 옥상 polygon 또는 장애물 데이터가 아니므로 현장조사가 필요합니다.',
+        sourceKind: 'building-or-roof',
+      });
+      setFeatureQueryDiagnostics({
+        queryStatus: 'not_found',
+        featureCount: buildingFootprints.features.length,
+        requestedLon: coordinate[0],
+        requestedLat: coordinate[1],
+        dataId: 'local-hwaseong-buildings.geojson',
+        buffer: 0,
+        requestPath: buildingFootprintLoadState.url,
+      });
+      setSelectedBuilding({
+        ...demoBuilding,
+        selectionNote: '선택 좌표에서 건물 polygon을 찾지 못했습니다.',
+      });
+      return;
+    }
 
     try {
       const result = await queryVWorldFeaturesByPoint({
@@ -582,7 +739,7 @@ function RiskMapPage() {
         selectionNote: '좌표는 선택됐지만 실제 건물 도형 조회가 완료되지 않아 fallback 예시 배치를 사용합니다.',
       });
     }
-  }, []);
+  }, [applyBuildingFootprintSelection, buildingFootprintLoadState.url, buildingFootprints]);
 
   const handlePvAnalysisRequest = useCallback(async () => {
     if (!selectedCoordinate) {
@@ -622,6 +779,57 @@ function RiskMapPage() {
         : response.message,
     );
   }, [selectedBuilding.estimatedPanelCount, selectedCoordinate]);
+
+  useEffect(() => {
+    if (!isBuildingFootprintGeoJsonEnabled()) {
+      return undefined;
+    }
+
+    let isMounted = true;
+    const url = getBuildingFootprintGeoJsonUrl();
+
+    setBuildingFootprintLoadState({
+      status: 'loading',
+      url,
+      collection: null,
+      message: '건물 footprint GeoJSON을 불러오는 중입니다.',
+    });
+
+    loadBuildingFootprints(url)
+      .then((collection) => {
+        if (!isMounted) {
+          return;
+        }
+
+        setBuildingFootprints(collection);
+        setBuildingFootprintLoadState({
+          status: 'loaded',
+          url,
+          collection,
+          message: `건물 footprint GeoJSON 로드 완료: ${collection.features.length.toLocaleString('ko-KR')}개 feature`,
+        });
+      })
+      .catch((error: unknown) => {
+        if (!isMounted) {
+          return;
+        }
+
+        setBuildingFootprints(null);
+        setBuildingFootprintLoadState({
+          status: 'error',
+          url,
+          collection: null,
+          message:
+            error instanceof Error
+              ? error.message
+              : '건물 footprint GeoJSON을 불러오거나 검증하지 못했습니다.',
+        });
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -897,6 +1105,26 @@ function RiskMapPage() {
                   <strong>{getDataTypeDisplayText(featureDataInfo)}</strong>
                 </div>
                 <div>
+                  <span>GeoJSON 로드</span>
+                  <strong>{buildingFootprintLoadState.message}</strong>
+                </div>
+                <div>
+                  <span>building_id</span>
+                  <strong>{selectedBuildingFootprint?.buildingId ?? '-'}</strong>
+                </div>
+                <div>
+                  <span>건물명</span>
+                  <strong>{selectedBuildingFootprint?.name ?? '-'}</strong>
+                </div>
+                <div>
+                  <span>주소</span>
+                  <strong>{selectedBuildingFootprint?.address ?? '-'}</strong>
+                </div>
+                <div>
+                  <span>geometry type</span>
+                  <strong>{selectedBuildingFootprint?.geometryType ?? '-'}</strong>
+                </div>
+                <div>
                   <span>실제 옥상 polygon 여부</span>
                   <strong>{featureDataInfo.isActualRoofPolygon ? '예' : '아님'}</strong>
                 </div>
@@ -1106,7 +1334,8 @@ function RiskMapPage() {
           <p className="riskDisclaimer">
             본 태양광 가상 설치는 브이월드 공간정보와 입력값 기반의 1차 추정입니다. 실제 설치 가능 여부,
             발전량, 절감액은 현장조사, 옥상 장애물, 음영, 구조안전성, 설비 사양, 관리주체 협의, 정책 공고
-            기준에 따라 달라질 수 있습니다.
+            기준에 따라 달라질 수 있습니다. 실제 설치 가능 여부는 옥상 장애물, 음영, 구조안전성, 관리주체 협의,
+            현장조사에 따라 달라질 수 있습니다.
           </p>
         </aside>
       </section>
