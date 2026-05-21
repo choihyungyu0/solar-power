@@ -27,6 +27,7 @@ import { requestPvAnalysis } from '../lib/pvAnalysisClient';
 import { requestSelectedBuildingPolygon } from '../lib/buildingPolygonClient';
 import {
   getBuildingFootprintGeoJsonUrl,
+  getConfiguredBuildingPolygonSource,
   isBuildingFootprintGeoJsonEnabled,
   loadBuildingFootprints,
   summarizeBuildingFootprintCoordinates,
@@ -55,6 +56,7 @@ type MapLoadStatus = 'loading' | 'ready' | 'error';
 type RiskPanelTab = 'risk' | 'solar' | 'policy';
 type SelectionMode = 'screen-fallback' | 'coordinate-fallback' | 'parcel-fallback' | 'geometry' | 'building_polygon';
 type PvAnalysisStatus = 'idle' | 'loading' | 'success' | 'fallback' | 'error';
+type RiskProcessStepState = 'disabled' | 'complete' | 'active' | 'pending';
 type GeometryQueryStatus =
   | 'idle'
   | 'loading'
@@ -93,6 +95,12 @@ type SelectedBuildingFootprint = {
   name: string;
   geometryType: 'Polygon' | 'MultiPolygon';
 } | null;
+
+type RiskProcessStep = {
+  title: string;
+  state: RiskProcessStepState;
+  message: string;
+};
 
 type SelectedBuilding = {
   apartmentName: string;
@@ -265,6 +273,22 @@ function getGeoJsonDiagnosticSourceStatus(loadState: BuildingFootprintLoadState)
   return 'missing';
 }
 
+function getRiskProcessStateText(state: RiskProcessStepState) {
+  if (state === 'complete') {
+    return '완료';
+  }
+
+  if (state === 'active') {
+    return '진행중';
+  }
+
+  if (state === 'disabled') {
+    return '비활성';
+  }
+
+  return '대기';
+}
+
 function createSolarEstimateFromPanelLayout(layoutResult: SolarPanelLayoutResult) {
   const capacity = layoutResult.estimatedCapacityKw;
   const annualGeneration = Math.round(estimateAnnualGenerationKwh(capacity));
@@ -435,6 +459,48 @@ function RiskMapPage() {
     [buildingFootprints],
   );
   const geoJsonDiagnosticSourceStatus = getGeoJsonDiagnosticSourceStatus(buildingFootprintLoadState);
+  const buildingPolygonSource = getConfiguredBuildingPolygonSource();
+  const isBuildingPolygonDataReady =
+    buildingPolygonSource === 'api' || (buildingPolygonSource === 'geojson' && buildingFootprintLoadState.status === 'loaded');
+  const hasSelectedBuildingPolygon = selectionMode === 'building_polygon' && Boolean(selectedBuildingFootprint) && Boolean(selectedRoofPolygon);
+  const hasGeneratedPanelLayout = hasSelectedBuildingPolygon && solarPanelPolygons.length > 0;
+  const hasPvAnalysisSucceeded = pvAnalysisStatus === 'success';
+  const riskProcessSteps: RiskProcessStep[] = [
+    {
+      title: '건물 선택',
+      state: !isBuildingPolygonDataReady ? 'disabled' : hasSelectedBuildingPolygon ? 'complete' : 'active',
+      message: !isBuildingPolygonDataReady
+        ? '화성시 건물 polygon 데이터 연결 필요'
+        : hasSelectedBuildingPolygon
+          ? `${selectedBuildingFootprint?.buildingId ?? '선택 건물'} 선택 완료`
+          : '지도에서 분석할 건물을 선택하세요.',
+    },
+    {
+      title: '태양광 패널 배치',
+      state: !hasSelectedBuildingPolygon ? 'pending' : hasGeneratedPanelLayout ? 'complete' : 'active',
+      message: hasGeneratedPanelLayout
+        ? `건물 footprint 기반 옥상 추정으로 ${solarPanelPolygons.length.toLocaleString('ko-KR')}개 패널 후보를 배치했습니다.`
+        : hasSelectedBuildingPolygon
+          ? '건물 footprint 기반 옥상 추정으로 패널 배치를 계산합니다.'
+          : '건물 선택 후 패널 배치를 확인할 수 있습니다.',
+    },
+    {
+      title: '발전량 분석',
+      state: hasPvAnalysisSucceeded ? 'complete' : hasGeneratedPanelLayout ? 'active' : 'pending',
+      message: hasPvAnalysisSucceeded
+        ? '발전량 분석이 완료되었습니다.'
+        : hasGeneratedPanelLayout
+          ? '패널 배치 결과로 발전량 분석을 실행하세요.'
+          : '패널 배치 후 발전량 분석을 실행할 수 있습니다.',
+    },
+    {
+      title: '리포트 확인',
+      state: hasPvAnalysisSucceeded ? 'active' : 'pending',
+      message: hasPvAnalysisSucceeded
+        ? '예상 발전량과 경제성 리포트를 확인하세요.'
+        : '발전량 분석 완료 후 리포트가 활성화됩니다.',
+    },
+  ];
 
   const applyBuildingFootprintSelection = useCallback(
     (match: BuildingFootprintMatch, coordinate: Coordinate) => {
@@ -953,6 +1019,23 @@ function RiskMapPage() {
             </div>
             <strong>{selectedBuilding.riskLevel}</strong>
           </div>
+
+          <section className="riskProcessPanel" aria-label="전기세 위험 지도 진행 단계">
+            <ol>
+              {riskProcessSteps.map((step, index) => (
+                <li key={step.title} className={`riskProcessStep is-${step.state}`}>
+                  <span className="riskProcessNumber">{index + 1}</span>
+                  <div>
+                    <div className="riskProcessStepHeader">
+                      <strong>{step.title}</strong>
+                      <em>{getRiskProcessStateText(step.state)}</em>
+                    </div>
+                    <p>{step.message}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </section>
 
           <div className="riskPanelTabs" role="tablist" aria-label="선택 건물 분석 탭">
             {panelTabs.map((tab) => (
