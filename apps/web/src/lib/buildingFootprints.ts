@@ -1,5 +1,6 @@
 import { booleanPointInPolygon, point } from '@turf/turf';
 import type { VWorldFeature } from './vworldFeatureQuery';
+import type { BuildingPolygonFeatureCollection, BuildingPolygonSourceMode } from '../types/buildingPolygon';
 
 export type BuildingFootprintFeature = VWorldFeature & {
   geometry: {
@@ -31,6 +32,7 @@ export type BuildingFootprintMatch = {
 };
 
 const DEFAULT_GEOJSON_URL = '/data/buildings/hwaseong-buildings.geojson';
+const BUILDING_POLYGON_UNCONFIGURED_MESSAGE = '화성시 건물 polygon 데이터가 아직 연결되지 않았습니다.';
 
 function getStringProperty(properties: Record<string, unknown>, keys: string[], fallback: string) {
   for (const key of keys) {
@@ -66,8 +68,34 @@ export function getBuildingFootprintGeoJsonUrl() {
   return import.meta.env.VITE_BUILDING_FOOTPRINT_GEOJSON_URL?.trim() || DEFAULT_GEOJSON_URL;
 }
 
+export function getConfiguredBuildingPolygonSource(): BuildingPolygonSourceMode {
+  const source = import.meta.env.VITE_BUILDING_POLYGON_SOURCE?.trim().toLowerCase();
+
+  if (source === 'api' || source === 'geojson') {
+    return source;
+  }
+
+  return 'none';
+}
+
+export function getBuildingPolygonSourceLabel(source: BuildingPolygonSourceMode) {
+  if (source === 'api') {
+    return '화성시 건물 polygon API';
+  }
+
+  if (source === 'geojson') {
+    return '화성시 건물 GeoJSON';
+  }
+
+  return '건물 polygon 데이터 미연결';
+}
+
+export function getBuildingPolygonUnconfiguredMessage() {
+  return BUILDING_POLYGON_UNCONFIGURED_MESSAGE;
+}
+
 export function isBuildingFootprintGeoJsonEnabled() {
-  return import.meta.env.VITE_BUILDING_POLYGON_SOURCE?.trim().toLowerCase() === 'geojson';
+  return getConfiguredBuildingPolygonSource() === 'geojson';
 }
 
 export function validateBuildingFootprintCollection(value: unknown): BuildingFootprintCollection {
@@ -97,13 +125,25 @@ export function validateBuildingFootprintCollection(value: unknown): BuildingFoo
 }
 
 export async function loadBuildingFootprints(url = getBuildingFootprintGeoJsonUrl()) {
+  if (!url) {
+    throw new Error(BUILDING_POLYGON_UNCONFIGURED_MESSAGE);
+  }
+
   const response = await fetch(url);
 
   if (!response.ok) {
-    throw new Error(`건물 footprint GeoJSON을 불러오지 못했습니다. HTTP ${response.status}`);
+    throw new Error(BUILDING_POLYGON_UNCONFIGURED_MESSAGE);
   }
 
   return validateBuildingFootprintCollection(await response.json());
+}
+
+export function normalizeBuildingFeatureCollection(value: unknown): BuildingPolygonFeatureCollection | null {
+  try {
+    return validateBuildingFootprintCollection(value) as BuildingPolygonFeatureCollection;
+  } catch {
+    return null;
+  }
 }
 
 export function findBuildingFootprintAtCoordinate(

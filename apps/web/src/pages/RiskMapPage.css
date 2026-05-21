@@ -578,6 +578,7 @@
   color: #0f172a;
   font-size: 14px;
   font-weight: 900;
+  overflow-wrap: anywhere;
   word-break: keep-all;
 }
 
