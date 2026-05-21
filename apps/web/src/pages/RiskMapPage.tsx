@@ -10,7 +10,6 @@ import {
   type VWorldSelection,
 } from '../lib/loadVWorldScript';
 import {
-  calculatePolygonAreaM2,
   estimateRoofPolygonFromFootprint,
   getPolygonCentroid,
   normalizeGeoJsonPolygon,
@@ -23,7 +22,7 @@ import {
   estimateCapacityKw,
   estimateInstallableArea,
 } from '../lib/solarSimulation';
-import { generateSolarPanelGrid } from '../lib/solarPanelLayout';
+import { generateSolarPanelLayout, type SolarPanelLayoutResult } from '../lib/solarPanelLayout';
 import { requestPvAnalysis } from '../lib/pvAnalysisClient';
 import { requestSelectedBuildingPolygon } from '../lib/buildingPolygonClient';
 import {
@@ -266,20 +265,19 @@ function getGeoJsonDiagnosticSourceStatus(loadState: BuildingFootprintLoadState)
   return 'missing';
 }
 
-function createSolarEstimateFromRoofArea(roofAreaM2: number) {
-  const installableArea = Math.round(estimateInstallableArea(roofAreaM2));
-  const capacity = Math.round(estimateCapacityKw(installableArea));
+function createSolarEstimateFromPanelLayout(layoutResult: SolarPanelLayoutResult) {
+  const capacity = layoutResult.estimatedCapacityKw;
   const annualGeneration = Math.round(estimateAnnualGenerationKwh(capacity));
   const annualSavings = Math.round(estimateAnnualSavingsKrw(annualGeneration));
 
   return {
-    estimatedRoofAreaM2: Math.round(roofAreaM2),
-    estimatedInstallableAreaM2: installableArea,
+    estimatedRoofAreaM2: Math.round(layoutResult.roofAreaM2),
+    estimatedInstallableAreaM2: Math.round(layoutResult.usableAreaM2),
     estimatedCapacityKw: capacity,
     estimatedAnnualGenerationKwh: annualGeneration,
     estimatedAnnualSavingsKrw: annualSavings,
-    estimatedPaybackYears: Number(Math.max(4.2, 680000 / Math.max(capacity, 1)).toFixed(1)),
-    estimatedPanelCount: Math.max(1, Math.round(capacity / 0.45)),
+    estimatedPaybackYears: capacity > 0 ? Number(Math.max(4.2, 680000 / Math.max(capacity, 1)).toFixed(1)) : 0,
+    estimatedPanelCount: layoutResult.panelCount,
   };
 }
 
@@ -454,10 +452,10 @@ function RiskMapPage() {
 
       const roofPolygon = estimateRoofPolygonFromFootprint(polygon);
       const roofCentroid = getPolygonCentroid(roofPolygon);
-      const roofAreaM2 = calculatePolygonAreaM2(roofPolygon);
-      const panelPolygons = generateSolarPanelGrid(roofPolygon);
-      const panelBasedCapacityKw = Number(((panelPolygons.length * PV_DEFAULT_PANEL_CAPACITY_W) / 1000).toFixed(1));
-      const solarEstimate = createSolarEstimateFromRoofArea(roofAreaM2);
+      const layoutResult = generateSolarPanelLayout(roofPolygon);
+      const panelPolygons = layoutResult.panelPolygons;
+      const solarEstimate = createSolarEstimateFromPanelLayout(layoutResult);
+      const layoutWarningMessage = layoutResult.warnings.length > 0 ? ` ${layoutResult.warnings.join(' ')}` : '';
       const refinedFocusResult = focusVWorldMapOnCoordinate(vworldMapRef.current, {
         longitude: roofCentroid[0],
         latitude: roofCentroid[1],
@@ -485,7 +483,7 @@ function RiskMapPage() {
       setGeometryQueryMessage(
         `건물 footprint 기반 옥상 추정: ${match.metadata.geometryType} geometry에서 ${panelPolygons.length.toLocaleString(
           'ko-KR',
-        )}개 패널 후보를 배치했습니다.`,
+        )}개 패널 후보를 배치했습니다.${layoutWarningMessage}`,
       );
       setFeatureDataInfo({
         dataId: 'local-hwaseong-buildings.geojson',
@@ -509,12 +507,9 @@ function RiskMapPage() {
         apartmentName: match.metadata.name,
         address: match.metadata.address,
         ...solarEstimate,
-        estimatedCapacityKw: panelBasedCapacityKw,
-        estimatedPanelCount: panelPolygons.length,
         selectionNote: `building_id ${match.metadata.buildingId} / ${match.metadata.geometryType} 기반으로 선택했습니다.`,
         simulationConfidence: '건물 footprint 기반 옥상 추정',
-        simulationNote:
-          '실제 설치 가능 여부는 옥상 장애물, 음영, 구조안전성, 관리주체 협의, 현장조사에 따라 달라질 수 있습니다.',
+        simulationNote: `건물 footprint 기반 옥상 추정입니다. ${layoutResult.reason ?? ''} 실제 설치 가능 여부는 옥상 장애물, 음영, 구조안전성, 관리주체 협의, 현장조사에 따라 달라질 수 있습니다.`,
       });
     },
     [buildingFootprintLoadState.url, buildingFootprints?.features.length],

@@ -1,3 +1,4 @@
+import { area as turfArea } from '@turf/turf';
 import { getPolygonCentroid, type Coordinate, type PolygonCoordinates } from './roofGeometry';
 
 type LocalPoint = {
@@ -9,17 +10,88 @@ export type SolarPanelLayoutOptions = {
   panelWidthM?: number;
   panelHeightM?: number;
   rowGapM?: number;
+  colGapM?: number;
   columnGapM?: number;
+  roofMarginM?: number;
+  usableAreaRatio?: number;
   maxPanels?: number;
 };
 
-const DEFAULT_PANEL_OPTIONS = {
+export type SolarPanelLayoutResult = {
+  panelPolygons: PolygonCoordinates[];
+  roofAreaM2: number;
+  usableAreaM2: number;
+  panelCount: number;
+  estimatedCapacityKw: number;
+  warnings: string[];
+  reason?: string;
+};
+
+type ResolvedSolarPanelLayoutOptions = {
+  panelWidthM: number;
+  panelHeightM: number;
+  rowGapM: number;
+  colGapM: number;
+  roofMarginM: number;
+  usableAreaRatio: number;
+  maxPanels: number;
+};
+
+const DEFAULT_PANEL_OPTIONS: ResolvedSolarPanelLayoutOptions = {
   panelWidthM: 1.1,
   panelHeightM: 1.8,
   rowGapM: 0.4,
-  columnGapM: 0.2,
-  maxPanels: 180,
+  colGapM: 0.2,
+  roofMarginM: 2.0,
+  usableAreaRatio: 0.45,
+  maxPanels: 1000,
 };
+
+const PANEL_CAPACITY_KW = 0.5;
+const SMALL_BUILDING_WARNING = '건물 면적이 작아 패널 배치가 어렵습니다.';
+const PANEL_CAP_WARNING = '패널 개수가 비정상적으로 많아 상한을 적용했습니다.';
+
+function resolveLayoutOptions(options: SolarPanelLayoutOptions): ResolvedSolarPanelLayoutOptions {
+  return {
+    ...DEFAULT_PANEL_OPTIONS,
+    ...options,
+    colGapM: options.colGapM ?? options.columnGapM ?? DEFAULT_PANEL_OPTIONS.colGapM,
+  };
+}
+
+function closePolygon(polygon: PolygonCoordinates): PolygonCoordinates {
+  if (polygon.length === 0) {
+    return polygon;
+  }
+
+  const first = polygon[0];
+  const last = polygon[polygon.length - 1];
+
+  if (first[0] === last[0] && first[1] === last[1]) {
+    return polygon;
+  }
+
+  return [...polygon, first];
+}
+
+function estimatePolygonAreaM2(polygon: PolygonCoordinates) {
+  if (polygon.length < 4) {
+    return 0;
+  }
+
+  try {
+    return turfArea({
+      type: 'Feature',
+      properties: {},
+      geometry: {
+        type: 'Polygon',
+        coordinates: [closePolygon(polygon)],
+      },
+    });
+  } catch {
+    return 0;
+  }
+}
 
 function createProjection(origin: Coordinate) {
   const metersPerDegreeLat = 111_320;
@@ -68,56 +140,109 @@ function createPanelRectangle(center: LocalPoint, width: number, height: number)
   ];
 }
 
+function canPlacePanel(rectangle: LocalPoint[], roofPolygon: LocalPoint[]) {
+  return rectangle.every((corner) => isPointInsidePolygon(corner, roofPolygon));
+}
+
 export function createPanelRectanglesInsideRoof(
   roofPolygon: PolygonCoordinates,
   options: SolarPanelLayoutOptions = {},
 ): PolygonCoordinates[] {
-  const mergedOptions = { ...DEFAULT_PANEL_OPTIONS, ...options };
+  const mergedOptions = resolveLayoutOptions(options);
   const centroid = getPolygonCentroid(roofPolygon);
   const projection = createProjection(centroid);
   const localRoofPolygon = roofPolygon.map(projection.toLocal);
   const xs = localRoofPolygon.map((point) => point.x);
   const ys = localRoofPolygon.map((point) => point.y);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  const stepX = mergedOptions.panelWidthM + mergedOptions.columnGapM;
+  const minX = Math.min(...xs) + mergedOptions.roofMarginM;
+  const maxX = Math.max(...xs) - mergedOptions.roofMarginM;
+  const minY = Math.min(...ys) + mergedOptions.roofMarginM;
+  const maxY = Math.max(...ys) - mergedOptions.roofMarginM;
+  const stepX = mergedOptions.panelWidthM + mergedOptions.colGapM;
   const stepY = mergedOptions.panelHeightM + mergedOptions.rowGapM;
   const panelRectangles: PolygonCoordinates[] = [];
 
-  // MVP layout: align panels to the polygon bounding box and keep panels whose center is inside the roof.
+  if (maxX - minX < mergedOptions.panelWidthM || maxY - minY < mergedOptions.panelHeightM) {
+    return panelRectangles;
+  }
+
+  // MVP layout: align panels to the local bounding box and keep panels fully inside the footprint-based roof estimate.
   // Exact clipping/rotation should later use real roof edge orientation and obstacle polygons.
-  for (
-    let y = minY + mergedOptions.panelHeightM / 2;
-    y <= maxY - mergedOptions.panelHeightM / 2;
-    y += stepY
-  ) {
-    for (
-      let x = minX + mergedOptions.panelWidthM / 2;
-      x <= maxX - mergedOptions.panelWidthM / 2;
-      x += stepX
-    ) {
+  for (let y = minY + mergedOptions.panelHeightM / 2; y <= maxY - mergedOptions.panelHeightM / 2; y += stepY) {
+    for (let x = minX + mergedOptions.panelWidthM / 2; x <= maxX - mergedOptions.panelWidthM / 2; x += stepX) {
       if (panelRectangles.length >= mergedOptions.maxPanels) {
         return panelRectangles;
       }
 
-      const center = { x, y };
+      const rectangle = createPanelRectangle({ x, y }, mergedOptions.panelWidthM, mergedOptions.panelHeightM);
 
-      if (!isPointInsidePolygon(center, localRoofPolygon)) {
+      if (!canPlacePanel(rectangle, localRoofPolygon)) {
         continue;
       }
 
-      panelRectangles.push(createPanelRectangle(center, mergedOptions.panelWidthM, mergedOptions.panelHeightM).map(projection.toCoordinate));
+      panelRectangles.push(rectangle.map(projection.toCoordinate));
     }
   }
 
   return panelRectangles;
 }
 
+export function generateSolarPanelLayout(
+  roofPolygon: PolygonCoordinates,
+  options: SolarPanelLayoutOptions = {},
+): SolarPanelLayoutResult {
+  const mergedOptions = resolveLayoutOptions(options);
+  const roofAreaM2 = estimatePolygonAreaM2(roofPolygon);
+  const usableAreaM2 = roofAreaM2 * mergedOptions.usableAreaRatio;
+  const panelAreaM2 = mergedOptions.panelWidthM * mergedOptions.panelHeightM;
+  const usableAreaPanelLimit = Math.floor(usableAreaM2 / panelAreaM2);
+  const warnings: string[] = [];
+
+  if (roofAreaM2 <= 0 || usableAreaPanelLimit < 1) {
+    return {
+      panelPolygons: [],
+      roofAreaM2,
+      usableAreaM2,
+      panelCount: 0,
+      estimatedCapacityKw: 0,
+      warnings: [SMALL_BUILDING_WARNING],
+      reason: SMALL_BUILDING_WARNING,
+    };
+  }
+
+  if (usableAreaPanelLimit > mergedOptions.maxPanels) {
+    warnings.push(PANEL_CAP_WARNING);
+  }
+
+  const panelPolygons = createPanelRectanglesInsideRoof(roofPolygon, {
+    ...mergedOptions,
+    maxPanels: Math.min(usableAreaPanelLimit, mergedOptions.maxPanels),
+  });
+
+  if (panelPolygons.length === 0) {
+    warnings.push(SMALL_BUILDING_WARNING);
+  }
+
+  if (panelPolygons.length >= mergedOptions.maxPanels && usableAreaPanelLimit > mergedOptions.maxPanels) {
+    warnings.push(PANEL_CAP_WARNING);
+  }
+
+  const uniqueWarnings = [...new Set(warnings)];
+
+  return {
+    panelPolygons,
+    roofAreaM2,
+    usableAreaM2,
+    panelCount: panelPolygons.length,
+    estimatedCapacityKw: Number((panelPolygons.length * PANEL_CAPACITY_KW).toFixed(1)),
+    warnings: uniqueWarnings,
+    reason: panelPolygons.length === 0 ? SMALL_BUILDING_WARNING : undefined,
+  };
+}
+
 export function generateSolarPanelGrid(
   roofPolygon: PolygonCoordinates,
   options: SolarPanelLayoutOptions = {},
 ): PolygonCoordinates[] {
-  return createPanelRectanglesInsideRoof(roofPolygon, options);
+  return generateSolarPanelLayout(roofPolygon, options).panelPolygons;
 }
