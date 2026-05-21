@@ -1088,8 +1088,8 @@ img {
 }
 
 .serviceIntroInner {
-  width: min(1440px, 100%);
-  margin: 0 auto;
+  width: 100%;
+  margin: 0;
 }
 
 .serviceIntroHeader {
@@ -1638,9 +1638,9 @@ img {
 .solarFeedInner {
   position: relative;
   z-index: 1;
-  width: min(1440px, calc(100% - 96px));
-  margin: 0 auto;
-  padding: 66px 0 22px;
+  width: 100%;
+  margin: 0;
+  padding: 66px 84px 22px;
 }
 
 .solarFeedTop {
@@ -1989,9 +1989,9 @@ img {
 }
 
 .solarFooterInner {
-  width: min(1440px, calc(100% - 96px));
-  margin: 0 auto;
-  padding: 26px 0;
+  width: 100%;
+  margin: 0;
+  padding: 26px 84px;
   display: grid;
   grid-template-columns: 1.35fr 1.45fr 0.95fr 1.35fr 1.2fr;
   gap: 30px;
@@ -2124,9 +2124,8 @@ img {
 }
 
 .solarFooterBottom {
-  width: min(1440px, calc(100% - 96px));
   min-height: 54px;
-  margin: 0 auto;
+  margin: 0 84px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3462,14 +3461,23 @@ img {
   }
 
   .heroActions {
+    width: 100%;
+    max-width: none;
     margin-top: 36px;
+    margin-right: 0;
+    margin-left: 0;
     gap: 14px;
   }
 
-  .heroActions,
   .metricStack,
   .featureCards {
     width: calc(100% - 64px);
+  }
+
+  .heroActions .primaryButton,
+  .heroActions .secondaryButton {
+    width: 100%;
+    min-width: 0;
   }
 
   .primaryButton,
