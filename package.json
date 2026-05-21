@@ -3,9 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "build": "npm --prefix apps/web run build",
     "web:dev": "npm --prefix apps/web run dev",
     "web:build": "npm --prefix apps/web run build",
     "web:preview": "npm --prefix apps/web run preview",
+    "validate:geojson": "node scripts/validate-hwaseong-geojson.mjs",
     "api:dev": "cd apps/api && uvicorn main:app --reload --port 8000"
   }
 }
