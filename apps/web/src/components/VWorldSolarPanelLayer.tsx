@@ -250,9 +250,11 @@ function addPanelEntitiesWithCesium({
   panelPolygons.forEach((panelPolygon, index) => {
     const id = `solarmate-panel-${selectedBuildingId}-${index}`;
     const outlineId = `${id}-outline`;
+    const flatDegrees = panelPolygon.flatMap(([longitude, latitude]) => [longitude, latitude]);
     const flatDegreesWithHeight = panelPolygon.flatMap(([longitude, latitude]) => [longitude, latitude, heightM]);
-    const positions = cesium.Cartesian3.fromDegreesArrayHeights(flatDegreesWithHeight);
-    const hierarchy = cesium.PolygonHierarchy ? new cesium.PolygonHierarchy(positions) : positions;
+    const polygonPositions = cesium.Cartesian3.fromDegreesArray(flatDegrees);
+    const outlinePositions = cesium.Cartesian3.fromDegreesArrayHeights(flatDegreesWithHeight);
+    const hierarchy = cesium.PolygonHierarchy ? new cesium.PolygonHierarchy(polygonPositions) : polygonPositions;
 
     entities.removeById?.(id);
     entities.removeById?.(outlineId);
@@ -265,13 +267,12 @@ function addPanelEntitiesWithCesium({
         outline: true,
         outlineColor: outlineMaterial,
         height: heightM,
-        perPositionHeight: true,
       },
     });
     const outlineEntity = addEntity({
       id: outlineId,
       polyline: {
-        positions,
+        positions: outlinePositions,
         width: 2,
         material: outlineMaterial,
         clampToGround: false,

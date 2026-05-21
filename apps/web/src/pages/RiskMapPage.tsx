@@ -524,6 +524,7 @@ function RiskMapPage() {
   const [selectedBuilding, setSelectedBuilding] = useState<SelectedBuilding>(demoBuilding);
   const [analysisStatus, setAnalysisStatus] = useState('');
   const [activeTab, setActiveTab] = useState<RiskPanelTab>('risk');
+  const activeTabRef = useRef<RiskPanelTab>('risk');
   const [pvAnalysisStatus, setPvAnalysisStatus] = useState<PvAnalysisStatus>('idle');
   const [pvAnalysisMessage, setPvAnalysisMessage] = useState('');
   const [pvAnalysisResponse, setPvAnalysisResponse] = useState<PvAnalysisProxyResponse | null>(null);
@@ -548,6 +549,8 @@ function RiskMapPage() {
   const [buildingFootprintLoadState, setBuildingFootprintLoadState] = useState<BuildingFootprintLoadState>(
     createInitialBuildingFootprintLoadState,
   );
+  const buildingFootprintUrlRef = useRef(buildingFootprintLoadState.url);
+  const buildingFootprintFeatureCountRef = useRef(0);
   const [selectedBuildingFootprint, setSelectedBuildingFootprint] = useState<SelectedBuildingFootprint>(null);
   const [selectedBuildingFeature, setSelectedBuildingFeature] = useState<SelectableBuildingFeature | null>(null);
   const [selectedBuildingGeometry, setSelectedBuildingGeometry] = useState<PolygonCoordinates | null>(null);
@@ -641,6 +644,18 @@ function RiskMapPage() {
   ];
 
   useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
+  useEffect(() => {
+    buildingFootprintUrlRef.current = buildingFootprintLoadState.url;
+  }, [buildingFootprintLoadState.url]);
+
+  useEffect(() => {
+    buildingFootprintFeatureCountRef.current = buildingFootprints?.features.length ?? 0;
+  }, [buildingFootprints?.features.length]);
+
+  useEffect(() => {
     if (
       activeTab === 'solar' &&
       hasSelectedBuildingPolygon &&
@@ -691,7 +706,7 @@ function RiskMapPage() {
       setSelectedRoofPolygon(roofPolygon);
       setSolarPanelPolygons(panelPolygons);
       panelVisibilityUserOverrideRef.current = false;
-      setIsSolarPanelLayerVisible(activeTab === 'solar' && panelPolygons.length > 0);
+      setIsSolarPanelLayerVisible(activeTabRef.current === 'solar' && panelPolygons.length > 0);
       setMapFocusStatus({
         message: refinedFocusResult.message,
         method: refinedFocusResult.method,
@@ -715,12 +730,12 @@ function RiskMapPage() {
       });
       setFeatureQueryDiagnostics({
         queryStatus: 'success',
-        featureCount: buildingFootprints?.features.length ?? 0,
+        featureCount: buildingFootprintFeatureCountRef.current,
         requestedLon: coordinate[0],
         requestedLat: coordinate[1],
         dataId: getBuildingSourceDataId(buildingPolygonSource),
         buffer: 0,
-        requestPath: buildingFootprintLoadState.url,
+        requestPath: buildingFootprintUrlRef.current,
       });
       setSelectedBuilding({
         ...demoBuilding,
@@ -732,7 +747,7 @@ function RiskMapPage() {
         simulationNote: `건물 footprint 기반 옥상 추정입니다. ${layoutResult.reason ?? ''} 실제 설치 가능 여부는 옥상 장애물, 음영, 구조안전성, 관리주체 협의, 현장조사에 따라 달라질 수 있습니다.`,
       });
     },
-    [activeTab, buildingFootprintLoadState.url, buildingFootprints?.features.length, buildingPolygonSource],
+    [buildingPolygonSource],
   );
 
   const handleMapSelection = useCallback(async (selection?: VWorldSelection) => {
@@ -890,7 +905,7 @@ function RiskMapPage() {
           buildingPolygonResult.building.source === 'admdong_index'
             ? diagnostics?.searchedFeatureCount ?? 0
             : buildingPolygonResult.building.source === 'geojson'
-              ? buildingFootprints?.features.length ?? 0
+              ? buildingFootprintFeatureCountRef.current
               : 1,
         requestedLon: coordinate[0],
         requestedLat: coordinate[1],
@@ -935,7 +950,7 @@ function RiskMapPage() {
         buildingPolygonResult.source === 'admdong_index'
           ? buildingPolygonResult.diagnostics?.searchedFeatureCount ?? 0
           : buildingPolygonResult.source === 'geojson'
-            ? buildingFootprints?.features.length ?? 0
+            ? buildingFootprintFeatureCountRef.current
             : 0,
       requestedLon: coordinate[0],
       requestedLat: coordinate[1],
@@ -952,7 +967,7 @@ function RiskMapPage() {
     });
     return;
 
-  }, [applyBuildingFootprintSelection, buildingPolygonSource, buildingFootprints]);
+  }, [applyBuildingFootprintSelection, buildingPolygonSource]);
 
   const handlePvAnalysisRequest = useCallback(async () => {
     if (!selectedCoordinate || selectionMode !== 'building_footprint') {
