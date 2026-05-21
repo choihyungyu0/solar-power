@@ -641,6 +641,172 @@
   margin-top: 14px;
 }
 
+.pvAnalysisButton {
+  margin-top: 16px;
+  background: linear-gradient(180deg, #0f766e 0%, #0f5f59 100%);
+  box-shadow: 0 16px 30px rgba(15, 118, 110, 0.22);
+}
+
+.riskAnalysisButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.pvAnalysisStatusText {
+  margin: 12px 0 0;
+  border-radius: 14px;
+  padding: 11px 12px;
+  background: #ecfeff;
+  color: #155e75;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.pvAnalysisStatusText.is-fallback,
+.pvAnalysisStatusText.is-error {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.pvAnalysisPanel {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 18px;
+  padding: 16px;
+  background: #ffffff;
+}
+
+.pvAnalysisPanel.isFallback {
+  border-color: rgba(249, 115, 22, 0.24);
+  background: #fffaf5;
+}
+
+.pvAnalysisPanelHeader {
+  display: grid;
+  gap: 7px;
+}
+
+.pvAnalysisPanelHeader span,
+.pvMonthlyChartHeader span {
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.pvAnalysisPanel.isFallback .pvAnalysisPanelHeader span {
+  color: #c2410c;
+}
+
+.pvAnalysisPanelHeader strong,
+.pvMonthlyChartHeader strong {
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.pvAnalysisPanelHeader p {
+  margin: 0;
+  color: #526377;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.55;
+}
+
+.pvResultGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pvResultGrid div {
+  min-width: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.pvResultGrid span,
+.pvResultGrid strong {
+  display: block;
+}
+
+.pvResultGrid span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.pvResultGrid strong {
+  margin-top: 5px;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 950;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.pvMonthlyChart {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid #e6edf5;
+  padding-top: 14px;
+}
+
+.pvMonthlyChartHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pvMonthlyChart ol {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pvMonthlyChart li {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 86px;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.pvMonthlyChart li > span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.pvMonthlyChart li > div {
+  position: relative;
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.pvMonthlyChart i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #facc15 0%, #0f766e 100%);
+}
+
+.pvMonthlyChart li > strong {
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 900;
+  text-align: right;
+}
+
 .panelToggleRow {
   min-height: 54px;
   display: flex;
@@ -777,5 +943,13 @@
   .geometryStatusBox div {
     grid-template-columns: 1fr;
     gap: 4px;
+  }
+
+  .pvResultGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .pvMonthlyChart li {
+    grid-template-columns: 30px minmax(0, 1fr) 76px;
   }
 }
