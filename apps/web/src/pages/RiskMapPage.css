@@ -8,7 +8,7 @@
 }
 
 .riskMapHeader {
-  min-height: 86px;
+  min-height: 72px;
   box-shadow: 0 14px 36px rgba(15, 23, 42, 0.08);
 }
 
@@ -19,13 +19,13 @@
 }
 
 .riskMapIntro {
-  width: min(100%, 1600px);
+  width: min(100%, 1840px);
   margin: 0 auto;
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
   gap: 28px;
   align-items: end;
-  padding: 28px 34px 20px;
+  padding: 24px 36px 18px;
 }
 
 .riskMapEyebrow {
@@ -43,7 +43,7 @@
 .riskMapIntro h1 {
   margin: 0;
   color: #0f172a;
-  font-size: clamp(32px, 4vw, 52px);
+  font-size: clamp(34px, 3.4vw, 56px);
   line-height: 1.08;
   letter-spacing: 0;
 }
@@ -57,13 +57,13 @@
 }
 
 .riskMapWorkspace {
-  width: min(100%, 1600px);
-  min-height: max(640px, calc(100vh - 170px));
+  width: min(100%, 1840px);
+  min-height: max(760px, calc(100vh - 142px));
   margin: 0 auto;
   display: grid;
-  grid-template-columns: minmax(0, 7.3fr) minmax(340px, 2.7fr);
-  gap: 22px;
-  padding: 0 34px 34px;
+  grid-template-columns: minmax(0, 1fr) minmax(430px, 460px);
+  gap: 26px;
+  padding: 0 36px 36px;
 }
 
 .riskMapCanvasColumn,
@@ -74,8 +74,8 @@
 
 .vworldMapShell {
   position: relative;
-  min-height: 640px;
-  height: calc(100vh - 180px);
+  min-height: 760px;
+  height: calc(100vh - 152px);
   overflow: hidden;
   border: 1px solid rgba(122, 144, 166, 0.26);
   border-radius: 22px;
@@ -358,13 +358,13 @@
 
 .riskInfoPanel {
   position: sticky;
-  top: 106px;
+  top: 86px;
   align-self: start;
-  max-height: calc(100vh - 126px);
+  max-height: calc(100vh - 100px);
   overflow: auto;
   border: 1px solid rgba(199, 213, 229, 0.85);
   border-radius: 22px;
-  padding: 24px;
+  padding: 26px;
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 24px 52px rgba(15, 23, 42, 0.12);
 }
@@ -388,7 +388,7 @@
 .riskInfoHeader h2 {
   margin: 5px 0 0;
   color: #0f172a;
-  font-size: 26px;
+  font-size: 30px;
   line-height: 1.16;
   letter-spacing: 0;
 }
@@ -404,7 +404,7 @@
 }
 
 .riskProcessPanel {
-  margin-top: 18px;
+  margin-top: 20px;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
   padding: 14px;
@@ -515,7 +515,7 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
-  margin-top: 18px;
+  margin-top: 20px;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
   padding: 5px;
@@ -546,15 +546,15 @@
 
 .buildingInfoList div {
   display: grid;
-  grid-template-columns: minmax(120px, 0.9fr) minmax(0, 1.1fr);
-  gap: 14px;
-  padding: 13px 0;
+  grid-template-columns: minmax(130px, 0.8fr) minmax(0, 1.2fr);
+  gap: 18px;
+  padding: 15px 0;
   border-bottom: 1px solid #edf2f7;
 }
 
 .buildingInfoList dt {
   color: #64748b;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 800;
 }
 
@@ -562,7 +562,7 @@
   min-width: 0;
   margin: 0;
   color: #111827;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 850;
   word-break: keep-all;
 }
@@ -670,21 +670,21 @@
 
 .geometryStatusBox div {
   display: grid;
-  grid-template-columns: minmax(110px, 0.8fr) minmax(0, 1.2fr);
-  gap: 10px;
+  grid-template-columns: minmax(128px, 0.78fr) minmax(0, 1.22fr);
+  gap: 14px;
   align-items: start;
 }
 
 .geometryStatusBox span {
   color: #64748b;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 850;
 }
 
 .geometryStatusBox strong {
   min-width: 0;
   color: #0f172a;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 900;
   overflow-wrap: anywhere;
   word-break: keep-all;
@@ -827,14 +827,14 @@
 .pvResultGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
 }
 
 .pvResultGrid div {
   min-width: 0;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
-  padding: 12px;
+  padding: 14px;
   background: #f8fafc;
 }
 
@@ -852,7 +852,7 @@
 .pvResultGrid strong {
   margin-top: 5px;
   color: #0f172a;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 950;
   line-height: 1.3;
   overflow-wrap: anywhere;

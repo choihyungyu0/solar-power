@@ -543,33 +543,33 @@ function RiskMapPage() {
     buildingPolygonSource === 'api' ||
     (buildingPolygonSource === 'geojson' && Boolean(buildingFootprints)) ||
     (buildingPolygonSource === 'admdong_index' && isAdmdongIndexReady);
-  const hasSelectedBuildingPolygon =
-    selectionMode === 'building_footprint' && Boolean(selectedBuildingFootprint) && Boolean(selectedRoofPolygon);
+  const hasSelectedBuilding = selectionMode === 'building_footprint' && Boolean(selectedBuildingFootprint);
+  const hasSelectedBuildingPolygon = hasSelectedBuilding && Boolean(selectedRoofPolygon);
   const hasGeneratedPanelLayout = hasSelectedBuildingPolygon && solarPanelPolygons.length > 0;
-  const hasPvAnalysisSucceeded = pvAnalysisStatus === 'success';
+  const hasPvAnalysisCompleted = pvAnalysisStatus === 'success' || pvAnalysisStatus === 'fallback';
   const riskProcessSteps: RiskProcessStep[] = [
     {
       title: '건물 선택',
-      state: !isBuildingPolygonDataReady ? 'disabled' : hasSelectedBuildingPolygon ? 'complete' : 'active',
+      state: !isBuildingPolygonDataReady ? 'disabled' : hasSelectedBuilding ? 'complete' : 'active',
       message: !isBuildingPolygonDataReady
         ? '화성시 건물 polygon 데이터 연결 필요'
-        : hasSelectedBuildingPolygon
+        : hasSelectedBuilding
           ? `${selectedBuildingFootprint?.buildingId ?? '선택 건물'} 선택 완료`
           : '지도에서 분석할 건물을 선택하세요.',
     },
     {
       title: '태양광 패널 배치',
-      state: !hasSelectedBuildingPolygon ? 'pending' : hasGeneratedPanelLayout ? 'complete' : 'active',
+      state: !hasSelectedBuilding ? 'pending' : hasGeneratedPanelLayout ? 'complete' : 'active',
       message: hasGeneratedPanelLayout
         ? `건물 footprint 기반 옥상 추정으로 ${solarPanelPolygons.length.toLocaleString('ko-KR')}개 패널 후보를 배치했습니다.`
-        : hasSelectedBuildingPolygon
+        : hasSelectedBuilding
           ? '건물 footprint 기반 옥상 추정으로 패널 배치를 계산합니다.'
           : '건물 선택 후 패널 배치를 확인할 수 있습니다.',
     },
     {
       title: '발전량 분석',
-      state: hasPvAnalysisSucceeded ? 'complete' : hasGeneratedPanelLayout ? 'active' : 'pending',
-      message: hasPvAnalysisSucceeded
+      state: hasPvAnalysisCompleted ? 'complete' : hasGeneratedPanelLayout ? 'active' : 'pending',
+      message: hasPvAnalysisCompleted
         ? '발전량 분석이 완료되었습니다.'
         : hasGeneratedPanelLayout
           ? '패널 배치 결과로 발전량 분석을 실행하세요.'
@@ -577,8 +577,8 @@ function RiskMapPage() {
     },
     {
       title: '리포트 확인',
-      state: hasPvAnalysisSucceeded ? 'active' : 'pending',
-      message: hasPvAnalysisSucceeded
+      state: hasPvAnalysisCompleted ? 'active' : 'pending',
+      message: hasPvAnalysisCompleted
         ? '예상 발전량과 경제성 리포트를 확인하세요.'
         : '발전량 분석 완료 후 리포트가 활성화됩니다.',
     },
@@ -915,6 +915,12 @@ function RiskMapPage() {
         : response.message,
     );
   }, [selectedBuilding.estimatedPanelCount, selectedCoordinate, selectionMode]);
+
+  const handleRiskAnalysisRequest = useCallback(async () => {
+    setAnalysisStatus('선택 건물 기준 위험 분석과 발전량 분석을 함께 실행합니다.');
+    setActiveTab('solar');
+    await handlePvAnalysisRequest();
+  }, [handlePvAnalysisRequest]);
 
   useEffect(() => {
     if (isBuildingAdmdongIndexEnabled()) {
@@ -1326,9 +1332,10 @@ function RiskMapPage() {
               <button
                 className="riskAnalysisButton"
                 type="button"
-                onClick={() => setAnalysisStatus('선택 건물 기준 위험 분석 시나리오 초안이 준비되었습니다.')}
+                onClick={handleRiskAnalysisRequest}
+                disabled={pvAnalysisStatus === 'loading'}
               >
-                이 건물로 위험 분석 시작
+                {pvAnalysisStatus === 'loading' ? '발전량 분석 중...' : '이 건물로 위험 분석 시작'}
               </button>
             </>
           )}
