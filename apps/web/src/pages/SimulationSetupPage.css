@@ -1,5 +1,6 @@
 .simulationSetupPage {
   min-height: 100vh;
+  overflow-x: hidden;
   color: #111827;
   background: #f6f7fa;
 }
@@ -18,17 +19,17 @@
 }
 
 .simulationSetupMain {
-  width: min(100%, 1640px);
-  margin: 0 auto;
-  padding: 44px 72px 34px;
+  width: 100%;
+  margin: 0;
+  padding: 36px clamp(18px, 2.3vw, 44px) 30px;
 }
 
 .setupTopSection {
   display: grid;
-  grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
-  gap: 58px;
+  grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
+  gap: clamp(28px, 3vw, 56px);
   align-items: center;
-  margin-bottom: 28px;
+  margin-bottom: 26px;
 }
 
 .setupTitleBox h1 {
@@ -49,7 +50,7 @@
 }
 
 .setupAddressCard {
-  min-height: 124px;
+  min-height: 120px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -141,9 +142,20 @@
 
 .setupContentLayout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 410px;
-  gap: 42px;
+  grid-template-columns: minmax(0, 1fr) clamp(390px, 22vw, 430px);
+  gap: clamp(28px, 2.2vw, 40px);
   align-items: start;
+}
+
+.setupTitleBox,
+.setupAddressCard,
+.setupContentLayout,
+.setupOptionColumn,
+.setupOptionGrid,
+.setupOptionCard,
+.setupSummaryPanel {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .setupSectionTitle {
@@ -173,14 +185,14 @@
 .setupOptionGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 30px;
-  margin-bottom: 20px;
+  gap: clamp(22px, 1.8vw, 30px);
+  margin-bottom: 18px;
 }
 
 .setupOptionCard {
   position: relative;
-  min-height: 378px;
-  padding: 22px 22px 18px;
+  min-height: 348px;
+  padding: 20px 22px 16px;
   border: 1px solid #d3dae6;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.98);
@@ -239,14 +251,14 @@
 }
 
 .setupOptionImageWrap {
-  height: 152px;
+  height: 130px;
   display: grid;
   place-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 
 .setupOptionImageWrap.isAngle {
-  height: 122px;
+  height: 104px;
 }
 
 .setupPanelImage,
@@ -295,14 +307,14 @@
 }
 
 .setupAngleCard {
-  min-height: 316px;
+  min-height: 292px;
 }
 
 .setupSummaryPanel {
   position: sticky;
   top: 140px;
-  min-height: 696px;
-  padding: 26px 30px 28px;
+  min-height: 646px;
+  padding: 24px 30px 26px;
   border: 1px solid rgba(100, 116, 139, 0.18);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.98);
@@ -319,7 +331,7 @@
 .setupSummaryList {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 .setupSummaryItem {
@@ -329,8 +341,8 @@
 }
 
 .setupSummaryIcon {
-  width: 56px;
-  height: 56px;
+  width: 54px;
+  height: 54px;
   display: grid;
   place-items: center;
   flex: 0 0 auto;
@@ -377,27 +389,27 @@
 
 .setupSummaryItem strong {
   color: #111827;
-  font-size: 26px;
+  font-size: 25px;
   font-weight: 950;
   line-height: 1;
 }
 
 .setupSummaryDivider {
   height: 1px;
-  margin: 24px 0 22px;
+  margin: 22px 0 20px;
   background: #dbe1ea;
 }
 
 .setupPreviewImage {
   display: block;
   width: 100%;
-  min-height: 224px;
+  min-height: 206px;
   aspect-ratio: 4 / 3;
   object-fit: contain;
 }
 
 .setupSummaryPanel .imagePlaceholder {
-  min-height: 224px;
+  min-height: 206px;
   border-radius: 12px;
 }
 
@@ -413,7 +425,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 24px;
-  margin-top: 20px;
+  margin-top: 18px;
 }
 
 .setupPreviousButton,
@@ -450,7 +462,7 @@
 
 @media (max-width: 1420px) {
   .simulationSetupMain {
-    padding-inline: 44px;
+    padding-inline: clamp(18px, 2.3vw, 44px);
   }
 
   .setupContentLayout {
@@ -464,6 +476,55 @@
 }
 
 @media (max-width: 1120px) {
+  .simulationSetupPage .simulationHeader {
+    min-height: 82px;
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 12px;
+    padding: 12px 18px;
+  }
+
+  .simulationSetupPage .simulationHeader::after {
+    content: none;
+    display: none;
+  }
+
+  .simulationSetupPage .simulationHeader .desktopNav,
+  .simulationSetupPage .simulationHeader .simulationHeaderCta,
+  .simulationSetupPage .simulationHeader .loginButton {
+    display: none;
+  }
+
+  .simulationSetupPage .simulationHeader .logo {
+    max-width: none;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .simulationSetupPage .simulationHeader .headerActions {
+    position: static;
+    width: auto;
+    min-width: 28px;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0;
+  }
+
+  .simulationSetupPage .simulationHeader .headerActions::after {
+    content: "";
+    display: block;
+    width: 28px;
+    height: 22px;
+    flex: 0 0 auto;
+    border-top: 4px solid #101828;
+    border-bottom: 4px solid #101828;
+    border-radius: 2px;
+    background: linear-gradient(#101828, #101828) center / 100% 4px no-repeat;
+  }
+
   .setupTopSection,
   .setupContentLayout {
     grid-template-columns: 1fr;
@@ -478,13 +539,72 @@
     min-height: auto;
   }
 
+  .setupOptionGrid,
+  .setupBottomActions {
+    grid-template-columns: 1fr;
+  }
+
   .setupPreviewImage {
     max-height: 320px;
   }
 }
 
 @media (max-width: 760px) {
+  .simulationSetupPage .simulationHeader {
+    min-height: 82px;
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 12px;
+    padding: 12px 18px;
+  }
+
+  .simulationSetupPage .simulationHeader::after {
+    content: none;
+    display: none;
+  }
+
+  .simulationSetupPage .simulationHeader .desktopNav,
+  .simulationSetupPage .simulationHeader .simulationHeaderCta {
+    display: none;
+  }
+
+  .simulationSetupPage .simulationHeader .logo {
+    max-width: none;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .simulationSetupPage .simulationHeader .headerActions {
+    position: static;
+    width: auto;
+    min-width: 28px;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 14px;
+  }
+
+  .simulationSetupPage .simulationHeader .headerActions::after {
+    content: "";
+    display: block;
+    width: 28px;
+    height: 22px;
+    flex: 0 0 auto;
+    border-top: 4px solid #101828;
+    border-bottom: 4px solid #101828;
+    border-radius: 2px;
+    background: linear-gradient(#101828, #101828) center / 100% 4px no-repeat;
+  }
+
+  .simulationSetupPage .simulationHeader .loginButton {
+    display: none;
+  }
+
   .simulationSetupMain {
+    width: 100vw;
+    max-width: 100vw;
     padding: 28px 18px;
   }
 
@@ -494,10 +614,22 @@
 
   .setupTitleBox h1 {
     font-size: 34px;
+    overflow-wrap: break-word;
   }
 
   .setupTitleBox p {
+    max-width: calc(100vw - 36px);
     font-size: 16px;
+    overflow-wrap: break-word;
+    white-space: normal;
+  }
+
+  .setupAddressCard,
+  .setupSectionTitle,
+  .setupOptionCard,
+  .setupSummaryPanel,
+  .setupBottomActions {
+    width: calc(100vw - 36px);
   }
 
   .setupAddressCard {
@@ -522,6 +654,11 @@
   .setupOptionGrid,
   .setupBottomActions {
     grid-template-columns: 1fr;
+  }
+
+  .setupOptionCard {
+    overflow: hidden;
+    min-height: auto;
   }
 
   .setupSectionTitle {
