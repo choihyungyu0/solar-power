@@ -31,3 +31,33 @@ Content-Type: application/json
   "address": "경기도 성남시 분당구 샘플아파트",
   "topic": "all"
 }
+### climate.gg live rooftop analysis test - known POC coordinate
+POST http://localhost:5173/api/climate-rooftop-analysis
+Content-Type: application/json
+
+{
+  "longitude": 127.02948714,
+  "latitude": 37.26726989,
+  "panelCapacityW": 640,
+  "panelAngle": 35,
+  "panelType": 1,
+  "cellsPerPanel": 2
+}
+
+### debug selectBuld known coordinate
+POST http://localhost:5173/api/debug-select-buld
+Content-Type: application/json
+
+{
+  "longitude": 127.02948714,
+  "latitude": 37.26726989
+}
+
+### debug selectBuld known coordinate
+POST http://localhost:5173/api/debug-select-buld
+Content-Type: application/json
+
+{
+  "longitude": 127.02948714,
+  "latitude": 37.26726989
+}

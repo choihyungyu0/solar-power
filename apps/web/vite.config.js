@@ -1,5 +1,7 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
+import climateRooftopAnalysisHandler from './api/climate-rooftop-analysis.ts';
+import debugSelectBuldHandler from './api/debug-select-buld.ts';
 
 const PV_ANALYSIS_API_URL = 'https://climate.gg.go.kr/spsvc/pv/analysis';
 const PV_ANALYSIS_TIMEOUT_MS = 8000;
@@ -131,10 +133,62 @@ function createFallbackResponse(message, input) {
   };
 }
 
+async function sendFetchResponse(response, fetchResponse) {
+  response.statusCode = fetchResponse.status;
+  fetchResponse.headers.forEach((value, key) => {
+    response.setHeader(key, value);
+  });
+  response.end(await fetchResponse.text());
+}
+
+async function createFetchRequest(request) {
+  const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await readBody(request);
+  const url = new URL(request.url || '/', 'http://localhost');
+
+  return new Request(url, {
+    method: request.method,
+    headers: request.headers,
+    body,
+  });
+}
+
 function localApiPlugin() {
   return {
     name: 'solarmate-local-api',
     configureServer(server) {
+      server.middlewares.use('/api/climate-rooftop-analysis', async (request, response) => {
+        try {
+          const fetchRequest = await createFetchRequest(request);
+          const fetchResponse = await climateRooftopAnalysisHandler(fetchRequest);
+
+          await sendFetchResponse(response, fetchResponse);
+        } catch {
+          sendJson(response, 200, {
+            ok: false,
+            source: 'climate.gg-live-hybrid',
+            message: 'climate.gg 라이브 분석 로컬 프록시 처리에 실패했습니다.',
+            fallbackRecommended: true,
+            diagnostics: {},
+          });
+        }
+      });
+
+      server.middlewares.use('/api/debug-select-buld', async (request, response) => {
+        try {
+          const fetchRequest = await createFetchRequest(request);
+          const fetchResponse = await debugSelectBuldHandler(fetchRequest);
+
+          await sendFetchResponse(response, fetchResponse);
+        } catch {
+          sendJson(response, 200, {
+            ok: false,
+            source: 'climate.gg-live',
+            message: 'debug-select-buld 로컬 프록시 처리에 실패했습니다.',
+            diagnostics: {},
+          });
+        }
+      });
+
       server.middlewares.use('/api/pv-analysis', async (request, response) => {
         if (request.method !== 'POST') {
           sendJson(response, 405, { error: 'Method not allowed.' });

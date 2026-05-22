@@ -93,3 +93,81 @@ export type ClimateFixtureIndex = {
   match_radius_m: number;
   buildings: ClimateFixtureEntry[];
 };
+
+export type ClimateSelectedBuildingFeature = {
+  type: 'Feature';
+  id?: string | number;
+  properties?: Record<string, unknown> | null;
+  geometry?: {
+    type: 'Polygon' | 'MultiPolygon';
+    coordinates: unknown;
+  } | null;
+};
+
+export type ClimateLiveRoofSource = 'climate.gg-selectBuld' | 'vworld-building-footprint-fallback';
+export type ClimateLiveSelectBuldStatus = 'success' | 'timeout' | 'not_found' | 'skipped';
+export type ClimateLiveApiSource = 'climate.gg-live-hybrid';
+
+export type ClimateLiveAnalysisRequest = {
+  longitude: number;
+  latitude: number;
+  selectedBuildingId?: string;
+  selectedBuildingFeature?: ClimateSelectedBuildingFeature;
+  panelCapacityW?: 500 | 640;
+  panelAngle?: 30 | 35;
+  panelType?: number;
+  cellsPerPanel?: number;
+};
+
+export type ClimateLiveAnalysisDiagnostics = {
+  inputWgs84?: { longitude: number; latitude: number };
+  input5186?: { x: number; y: number };
+  roofAreaM2?: number;
+  cellCount?: number;
+  shadingCellCount?: number;
+  shadingAverage?: number;
+  panelCount?: number;
+  roofSource?: ClimateLiveRoofSource;
+  selectBuldStatus?: ClimateLiveSelectBuldStatus;
+  liveHybridMode?: boolean;
+  maxCellsApplied?: boolean;
+  apiTimingsMs?: Record<string, number>;
+  warnings?: string[];
+  unqId?: string | null;
+  selectBuldUrl?: string;
+  selectBuldRequestBody?: string;
+  selectBuldHttpStatus?: number;
+  selectBuldContentType?: string | null;
+  selectBuldRawTextPreview?: string;
+  selectBuldRawKeys?: string[];
+  selectBuldHasBuld?: boolean;
+  selectBuldBuldKeys?: string[];
+  selectBuldFeatureParseStatus?: string;
+  selectBuldAttemptCount?: number;
+  selectBuldTimeoutMs?: number;
+  selectBuldAttemptTimingsMs?: number[];
+  selectBuldLastError?: string;
+  [key: string]: unknown;
+};
+
+export type ClimateLiveAnalysisSuccessResponse = {
+  ok: true;
+  source: ClimateLiveApiSource;
+  roofSource: ClimateLiveRoofSource;
+  bundle: ClimateBundle;
+  panelsGeojson: ClimatePanelsGeoJson;
+  diagnostics: ClimateLiveAnalysisDiagnostics;
+};
+
+export type ClimateLiveAnalysisFailureResponse = {
+  ok: false;
+  source: ClimateLiveApiSource;
+  roofSource?: ClimateLiveRoofSource;
+  message: string;
+  fallbackRecommended: true;
+  diagnostics: ClimateLiveAnalysisDiagnostics;
+};
+
+export type ClimateLiveAnalysisResponse =
+  | ClimateLiveAnalysisSuccessResponse
+  | ClimateLiveAnalysisFailureResponse;

@@ -17,6 +17,10 @@ import VWorldSolarPanelLayer, {
   deriveRoofHeightMFromFeature,
   type VWorldSolarPanelLayerStatus,
 } from '../components/VWorldSolarPanelLayer';
+import ClimatePanelLayer, {
+  CLIMATE_PANEL_LEGEND_ITEMS,
+  type ClimatePanelLayerStatus,
+} from '../components/ClimatePanelLayer';
 import {
   focusVWorldMapOnCoordinate,
   createVWorldSelectionFromMouseEvent,
@@ -46,6 +50,18 @@ import {
 import { requestPvAnalysis } from '../lib/pvAnalysisClient';
 import { requestSelectedBuildingPolygon } from '../lib/buildingPolygonClient';
 import {
+  DEFAULT_CLIMATE_POC_ID,
+  loadClimateBundle,
+  loadClimatePanelGeojson,
+  summarizeClimatePanelGeojson,
+  type ClimatePocBbox,
+  type ClimatePocPanelExtent,
+} from '../lib/climateBundleClient';
+import {
+  normalizeClimateBundlePvOutput,
+  runClimateRooftopAnalysis,
+} from '../lib/climateLiveClient';
+import {
   createBuildingFootprintDiagnostics,
   getBuildingAdmdongIndexUrl,
   getBuildingFootprintGeoJsonUrl,
@@ -69,6 +85,13 @@ import {
   type VWorldFeature,
   type VWorldFeatureQueryStatus,
 } from '../lib/vworldFeatureQuery';
+import type {
+  ClimateBundle,
+  ClimateLiveAnalysisDiagnostics,
+  ClimateLiveRoofSource,
+  ClimatePanelsGeoJson,
+  ClimateSelectedBuildingFeature,
+} from '../types/climateBundle';
 import type { PvAnalysisInput, PvAnalysisProxyResponse, PvAnalysisResult } from '../types/pvAnalysis';
 import './RiskMapPage.css';
 
@@ -86,11 +109,20 @@ const ROOF_FOCUS_MIN_HEIGHT_M = 520;
 const ROOF_FOCUS_MAX_HEIGHT_M = 1800;
 const ROOF_FOCUS_SPAN_MULTIPLIER = 3.2;
 const ROOF_FOCUS_HEIGHT_PADDING_M = 220;
+const CLIMATE_POC_FOCUS_MIN_HEIGHT_M = 550;
+const CLIMATE_POC_FOCUS_MAX_HEIGHT_M = 1800;
+const CLIMATE_POC_FOCUS_SPAN_MULTIPLIER = 4;
+const CLIMATE_POC_FOCUS_HEIGHT_PADDING_M = 320;
+const SIMPLE_PAYBACK_MAX_REASONABLE_YEARS = 100;
+const FOOTPRINT_FALLBACK_SIMPLE_PAYBACK_YEARS = 6.8;
 
 type MapLoadStatus = 'loading' | 'ready' | 'error';
 type RiskPanelTab = 'risk' | 'solar' | 'policy';
 type SelectionMode = 'screen-fallback' | 'coordinate-fallback' | 'parcel-fallback' | 'geometry' | 'building_footprint';
 type PvAnalysisStatus = 'idle' | 'loading' | 'success' | 'fallback' | 'error';
+type ClimatePanelLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
+type LiveClimateStatus = 'idle' | 'loading' | 'success' | 'error';
+type SimplePaybackSource = 'climate-live' | 'static-poc' | 'footprint-fallback';
 type RiskProcessStepState = 'disabled' | 'complete' | 'active' | 'pending';
 type GeometryQueryStatus =
   | 'idle'
@@ -228,7 +260,7 @@ const solarFields = [
   ['예상 설치용량', 'estimatedCapacityKw', 'kw'],
   ['예상 연간 발전량', 'estimatedAnnualGenerationKwh', 'kwh'],
   ['예상 연간 절감액', 'estimatedAnnualSavingsKrw', 'krw'],
-  ['예상 회수기간', 'estimatedPaybackYears', 'years'],
+  ['단순 회수기간 추정', 'estimatedPaybackYears', 'years'],
 ] as const;
 
 const pvAnalysisResultCards = [
@@ -288,12 +320,97 @@ function formatScenarioKw(value: number) {
   return `시나리오 기준 ${value.toLocaleString('ko-KR')}kW`;
 }
 
+function formatEstimatedKw(value: number) {
+  return `추정 ${value.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}kW`;
+}
+
 function formatEstimatedKrw(value: number) {
   return `추정 ${Math.round(value).toLocaleString('ko-KR')}원`;
 }
 
 function formatEstimatedKg(value: number) {
   return `추정 ${Math.round(value).toLocaleString('ko-KR')}kg`;
+}
+
+function toFiniteNumber(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function normalizeSimplePaybackYears(years: unknown) {
+  const value = toFiniteNumber(years);
+
+  if (!value || value <= 0 || value > SIMPLE_PAYBACK_MAX_REASONABLE_YEARS) {
+    return null;
+  }
+
+  return Math.round(value * 10) / 10;
+}
+
+function calculateSimplePaybackYears(estimatedInvestmentKrw: unknown, firstYearSaveCostKrw: unknown) {
+  const investment = toFiniteNumber(estimatedInvestmentKrw);
+  const firstYearSaveCost = toFiniteNumber(firstYearSaveCostKrw);
+
+  if (!investment || investment <= 0 || !firstYearSaveCost || firstYearSaveCost <= 0) {
+    return null;
+  }
+
+  return normalizeSimplePaybackYears(investment / firstYearSaveCost);
+}
+
+function calculateClimateBundlePaybackYears(bundle: ClimateBundle | null) {
+  const expectedRevenue = bundle?.pv_analysis_output.expected_revenue;
+
+  if (!expectedRevenue) {
+    return null;
+  }
+
+  return calculateSimplePaybackYears(expectedRevenue.expected_investment, expectedRevenue.first_year_save_cost);
+}
+
+function calculatePvResultPaybackYears(result: PvAnalysisResult | null) {
+  if (!result) {
+    return null;
+  }
+
+  return calculateSimplePaybackYears(result.estimatedInvestmentKrw, result.firstYearSelfConsumptionSavingKrw);
+}
+
+function formatSimplePaybackYears(years: number | null) {
+  return years === null
+    ? '계산 불가'
+    : `${years.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}년`;
+}
+
+function getSimplePaybackSourceText(source: SimplePaybackSource) {
+  if (source === 'climate-live') {
+    return 'climate.gg live 결과 기준';
+  }
+
+  if (source === 'static-poc') {
+    return 'climate.gg 샘플 POC 기준';
+  }
+
+  return '건물 footprint fallback 기준';
+}
+
+function formatEstimatedSquareMeters(value: number | null | undefined) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? `추정 ${value.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}㎡`
+    : '-';
+}
+
+function formatEstimatedScore(value: number | null | undefined) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? `추정 ${value.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}`
+    : '-';
+}
+
+function formatOptionalText(value: string | number | null | undefined) {
+  if (value === null || value === undefined || value === '') {
+    return '-';
+  }
+
+  return String(value);
 }
 
 function formatCoordinate(coordinate: Coordinate | null) {
@@ -357,6 +474,19 @@ function formatPanelCoordinates(polygon: PolygonCoordinates | null) {
     .join(' ');
 }
 
+function formatClimatePocBbox(bbox: ClimatePocBbox | null) {
+  if (!bbox) {
+    return '-';
+  }
+
+  return [
+    `minLon ${bbox.minLongitude.toFixed(7)}`,
+    `minLat ${bbox.minLatitude.toFixed(7)}`,
+    `maxLon ${bbox.maxLongitude.toFixed(7)}`,
+    `maxLat ${bbox.maxLatitude.toFixed(7)}`,
+  ].join(' · ');
+}
+
 function getGeoJsonDiagnosticSourceStatus(loadState: BuildingFootprintLoadState) {
   if (loadState.status === 'index_loaded' || loadState.status === 'selected' || loadState.diagnostics.indexLoaded) {
     return 'loaded';
@@ -396,7 +526,7 @@ function createSolarEstimateFromPanelLayout(layoutResult: SolarPanelLayoutResult
     estimatedCapacityKw: capacity,
     estimatedAnnualGenerationKwh: annualGeneration,
     estimatedAnnualSavingsKrw: annualSavings,
-    estimatedPaybackYears: capacity > 0 ? Number(Math.max(4.2, 680000 / Math.max(capacity, 1)).toFixed(1)) : 0,
+    estimatedPaybackYears: capacity > 0 && annualSavings > 0 ? FOOTPRINT_FALLBACK_SIMPLE_PAYBACK_YEARS : 0,
     estimatedPanelCount: layoutResult.panelCount,
   };
 }
@@ -435,6 +565,25 @@ function getRoofFocusHeightM(roofPolygon: PolygonCoordinates) {
   const preferredHeight = spanMeters * ROOF_FOCUS_SPAN_MULTIPLIER + ROOF_FOCUS_HEIGHT_PADDING_M;
 
   return Math.round(Math.min(ROOF_FOCUS_MAX_HEIGHT_M, Math.max(ROOF_FOCUS_MIN_HEIGHT_M, preferredHeight)));
+}
+
+function getClimatePocFocusHeightM(extent: ClimatePocPanelExtent) {
+  const bbox = extent.bbox;
+  const longitudeSpanMeters = getDistanceMeters(
+    [bbox.minLongitude, bbox.minLatitude],
+    [bbox.maxLongitude, bbox.minLatitude],
+  );
+  const latitudeSpanMeters = getDistanceMeters(
+    [bbox.minLongitude, bbox.minLatitude],
+    [bbox.minLongitude, bbox.maxLatitude],
+  );
+  const preferredHeight =
+    Math.max(longitudeSpanMeters, latitudeSpanMeters) * CLIMATE_POC_FOCUS_SPAN_MULTIPLIER +
+    CLIMATE_POC_FOCUS_HEIGHT_PADDING_M;
+
+  return Math.round(
+    Math.min(CLIMATE_POC_FOCUS_MAX_HEIGHT_M, Math.max(CLIMATE_POC_FOCUS_MIN_HEIGHT_M, preferredHeight)),
+  );
 }
 
 function getNearbyBuildingPolygons(polygons: PolygonCoordinates[], coordinate: Coordinate | null) {
@@ -608,7 +757,23 @@ function RiskMapPage() {
   const [pvAnalysisMessage, setPvAnalysisMessage] = useState('');
   const [pvAnalysisResponse, setPvAnalysisResponse] = useState<PvAnalysisProxyResponse | null>(null);
   const [isSolarPanelLayerVisible, setIsSolarPanelLayerVisible] = useState(false);
+  const [isClimatePanelModeEnabled, setIsClimatePanelModeEnabled] = useState(false);
+  const [climatePanelLoadStatus, setClimatePanelLoadStatus] = useState<ClimatePanelLoadStatus>('idle');
+  const [climatePanelLoadMessage, setClimatePanelLoadMessage] = useState(
+    'climate.gg POC 샘플은 토글을 켜면 public 정적 파일에서 불러옵니다.',
+  );
+  const [climateBundle, setClimateBundle] = useState<ClimateBundle | null>(null);
+  const [climatePanelGeojson, setClimatePanelGeojson] = useState<ClimatePanelsGeoJson | null>(null);
+  const [climatePocExtent, setClimatePocExtent] = useState<ClimatePocPanelExtent | null>(null);
+  const [liveClimateStatus, setLiveClimateStatus] = useState<LiveClimateStatus>('idle');
+  const [liveClimateStep, setLiveClimateStep] = useState('선택 건물 기준 라이브 분석 대기');
+  const [liveClimateError, setLiveClimateError] = useState('');
+  const [liveClimateBundle, setLiveClimateBundle] = useState<ClimateBundle | null>(null);
+  const [liveClimatePanelGeojson, setLiveClimatePanelGeojson] = useState<ClimatePanelsGeoJson | null>(null);
+  const [liveClimateDiagnostics, setLiveClimateDiagnostics] = useState<ClimateLiveAnalysisDiagnostics | null>(null);
+  const [cameraMoveStatus, setCameraMoveStatus] = useState('climate.gg POC 패널 위치 계산 대기');
   const panelVisibilityUserOverrideRef = useRef(false);
+  const climateFocusPocRef = useRef<string | null>(null);
   const [vworldMap, setVworldMap] = useState<VWorldMapInstance | null>(null);
   const vworldMapRef = useRef<VWorldMapInstance | null>(null);
   const lastMapSelectionRef = useRef<{ longitude: number; latitude: number; selectedAt: number } | null>(null);
@@ -678,6 +843,18 @@ function RiskMapPage() {
     debugEntityAdded: false,
     debugLiftApplied: false,
   });
+  const [climatePanelLayerStatus, setClimatePanelLayerStatus] = useState<ClimatePanelLayerStatus>({
+    state: 'idle',
+    message: 'climate.gg POC 패널 레이어가 꺼져 있습니다.',
+    climatePanelFeatureCount: 0,
+    climatePanelEntityCount: 0,
+    firstPanelCoordinates: null,
+    climatePanelRenderStatus: 'idle',
+    renderMethod: '-',
+    viewerDebugId: null,
+    viewerEntityCount: null,
+  });
+  const [isDeveloperDiagnosticsOpen, setIsDeveloperDiagnosticsOpen] = useState(false);
   const hasMapAnchoredGeometry =
     selectionMode === 'geometry' || selectionMode === 'parcel-fallback' || selectionMode === 'building_footprint';
   const shouldShowDevDiagnostics = import.meta.env.DEV;
@@ -722,7 +899,144 @@ function RiskMapPage() {
   const hasSelectedBuilding = selectionMode === 'building_footprint' && Boolean(selectedBuildingFootprint);
   const hasSelectedBuildingPolygon = hasSelectedBuilding && Boolean(selectedRoofPolygon);
   const hasGeneratedPanelLayout = hasSelectedBuildingPolygon && solarPanelPolygons.length > 0;
+  const staticClimatePanelFeatureCount = climatePocExtent?.featureCount ?? climatePanelGeojson?.features.length ?? 0;
+  const climatePocCentroid = climatePocExtent?.centroid ?? null;
+  const climatePocBbox = climatePocExtent?.bbox ?? null;
+  const liveClimatePocExtent = useMemo(
+    () => summarizeClimatePanelGeojson(liveClimatePanelGeojson),
+    [liveClimatePanelGeojson],
+  );
+  const liveClimatePanelFeatureCount = liveClimatePocExtent?.featureCount ?? liveClimatePanelGeojson?.features.length ?? 0;
+  const hasStaticClimatePanelLayout =
+    isClimatePanelModeEnabled &&
+    climatePanelLoadStatus === 'loaded' &&
+    staticClimatePanelFeatureCount > 0 &&
+    Boolean(climatePocCentroid);
+  const hasLiveClimatePanelLayout =
+    liveClimateStatus === 'success' && liveClimatePanelFeatureCount > 0 && Boolean(liveClimateBundle);
+  const activeClimateBundle = hasLiveClimatePanelLayout
+    ? liveClimateBundle
+    : hasStaticClimatePanelLayout
+      ? climateBundle
+      : null;
+  const activeClimatePanelGeojson = hasLiveClimatePanelLayout
+    ? liveClimatePanelGeojson
+    : hasStaticClimatePanelLayout
+      ? climatePanelGeojson
+      : null;
+  const activeClimatePanelFeatureCount = hasLiveClimatePanelLayout
+    ? liveClimatePanelFeatureCount
+    : hasStaticClimatePanelLayout
+      ? staticClimatePanelFeatureCount
+      : 0;
+  const shouldRenderClimatePanelLayer = isSolarPanelLayerVisible && Boolean(activeClimatePanelGeojson);
+  const shouldRenderGeneratedPanelLayer =
+    isSolarPanelLayerVisible &&
+    hasMapAnchoredGeometry &&
+    !hasLiveClimatePanelLayout &&
+    (!isClimatePanelModeEnabled || climatePanelLoadStatus === 'error');
+  const liveRoofSource = (liveClimateDiagnostics?.roofSource as ClimateLiveRoofSource | undefined) ?? null;
+  const liveSelectBuldStatus = liveClimateDiagnostics?.selectBuldStatus ?? null;
+  const liveHybridMode = Boolean(liveClimateDiagnostics?.liveHybridMode);
+  const maxCellsApplied = Boolean(liveClimateDiagnostics?.maxCellsApplied);
+  const panelPlacementSourceLabel = hasLiveClimatePanelLayout
+    ? 'climate.gg 라이브 옥상·음영 분석'
+    : isClimatePanelModeEnabled
+      ? 'climate.gg 샘플 음영 분석'
+      : '건물 footprint 기반 자체 배치';
+  const resolvedPanelPlacementSourceLabel = hasLiveClimatePanelLayout
+    ? liveRoofSource === 'climate.gg-selectBuld'
+      ? 'climate.gg 옥상 polygon + 음영 분석'
+      : '선택 건물 footprint + climate.gg 음영 분석'
+    : panelPlacementSourceLabel;
+  const demoPanelSourceLabel = hasLiveClimatePanelLayout
+    ? liveRoofSource === 'climate.gg-selectBuld'
+      ? 'climate.gg 옥상 polygon + 음영 분석'
+      : '선택 건물 footprint + climate.gg 음영 분석'
+    : resolvedPanelPlacementSourceLabel;
+  const hasAnyPanelLayout = hasGeneratedPanelLayout || hasStaticClimatePanelLayout || hasLiveClimatePanelLayout;
   const hasPvAnalysisCompleted = pvAnalysisStatus === 'success' || pvAnalysisStatus === 'fallback';
+  const liveRoofAreaM2 = liveClimateDiagnostics?.roofAreaM2 ?? null;
+  const liveCellCount = liveClimateDiagnostics?.cellCount ?? null;
+  const liveShadingAverage = liveClimateDiagnostics?.shadingAverage ?? null;
+  const livePanelCount = liveClimateDiagnostics?.panelCount ?? null;
+  const liveApiSource = liveClimateStatus === 'success' ? 'climate.gg-live-hybrid' : '-';
+  const climateExpectedRevenue = activeClimateBundle?.pv_analysis_output.expected_revenue;
+  const simplePaybackSource: SimplePaybackSource = hasLiveClimatePanelLayout
+    ? 'climate-live'
+    : hasStaticClimatePanelLayout
+      ? 'static-poc'
+      : 'footprint-fallback';
+  const climateBundlePaybackYears = calculateClimateBundlePaybackYears(activeClimateBundle);
+  const pvResultPaybackYears = calculatePvResultPaybackYears(pvAnalysisResult);
+  const footprintPaybackYears = normalizeSimplePaybackYears(selectedBuilding.estimatedPaybackYears);
+  const simplePaybackYears =
+    simplePaybackSource === 'climate-live' || simplePaybackSource === 'static-poc'
+      ? climateBundlePaybackYears
+      : pvResultPaybackYears ?? footprintPaybackYears;
+  const simplePaybackText = formatSimplePaybackYears(simplePaybackYears);
+  const simplePaybackSourceText = getSimplePaybackSourceText(simplePaybackSource);
+  const overviewRoofAreaM2 = liveRoofAreaM2 ?? activeClimateBundle?.roof_area_sqm_5186 ?? selectedBuilding.estimatedRoofAreaM2;
+  const overviewShadingAverage = liveShadingAverage ?? activeClimateBundle?.shading.score_mean ?? null;
+  const overviewPanelCount =
+    livePanelCount ?? activeClimateBundle?.pv_analysis_input.solar_panel_info.panel_count ?? selectedBuilding.estimatedPanelCount;
+  const overviewInstallCapacityKw =
+    climateExpectedRevenue?.install_kw ?? pvAnalysisResult?.installKw ?? selectedBuilding.estimatedCapacityKw;
+  const overviewAnnualGenerationKwh =
+    activeClimateBundle?.pv_analysis_output.annual_generation ??
+    pvAnalysisResult?.annualGenerationKwh ??
+    selectedBuilding.estimatedAnnualGenerationKwh;
+  const overviewAnnualSavingsKrw =
+    climateExpectedRevenue?.first_year_save_cost ??
+    pvAnalysisResult?.firstYearSelfConsumptionSavingKrw ??
+    selectedBuilding.estimatedAnnualSavingsKrw;
+  const overviewInvestmentKrw = climateExpectedRevenue?.expected_investment ?? pvAnalysisResult?.estimatedInvestmentKrw ?? null;
+  const roofSourceFallbackNote =
+    hasLiveClimatePanelLayout && liveRoofSource === 'vworld-building-footprint-fallback'
+      ? 'climate.gg 옥상 polygon 조회가 지연되어 선택 건물 footprint 기반으로 음영 분석을 진행했습니다.'
+      : null;
+  const analysisOverviewCards = [
+    ['분석 소스', demoPanelSourceLabel],
+    ['옥상 추정 면적', formatEstimatedSquareMeters(overviewRoofAreaM2)],
+    ['음영 평균 점수', formatEstimatedScore(overviewShadingAverage)],
+    ['예상 패널 수', formatDiagnosticCount(overviewPanelCount)],
+    ['예상 설치용량', formatEstimatedKw(overviewInstallCapacityKw)],
+    ['예상 연간 발전량', formatEstimatedKwh(overviewAnnualGenerationKwh)],
+    ['예상 연간 절감액', formatEstimatedKrw(overviewAnnualSavingsKrw)],
+    ['총 설치비 추정', overviewInvestmentKrw && overviewInvestmentKrw > 0 ? formatEstimatedKrw(overviewInvestmentKrw) : '계산 불가'],
+    ['단순 회수기간 추정', simplePaybackText],
+  ] as const;
+  const climateBundleSummaryItems = activeClimateBundle
+    ? [
+        ['unq_id', formatOptionalText(activeClimateBundle.meta.unq_id)],
+        ['building name', formatOptionalText(activeClimateBundle.meta.bldg_nm)],
+        ['roof area', formatEstimatedSquareMeters(activeClimateBundle.roof_area_sqm_5186)],
+        [
+          'shading score mean/min/max',
+          `${formatEstimatedScore(activeClimateBundle.shading.score_mean)} / ${formatEstimatedScore(
+            activeClimateBundle.shading.score_min,
+          )} / ${formatEstimatedScore(activeClimateBundle.shading.score_max)}`,
+        ],
+        [
+          'panel/cell count',
+          `추정 ${activeClimateBundle.pv_analysis_input.solar_panel_info.panel_count.toLocaleString('ko-KR')}개 / 셀 ${activeClimateBundle.shading.cells_total.toLocaleString(
+            'ko-KR',
+          )}개`,
+        ],
+        ['annual generation', formatEstimatedKwh(activeClimateBundle.pv_analysis_output.annual_generation)],
+        ['install kw', climateExpectedRevenue ? formatEstimatedKw(climateExpectedRevenue.install_kw) : '-'],
+        ['first year revenue', climateExpectedRevenue ? formatEstimatedKrw(climateExpectedRevenue.first_year_revenue) : '-'],
+        [
+          'first year save cost',
+          climateExpectedRevenue ? formatEstimatedKrw(climateExpectedRevenue.first_year_save_cost) : '-',
+        ],
+        [
+          'expected investment',
+          climateExpectedRevenue ? formatEstimatedKrw(climateExpectedRevenue.expected_investment) : '-',
+        ],
+        ['단순 회수기간 추정', simplePaybackText],
+      ]
+    : [];
   const panelSpacingText = `행 ${formatMeters(DEFAULT_SOLAR_PANEL_LAYOUT_OPTIONS.rowGapM)} · 열 ${formatMeters(
     DEFAULT_SOLAR_PANEL_LAYOUT_OPTIONS.colGapM,
   )}`;
@@ -740,19 +1054,23 @@ function RiskMapPage() {
     },
     {
       title: '태양광 패널 배치',
-      state: !hasSelectedBuilding ? 'pending' : hasGeneratedPanelLayout ? 'complete' : 'active',
-      message: hasGeneratedPanelLayout
-        ? `건물 footprint 기반 옥상 추정으로 ${solarPanelPolygons.length.toLocaleString('ko-KR')}개 패널 후보를 배치했습니다.`
-        : hasSelectedBuilding
-          ? '건물 footprint 기반 옥상 추정으로 패널 배치를 계산합니다.'
-          : '건물 선택 후 패널 배치를 확인할 수 있습니다.',
+      state: !hasSelectedBuilding && !hasAnyPanelLayout ? 'pending' : hasAnyPanelLayout ? 'complete' : 'active',
+      message: hasLiveClimatePanelLayout
+        ? `선택 건물 기준 climate.gg 라이브 분석으로 ${liveClimatePanelFeatureCount.toLocaleString('ko-KR')}개 음영 셀을 불러왔습니다.`
+        : hasStaticClimatePanelLayout
+          ? `climate.gg 샘플 사전계산본으로 ${staticClimatePanelFeatureCount.toLocaleString('ko-KR')}개 옥상·음영 셀을 불러왔습니다.`
+        : hasGeneratedPanelLayout
+          ? `건물 footprint 기반 옥상 추정으로 ${solarPanelPolygons.length.toLocaleString('ko-KR')}개 패널 후보를 배치했습니다.`
+          : hasSelectedBuilding
+            ? '건물 footprint 기반 옥상 추정으로 패널 배치를 계산합니다.'
+            : '건물 선택 후 패널 배치를 확인할 수 있습니다.',
     },
     {
       title: '발전량 분석',
-      state: hasPvAnalysisCompleted ? 'complete' : hasGeneratedPanelLayout ? 'active' : 'pending',
+      state: hasPvAnalysisCompleted ? 'complete' : hasAnyPanelLayout ? 'active' : 'pending',
       message: hasPvAnalysisCompleted
         ? '발전량 분석이 완료되었습니다.'
-        : hasGeneratedPanelLayout
+        : hasAnyPanelLayout
           ? '패널 배치 결과로 발전량 분석을 실행하세요.'
           : '패널 배치 후 발전량 분석을 실행할 수 있습니다.',
     },
@@ -787,6 +1105,145 @@ function RiskMapPage() {
       setIsSolarPanelLayerVisible(true);
     }
   }, [activeTab, hasSelectedBuildingPolygon, solarPanelPolygons.length]);
+
+  const loadClimatePocAssets = useCallback(async () => {
+    setClimatePanelLoadStatus('loading');
+    setClimatePanelLoadMessage('climate.gg POC 정적 파일을 불러오는 중입니다.');
+    setCameraMoveStatus('climate.gg POC 정적 파일 로드 중');
+
+    try {
+      const [loadedBundle, loadedPanels] = await Promise.all([
+        loadClimateBundle(DEFAULT_CLIMATE_POC_ID),
+        loadClimatePanelGeojson(DEFAULT_CLIMATE_POC_ID),
+      ]);
+      const nextExtent = summarizeClimatePanelGeojson(loadedPanels);
+
+      if (!nextExtent) {
+        setClimatePanelLoadStatus('error');
+        setClimatePanelLoadMessage('climate.gg POC 정적 파일을 불러오지 못했습니다.');
+        setClimateBundle(null);
+        setClimatePanelGeojson(null);
+        setClimatePocExtent(null);
+        setCameraMoveStatus('panels_4326.geojson에서 bbox/centroid 계산 가능한 좌표를 찾지 못했습니다.');
+        setClimatePanelLayerStatus((current) => ({
+          ...current,
+          state: 'error',
+          message: 'climate.gg POC 정적 파일을 불러오지 못했습니다.',
+          climatePanelFeatureCount: loadedPanels.features.length,
+          climatePanelEntityCount: 0,
+          firstPanelCoordinates: null,
+          climatePanelRenderStatus: 'error',
+          renderMethod: '-',
+          viewerDebugId: null,
+          viewerEntityCount: null,
+        }));
+        return;
+      }
+
+      setClimateBundle(loadedBundle);
+      setClimatePanelGeojson(loadedPanels);
+      setClimatePocExtent(nextExtent);
+      setClimatePanelLoadStatus('loaded');
+      setClimatePanelLoadMessage(
+        `climate.gg POC 사전계산본 ${nextExtent.featureCount.toLocaleString('ko-KR')}개 패널 셀을 불러왔습니다.`,
+      );
+      setCameraMoveStatus(
+        `climatePocCentroid/bbox 계산 완료 · ${nextExtent.featureCount.toLocaleString('ko-KR')}개 feature`,
+      );
+      setClimatePanelLayerStatus((current) => ({
+        ...current,
+        state: current.state === 'rendered' ? current.state : 'loaded',
+        message: `climate.gg POC 정적 파일 로드 완료 · ${nextExtent.featureCount.toLocaleString('ko-KR')}개 패널 셀`,
+        climatePanelFeatureCount: nextExtent.featureCount,
+        climatePanelEntityCount: current.state === 'rendered' ? current.climatePanelEntityCount : 0,
+        climatePanelRenderStatus: current.state === 'rendered' ? current.climatePanelRenderStatus : 'loaded',
+      }));
+    } catch {
+      setClimatePanelLoadStatus('error');
+      setClimatePanelLoadMessage('climate.gg POC 정적 파일을 불러오지 못했습니다.');
+      setClimateBundle(null);
+      setClimatePanelGeojson(null);
+      setClimatePocExtent(null);
+      setCameraMoveStatus('climate.gg POC 정적 파일을 불러오지 못했습니다.');
+      setClimatePanelLayerStatus({
+        state: 'error',
+        message: 'climate.gg POC 정적 파일을 불러오지 못했습니다.',
+        climatePanelFeatureCount: 0,
+        climatePanelEntityCount: 0,
+        firstPanelCoordinates: null,
+        climatePanelRenderStatus: 'error',
+        renderMethod: '-',
+        viewerDebugId: null,
+        viewerEntityCount: null,
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isClimatePanelModeEnabled && climatePanelLoadStatus === 'idle') {
+      void loadClimatePocAssets();
+    }
+  }, [climatePanelLoadStatus, isClimatePanelModeEnabled, loadClimatePocAssets]);
+
+  useEffect(() => {
+    if (!isClimatePanelModeEnabled) {
+      setCameraMoveStatus('climate.gg POC 패널 위치 계산 대기');
+      return;
+    }
+
+    if (climatePanelLoadStatus === 'loading') {
+      setCameraMoveStatus('climate.gg POC 정적 파일 로드 중');
+      return;
+    }
+
+    if (climatePanelLoadStatus === 'error') {
+      setCameraMoveStatus('climate.gg POC 정적 파일을 불러오지 못했습니다.');
+      return;
+    }
+
+    if (!climatePocExtent) {
+      setCameraMoveStatus('climate.gg POC 패널 bbox/centroid 계산 대기');
+      return;
+    }
+
+    setCameraMoveStatus(
+      `climatePocCentroid/bbox 계산 완료 · ${climatePocExtent.featureCount.toLocaleString('ko-KR')}개 feature`,
+    );
+  }, [climatePanelLoadStatus, climatePocExtent, isClimatePanelModeEnabled]);
+
+  useEffect(() => {
+    if (!isClimatePanelModeEnabled || !climateBundle || !vworldMap || !climatePocExtent) {
+      return;
+    }
+
+    const pocId = climateBundle.meta.unq_id ?? DEFAULT_CLIMATE_POC_ID;
+
+    if (climateFocusPocRef.current === pocId) {
+      return;
+    }
+
+    const focusResult = focusVWorldMapOnCoordinate(vworldMap, {
+      longitude: climatePocExtent.centroid[0],
+      latitude: climatePocExtent.centroid[1],
+      height: getClimatePocFocusHeightM(climatePocExtent),
+      pitch: -84,
+    });
+
+    climateFocusPocRef.current = pocId;
+    setCameraMoveStatus(
+      focusResult.moved
+        ? `자동 이동 완료 · ${focusResult.method || 'camera'} · climatePocCentroid 기준`
+        : `자동 이동 미완료 · ${focusResult.message}`,
+    );
+    setMapFocusStatus({
+      message: focusResult.message,
+      method: focusResult.method,
+      selectionSource: 'climate.gg POC',
+      selectionMethod: resolvedPanelPlacementSourceLabel,
+      moved: focusResult.moved,
+      markerAdded: false,
+    });
+  }, [climateBundle, climatePocExtent, isClimatePanelModeEnabled, resolvedPanelPlacementSourceLabel, vworldMap]);
 
   const applyBuildingFootprintSelection = useCallback(
     (match: BuildingFootprintMatch, coordinate: Coordinate, selection?: VWorldSelection) => {
@@ -824,6 +1281,12 @@ function RiskMapPage() {
       setSelectedBuildingGeometry(polygon);
       setSelectedRoofPolygon(roofPolygon);
       setSolarPanelPolygons(panelPolygons);
+      setLiveClimateStatus('idle');
+      setLiveClimateStep('새 선택 건물 기준 라이브 분석 대기');
+      setLiveClimateError('');
+      setLiveClimateDiagnostics(null);
+      setLiveClimateBundle(null);
+      setLiveClimatePanelGeojson(null);
       panelVisibilityUserOverrideRef.current = false;
       setIsSolarPanelLayerVisible(activeTabRef.current === 'solar' && panelPolygons.length > 0);
       setMapFocusStatus({
@@ -1180,6 +1643,127 @@ function RiskMapPage() {
     setActiveTab('solar');
     await handlePvAnalysisRequest();
   }, [handlePvAnalysisRequest]);
+
+  const handleClimatePanelModeChange = useCallback(
+    (nextEnabled: boolean) => {
+      setIsClimatePanelModeEnabled(nextEnabled);
+
+      if (!nextEnabled) {
+        setCameraMoveStatus(
+          climatePocExtent
+            ? 'climate.gg POC 패널 위치 계산 완료 · 토글이 꺼져 있습니다.'
+            : 'climate.gg POC 패널 위치 계산 대기',
+        );
+        return;
+      }
+
+      setIsSolarPanelLayerVisible(true);
+      panelVisibilityUserOverrideRef.current = false;
+      climateFocusPocRef.current = null;
+      void loadClimatePocAssets();
+    },
+    [climatePocExtent, loadClimatePocAssets],
+  );
+
+  const handleClimatePocCameraMove = useCallback(() => {
+    if (!climatePocExtent) {
+      setCameraMoveStatus('climatePocBbox 또는 climatePocCentroid가 아직 계산되지 않았습니다.');
+      return;
+    }
+
+    const [longitude, latitude] = climatePocExtent.centroid;
+    const focusResult = focusVWorldMapOnCoordinate(vworldMapRef.current, {
+      longitude,
+      latitude,
+      height: getClimatePocFocusHeightM(climatePocExtent),
+      pitch: -84,
+    });
+    const nextStatus = focusResult.moved
+      ? `수동 이동 완료 · ${focusResult.method || 'camera'} · climatePocCentroid 기준`
+      : `수동 이동 미완료 · ${focusResult.message}`;
+
+    setCameraMoveStatus(nextStatus);
+    setMapFocusStatus({
+      message: focusResult.message,
+      method: focusResult.method,
+      selectionSource: 'climate.gg POC',
+      selectionMethod: 'POC 위치로 이동',
+      moved: focusResult.moved,
+      markerAdded: false,
+    });
+  }, [climatePocExtent]);
+
+  const handleLiveClimateAnalysisRequest = useCallback(async () => {
+    if (!selectedCoordinate || !hasSelectedBuilding || !selectedBuildingFeature) {
+      setLiveClimateStatus('error');
+      setLiveClimateStep('선택 건물 기준 좌표가 필요합니다.');
+      setLiveClimateError('화성시 건물 polygon을 선택한 뒤 climate.gg 라이브 분석을 실행해주세요.');
+      return;
+    }
+
+    setLiveClimateStatus('loading');
+    setLiveClimateStep('선택 건물 기준 climate.gg 라이브 분석 요청 중');
+    setLiveClimateError('');
+    setLiveClimateDiagnostics(null);
+    setLiveClimateBundle(null);
+    setLiveClimatePanelGeojson(null);
+    setPvAnalysisStatus('loading');
+    setPvAnalysisMessage('AI/공공데이터 기반 옥상 음영 분석을 실행하고 있습니다.');
+
+    const response = await runClimateRooftopAnalysis({
+      longitude: selectedCoordinate[0],
+      latitude: selectedCoordinate[1],
+      selectedBuildingId: selectedBuildingId ?? undefined,
+      selectedBuildingFeature: selectedBuildingFeature as ClimateSelectedBuildingFeature,
+      panelCapacityW: 640,
+      panelAngle: 35,
+      panelType: 1,
+      cellsPerPanel: 2,
+    });
+
+    if (!response.ok) {
+      setLiveClimateStatus('error');
+      setLiveClimateStep('climate.gg 라이브 분석 실패');
+      setLiveClimateError(response.message);
+      setLiveClimateDiagnostics(response.diagnostics);
+      setPvAnalysisStatus('idle');
+      setPvAnalysisMessage('');
+      setAnalysisStatus('climate.gg 라이브 분석 실패로 건물 footprint 기반 자체 배치를 표시합니다.');
+      setIsSolarPanelLayerVisible(true);
+      return;
+    }
+
+    const normalizedPvResult = normalizeClimateBundlePvOutput(response.bundle.pv_analysis_output);
+    const liveCompletionMessage =
+      response.roofSource === 'vworld-building-footprint-fallback'
+        ? 'climate.gg 옥상 polygon 조회가 지연되어 선택 건물 footprint 기반으로 음영 분석을 진행했습니다.'
+        : '선택 건물 기준 climate.gg 옥상 polygon + 음영 분석 완료';
+
+    setLiveClimateStatus('success');
+    setLiveClimateStep(liveCompletionMessage);
+    setLiveClimateError('');
+    setLiveClimateDiagnostics(response.diagnostics);
+    setLiveClimateBundle(response.bundle);
+    setLiveClimatePanelGeojson(response.panelsGeojson);
+    setIsSolarPanelLayerVisible(true);
+    setPvAnalysisStatus('success');
+    setPvAnalysisMessage(liveCompletionMessage);
+    setPvAnalysisResponse({
+      ok: true,
+      source: 'gyeonggi-climate-platform',
+      input: {
+        latitude: response.bundle.pv_analysis_input.latitude,
+        longitude: response.bundle.pv_analysis_input.longitude,
+        shadingIndexAverage: response.bundle.pv_analysis_input.shading_index_average,
+        solarPanelAngle: Number(response.bundle.pv_analysis_input.solar_panel_angle),
+        panelCapacityW: response.bundle.pv_analysis_input.solar_panel_info.panel_capacity,
+        panelCount: response.bundle.pv_analysis_input.solar_panel_info.panel_count,
+        panelType: response.bundle.pv_analysis_input.solar_panel_info.panel_type,
+      },
+      result: normalizedPvResult,
+    });
+    setAnalysisStatus(liveCompletionMessage);
+  }, [hasSelectedBuilding, selectedBuildingFeature, selectedBuildingId, selectedCoordinate]);
 
   const handleMapShellClickCapture = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -1587,13 +2171,22 @@ function RiskMapPage() {
 
             <VWorldSolarPanelLayer
               map={vworldMap}
-              visible={isSolarPanelLayerVisible && hasMapAnchoredGeometry}
+              visible={shouldRenderGeneratedPanelLayer}
               selectedBuildingFeature={selectedBuildingFeature}
               selectedBuildingId={selectedBuildingId}
               selectedBuildingCentroid={selectedBuildingCentroid}
               panelPolygons={solarPanelPolygons}
               roofHeightM={roofHeightEstimate.roofHeightM}
               onStatusChange={setPanelLayerStatus}
+            />
+
+            <ClimatePanelLayer
+              map={vworldMap}
+              visible={shouldRenderClimatePanelLayer}
+              panelsGeojson={activeClimatePanelGeojson}
+              pocId={activeClimateBundle?.meta.unq_id ?? DEFAULT_CLIMATE_POC_ID}
+              roofHeightM={activeClimateBundle?.meta.bldg_hgt ?? roofHeightEstimate.roofHeightM}
+              onStatusChange={setClimatePanelLayerStatus}
             />
 
             {mapStatus === 'loading' && (
@@ -1711,11 +2304,81 @@ function RiskMapPage() {
             <>
               <div className="simulationSummary">
                 <span>{selectedBuilding.simulationConfidence}</span>
-                <strong>태양광 가상 설치 시뮬레이션</strong>
+                <strong>AI/공공데이터 기반 패널 배치 예시</strong>
                 <p>{selectedBuilding.simulationNote}</p>
               </div>
 
+              <div className="panelSourceSummary">
+                <span>패널 배치 데이터 소스</span>
+                <strong>{demoPanelSourceLabel}</strong>
+                <p>
+                  표시되는 패널과 발전량은 예상·추정 예시이며, 실제 설치 가능 여부는 현장조사와 구조안전성,
+                  관리주체 협의, 실제 공고 확인이 필요합니다.
+                </p>
+                <button
+                  className="riskAnalysisButton climateLiveButton"
+                  type="button"
+                  onClick={handleLiveClimateAnalysisRequest}
+                  disabled={
+                    !hasSelectedBuilding ||
+                    !selectedCoordinate ||
+                    !selectedBuildingFeature ||
+                    liveClimateStatus === 'loading'
+                  }
+                >
+                  {liveClimateStatus === 'loading'
+                    ? 'climate.gg 라이브 분석 중...'
+                    : '선택 건물 climate.gg 라이브 분석 실행'}
+                </button>
+                <p>
+                  climate.gg 샘플 POC는 1개 샘플 건물 사전계산본이므로 현재 선택 건물과 위치가 다를 수 있습니다.
+                </p>
+                <label className="panelToggleRow panelToggleRowInline">
+                  <span>climate.gg 샘플 음영 분석 보기</span>
+                  <input
+                    type="checkbox"
+                    checked={isClimatePanelModeEnabled}
+                    onChange={(event) => {
+                      handleClimatePanelModeChange(event.target.checked);
+                    }}
+                  />
+                </label>
+                {isClimatePanelModeEnabled && climatePanelLoadStatus === 'error' && (
+                  <p role="alert">climate.gg POC 정적 파일을 불러오지 못했습니다. 건물 footprint 기반 자체 배치를 fallback으로 표시합니다.</p>
+                )}
+                <button
+                  className="pocFocusButton"
+                  type="button"
+                  onClick={handleClimatePocCameraMove}
+                  disabled={!climatePocCentroid}
+                >
+                  샘플 POC 건물 위치로 이동
+                </button>
+              </div>
+
               <div className="geometryStatusBox">
+                <div className="analysisOverviewGrid">
+                  {analysisOverviewCards.map(([label, value]) => (
+                    <div className="analysisOverviewCard" key={label}>
+                      <span>{label}</span>
+                      <strong>{value}</strong>
+                    </div>
+                  ))}
+                </div>
+                {roofSourceFallbackNote && <p className="analysisSourceNote">{roofSourceFallbackNote}</p>}
+                <p className="analysisSourceWarning">
+                  본 분석은 비공식 API와 건물 footprint 기반 추정을 포함한 MVP입니다. 실제 설치 가능 여부는 현장조사와 구조 검토가 필요합니다.
+                </p>
+                <button
+                  className="developerDiagnosticsToggle"
+                  type="button"
+                  aria-expanded={isDeveloperDiagnosticsOpen}
+                  onClick={() => setIsDeveloperDiagnosticsOpen((current) => !current)}
+                >
+                  개발자 진단 보기
+                </button>
+                {isDeveloperDiagnosticsOpen && (
+                  <div className="developerDiagnosticsContent">
                 <div>
                   <span>선택 모드</span>
                   <strong>{getSelectionModeText(selectionMode)}</strong>
@@ -1738,6 +2401,85 @@ function RiskMapPage() {
                 <div>
                   <span>데이터 소스</span>
                   <strong>{featureDataInfo.dataTypeLabel}</strong>
+                </div>
+                <div>
+                  <span>패널 배치 소스</span>
+                  <strong>{demoPanelSourceLabel}</strong>
+                </div>
+                <div>
+                  <span>liveClimateStatus</span>
+                  <strong>{liveClimateStatus}</strong>
+                </div>
+                <div>
+                  <span>liveClimateStep</span>
+                  <strong>{liveClimateStep}</strong>
+                </div>
+                <div>
+                  <span>liveClimateError</span>
+                  <strong>{liveClimateError || '-'}</strong>
+                </div>
+                <div>
+                  <span>liveRoofAreaM2</span>
+                  <strong>{formatEstimatedSquareMeters(liveRoofAreaM2)}</strong>
+                </div>
+                <div>
+                  <span>liveCellCount</span>
+                  <strong>{formatDiagnosticCount(liveCellCount)}</strong>
+                </div>
+                <div>
+                  <span>liveShadingAverage</span>
+                  <strong>{formatEstimatedScore(liveShadingAverage)}</strong>
+                </div>
+                <div>
+                  <span>livePanelCount</span>
+                  <strong>{formatDiagnosticCount(livePanelCount)}</strong>
+                </div>
+                <div>
+                  <span>liveApiSource</span>
+                  <strong>{liveApiSource}</strong>
+                </div>
+                <div>
+                  <span>roofSource</span>
+                  <strong>{liveRoofSource ?? '-'}</strong>
+                </div>
+                <div>
+                  <span>selectBuldStatus</span>
+                  <strong>{liveSelectBuldStatus ?? '-'}</strong>
+                </div>
+                <div>
+                  <span>liveHybridMode</span>
+                  <strong>{liveHybridMode ? 'true' : 'false'}</strong>
+                </div>
+                <div>
+                  <span>maxCellsApplied</span>
+                  <strong>{maxCellsApplied ? 'true' : 'false'}</strong>
+                </div>
+                <div>
+                  <span>climatePocEnabled</span>
+                  <strong>{isClimatePanelModeEnabled ? 'true' : 'false'}</strong>
+                </div>
+                <div>
+                  <span>climatePocLoadStatus</span>
+                  <strong>{climatePanelLoadStatus}</strong>
+                </div>
+                <div>
+                  <span>climate.gg POC 로드</span>
+                  <strong>
+                    {climatePanelLoadStatus}
+                    {climatePanelLoadMessage ? ` · ${climatePanelLoadMessage}` : ''}
+                  </strong>
+                </div>
+                <div>
+                  <span>climatePocCentroid</span>
+                  <strong>{formatCoordinate(climatePocCentroid)}</strong>
+                </div>
+                <div>
+                  <span>climatePocBbox</span>
+                  <strong>{formatClimatePocBbox(climatePocBbox)}</strong>
+                </div>
+                <div>
+                  <span>cameraMoveStatus</span>
+                  <strong>{cameraMoveStatus}</strong>
                 </div>
                 <div>
                   <span>현재 사용 데이터ID</span>
@@ -1855,6 +2597,25 @@ function RiskMapPage() {
                   <strong>{panelLayerStatus.panelEntityCount.toLocaleString('ko-KR')}개</strong>
                 </div>
                 <div>
+                  <span>climatePanelFeatureCount</span>
+                  <strong>{activeClimatePanelFeatureCount.toLocaleString('ko-KR')}개</strong>
+                </div>
+                <div>
+                  <span>climatePanelEntityCount</span>
+                  <strong>{climatePanelLayerStatus.climatePanelEntityCount.toLocaleString('ko-KR')}개</strong>
+                </div>
+                <div>
+                  <span>firstPanelCoordinates</span>
+                  <strong>{formatPanelCoordinates(climatePanelLayerStatus.firstPanelCoordinates)}</strong>
+                </div>
+                <div>
+                  <span>climatePanelRenderStatus</span>
+                  <strong>
+                    {climatePanelLayerStatus.climatePanelRenderStatus}
+                    {climatePanelLayerStatus.renderMethod !== '-' ? ` · ${climatePanelLayerStatus.renderMethod}` : ''}
+                  </strong>
+                </div>
+                <div>
                   <span>지도 객체 렌더링 방식</span>
                   <strong>{panelLayerStatus.renderMode}</strong>
                 </div>
@@ -1923,9 +2684,44 @@ function RiskMapPage() {
                 {hasSelectedBuildingPolygon && solarPanelPolygons.length === 0 && (
                   <p role="status">선택 건물에서 배치 가능한 패널을 계산하지 못했습니다.</p>
                 )}
+                  </div>
+                )}
               </div>
 
-              {shouldShowDevDiagnostics && (
+              <section className="climatePanelLegendPanel" aria-label="climate.gg 패널 음영 범례">
+                <div className="climatePanelLegendHeader">
+                  <span>climate.gg 패널 음영 범례</span>
+                  <strong>높은 shading_score가 더 양호한 셀입니다.</strong>
+                </div>
+                <ul>
+                  {CLIMATE_PANEL_LEGEND_ITEMS.map((item) => (
+                    <li key={item.label}>
+                      <i style={{ background: item.color }} aria-hidden="true" />
+                      <span>{item.label}</span>
+                      <strong>{item.scoreText}</strong>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+
+              {activeClimateBundle && isDeveloperDiagnosticsOpen && (
+                <section className="climateBundleSummary" aria-label="climate.gg 분석 bundle 요약">
+                  <div className="climateBundleSummaryHeader">
+                    <span>{hasLiveClimatePanelLayout ? 'climate.gg live bundle' : 'climate.gg sample bundle'}</span>
+                    <strong>옥상·음영·발전량 추정 요약</strong>
+                  </div>
+                  <dl>
+                    {climateBundleSummaryItems.map(([label, value]) => (
+                      <div key={label}>
+                        <dt>{label}</dt>
+                        <dd>{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </section>
+              )}
+
+              {shouldShowDevDiagnostics && isDeveloperDiagnosticsOpen && (
                 <div className="devDiagnosticsPanel" aria-label="개발용 건물 polygon 매칭 진단">
                   <strong>개발용 건물 polygon 매칭 진단</strong>
                   <dl>
@@ -2054,8 +2850,12 @@ function RiskMapPage() {
               <dl className="buildingInfoList solarInfoList">
                 {solarFields.map(([label, key, unit]) => (
                   <div key={key}>
-                    <dt>{label}</dt>
-                    <dd>{formatSolarValue(selectedBuilding[key], unit)}</dd>
+                    <dt>{key === 'estimatedPaybackYears' ? '단순 회수기간 추정' : label}</dt>
+                    <dd>
+                      {key === 'estimatedPaybackYears'
+                        ? formatSimplePaybackYears(normalizeSimplePaybackYears(selectedBuilding[key]))
+                        : formatSolarValue(selectedBuilding[key], unit)}
+                    </dd>
                   </div>
                 ))}
               </dl>
@@ -2103,6 +2903,11 @@ function RiskMapPage() {
                         <strong>{card.render(pvAnalysisResult)}</strong>
                       </div>
                     ))}
+                    <div>
+                      <span>단순 회수기간 추정</span>
+                      <strong>{simplePaybackText}</strong>
+                      <small>{simplePaybackSourceText}</small>
+                    </div>
                   </div>
 
                   {pvAnalysisResult.monthlyGenerationSeries.length > 0 && (
