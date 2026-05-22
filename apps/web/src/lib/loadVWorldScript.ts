@@ -138,6 +138,8 @@ const KOREA_BOUNDS = {
   maxLatitude: 39.5,
 };
 const DUPLICATE_CLICK_WINDOW_MS = 350;
+const TOUCH_TAP_MAX_MOVE_PX = 12;
+const TOUCH_GESTURE_SUPPRESS_CLICK_MS = 700;
 
 class VWorldScriptLoadError extends Error {
   diagnostics: VWorldLoadDiagnostics;
@@ -1098,6 +1100,9 @@ export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWo
         selectedAt: number;
       }
     | null = null;
+  let suppressClickUntil = 0;
+  let wasMultiTouchGesture = false;
+  const activeTouchPointers = new Map<number, { startX: number; startY: number; maxMovePx: number }>();
 
   if (!ensureJQueryGlobal()) {
     throw new Error(VWORLD_JQUERY_FAILURE_MESSAGE);
@@ -1168,6 +1173,11 @@ export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWo
   }
 
   function emitSelection(selection: VWorldSelection) {
+    if (Date.now() < suppressClickUntil) {
+      updateClickDiagnostics(selection, 'ignored');
+      return;
+    }
+
     if (!isFiniteNumber(selection.longitude) || !isFiniteNumber(selection.latitude)) {
       updateClickDiagnostics(selection, 'ignored');
       return;
@@ -1194,10 +1204,75 @@ export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWo
   };
   map.onClick?.addEventListener?.(clickHandler);
 
+  const mapElement = document.getElementById(mapId);
+
+  const markTouchGestureForSuppression = () => {
+    suppressClickUntil = Date.now() + TOUCH_GESTURE_SUPPRESS_CLICK_MS;
+  };
+
+  const pointerDownHandler = (event: PointerEvent) => {
+    if (event.pointerType !== 'touch' && event.pointerType !== 'pen') {
+      return;
+    }
+
+    activeTouchPointers.set(event.pointerId, {
+      startX: event.clientX,
+      startY: event.clientY,
+      maxMovePx: 0,
+    });
+    wasMultiTouchGesture = wasMultiTouchGesture || activeTouchPointers.size > 1;
+  };
+
+  const pointerMoveHandler = (event: PointerEvent) => {
+    const pointer = activeTouchPointers.get(event.pointerId);
+
+    if (!pointer) {
+      return;
+    }
+
+    const movePx = Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY);
+    pointer.maxMovePx = Math.max(pointer.maxMovePx, movePx);
+
+    if (pointer.maxMovePx > TOUCH_TAP_MAX_MOVE_PX || activeTouchPointers.size > 1) {
+      markTouchGestureForSuppression();
+    }
+  };
+
+  const pointerUpHandler = (event: PointerEvent) => {
+    const pointer = activeTouchPointers.get(event.pointerId);
+
+    if (pointer && (pointer.maxMovePx > TOUCH_TAP_MAX_MOVE_PX || wasMultiTouchGesture)) {
+      markTouchGestureForSuppression();
+    }
+
+    activeTouchPointers.delete(event.pointerId);
+
+    if (activeTouchPointers.size === 0) {
+      wasMultiTouchGesture = false;
+    }
+  };
+
+  const touchMoveHandler = (event: TouchEvent) => {
+    if (event.touches.length > 1) {
+      markTouchGestureForSuppression();
+    }
+  };
+
+  mapElement?.addEventListener('pointerdown', pointerDownHandler, { passive: true });
+  mapElement?.addEventListener('pointermove', pointerMoveHandler, { passive: true });
+  mapElement?.addEventListener('pointerup', pointerUpHandler, { passive: true });
+  mapElement?.addEventListener('pointercancel', pointerUpHandler, { passive: true });
+  mapElement?.addEventListener('touchmove', touchMoveHandler, { passive: true });
+
   return {
     map,
     dispose: () => {
       map?.onClick?.removeEventListener?.(clickHandler);
+      mapElement?.removeEventListener('pointerdown', pointerDownHandler);
+      mapElement?.removeEventListener('pointermove', pointerMoveHandler);
+      mapElement?.removeEventListener('pointerup', pointerUpHandler);
+      mapElement?.removeEventListener('pointercancel', pointerUpHandler);
+      mapElement?.removeEventListener('touchmove', touchMoveHandler);
       map?.destroy?.();
       document.getElementById(mapId)?.replaceChildren();
     },

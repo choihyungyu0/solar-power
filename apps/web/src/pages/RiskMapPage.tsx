@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import VWorldSelectableBuildingLayer, {
   type VWorldSelectableBuildingLayerStatus,
 } from '../components/VWorldSelectableBuildingLayer';
@@ -72,6 +80,12 @@ const PV_DEFAULT_PANEL_TYPE = 1;
 const PV_DEFAULT_PANEL_COUNT = 204;
 const NEARBY_BUILDING_OUTLINE_RADIUS_M = 130;
 const MAX_NEARBY_BUILDING_OUTLINES = 220;
+const TOUCH_TAP_MAX_MOVE_PX = 12;
+const TOUCH_GESTURE_SUPPRESS_CLICK_MS = 700;
+const ROOF_FOCUS_MIN_HEIGHT_M = 520;
+const ROOF_FOCUS_MAX_HEIGHT_M = 1800;
+const ROOF_FOCUS_SPAN_MULTIPLIER = 3.2;
+const ROOF_FOCUS_HEIGHT_PADDING_M = 220;
 
 type MapLoadStatus = 'loading' | 'ready' | 'error';
 type RiskPanelTab = 'risk' | 'solar' | 'policy';
@@ -404,6 +418,25 @@ function getDistanceMeters(from: Coordinate, to: Coordinate) {
   return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 }
 
+function getPolygonMaxSpanMeters(polygon: PolygonCoordinates) {
+  let maxSpanMeters = 0;
+
+  for (let leftIndex = 0; leftIndex < polygon.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < polygon.length; rightIndex += 1) {
+      maxSpanMeters = Math.max(maxSpanMeters, getDistanceMeters(polygon[leftIndex], polygon[rightIndex]));
+    }
+  }
+
+  return maxSpanMeters;
+}
+
+function getRoofFocusHeightM(roofPolygon: PolygonCoordinates) {
+  const spanMeters = getPolygonMaxSpanMeters(roofPolygon);
+  const preferredHeight = spanMeters * ROOF_FOCUS_SPAN_MULTIPLIER + ROOF_FOCUS_HEIGHT_PADDING_M;
+
+  return Math.round(Math.min(ROOF_FOCUS_MAX_HEIGHT_M, Math.max(ROOF_FOCUS_MIN_HEIGHT_M, preferredHeight)));
+}
+
 function getNearbyBuildingPolygons(polygons: PolygonCoordinates[], coordinate: Coordinate | null) {
   if (!coordinate) {
     return [];
@@ -579,6 +612,11 @@ function RiskMapPage() {
   const [vworldMap, setVworldMap] = useState<VWorldMapInstance | null>(null);
   const vworldMapRef = useRef<VWorldMapInstance | null>(null);
   const lastMapSelectionRef = useRef<{ longitude: number; latitude: number; selectedAt: number } | null>(null);
+  const mapTouchGestureRef = useRef({
+    suppressClickUntil: 0,
+    wasMultiTouchGesture: false,
+    activePointers: new Map<number, { startX: number; startY: number; maxMovePx: number }>(),
+  });
   const [selectedCoordinate, setSelectedCoordinate] = useState<Coordinate | null>(null);
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('screen-fallback');
   const [geometryQueryStatus, setGeometryQueryStatus] = useState<GeometryQueryStatus>('idle');
@@ -768,6 +806,7 @@ function RiskMapPage() {
 
       const roofPolygon = estimateRoofPolygonFromFootprint(polygon);
       const roofCentroid = getPolygonCentroid(roofPolygon);
+      const focusHeightM = getRoofFocusHeightM(roofPolygon);
       const layoutResult = generateSolarPanelLayout(roofPolygon);
       const panelPolygons = layoutResult.panelPolygons;
       const solarEstimate = createSolarEstimateFromPanelLayout(layoutResult);
@@ -775,8 +814,8 @@ function RiskMapPage() {
       const refinedFocusResult = focusVWorldMapOnCoordinate(vworldMapRef.current, {
         longitude: roofCentroid[0],
         latitude: roofCentroid[1],
-        height: 160,
-        pitch: -82,
+        height: focusHeightM,
+        pitch: -88,
       });
 
       setSelectedCoordinate(coordinate);
@@ -1144,6 +1183,10 @@ function RiskMapPage() {
 
   const handleMapShellClickCapture = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (Date.now() < mapTouchGestureRef.current.suppressClickUntil) {
+        return;
+      }
+
       const targetElement = event.target instanceof Element ? event.target : null;
 
       if (
@@ -1176,6 +1219,61 @@ function RiskMapPage() {
       }, 120);
     },
     [handleMapSelection],
+  );
+
+  const suppressMapTouchClick = useCallback(() => {
+    mapTouchGestureRef.current.suppressClickUntil = Date.now() + TOUCH_GESTURE_SUPPRESS_CLICK_MS;
+  }, []);
+
+  const handleMapPointerDownCapture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'touch' && event.pointerType !== 'pen') {
+      return;
+    }
+
+    const gesture = mapTouchGestureRef.current;
+    gesture.activePointers.set(event.pointerId, {
+      startX: event.clientX,
+      startY: event.clientY,
+      maxMovePx: 0,
+    });
+    gesture.wasMultiTouchGesture = gesture.wasMultiTouchGesture || gesture.activePointers.size > 1;
+  }, []);
+
+  const handleMapPointerMoveCapture = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const gesture = mapTouchGestureRef.current;
+      const pointer = gesture.activePointers.get(event.pointerId);
+
+      if (!pointer) {
+        return;
+      }
+
+      const movePx = Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY);
+      pointer.maxMovePx = Math.max(pointer.maxMovePx, movePx);
+
+      if (pointer.maxMovePx > TOUCH_TAP_MAX_MOVE_PX || gesture.activePointers.size > 1) {
+        suppressMapTouchClick();
+      }
+    },
+    [suppressMapTouchClick],
+  );
+
+  const handleMapPointerUpCapture = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const gesture = mapTouchGestureRef.current;
+      const pointer = gesture.activePointers.get(event.pointerId);
+
+      if (pointer && (pointer.maxMovePx > TOUCH_TAP_MAX_MOVE_PX || gesture.wasMultiTouchGesture)) {
+        suppressMapTouchClick();
+      }
+
+      gesture.activePointers.delete(event.pointerId);
+
+      if (gesture.activePointers.size === 0) {
+        gesture.wasMultiTouchGesture = false;
+      }
+    },
+    [suppressMapTouchClick],
   );
 
   useEffect(() => {
@@ -1426,6 +1524,10 @@ function RiskMapPage() {
         <div className="riskMapCanvasColumn">
           <div
             className={`vworldMapShell ${isSolarPanelLayerVisible ? 'isSolarMode' : ''}`}
+            onPointerDownCapture={handleMapPointerDownCapture}
+            onPointerMoveCapture={handleMapPointerMoveCapture}
+            onPointerUpCapture={handleMapPointerUpCapture}
+            onPointerCancelCapture={handleMapPointerUpCapture}
             onClickCapture={handleMapShellClickCapture}
             onClick={(event) => {
               if (event.target === event.currentTarget) {
