@@ -74,16 +74,15 @@ function App() {
           <a className="logo" href="/" aria-label="솔라메이트 홈">
             <span className="sunMark" aria-hidden="true" />
             <span>
-              <strong>솔라메이트</strong>
-              <small>SolarMate</small>
+              <strong>로고</strong>
+              <small />
             </span>
           </a>
 
           <nav className="desktopNav" aria-label="주요 메뉴">
+            <a href="/risk-map">태양광 도입</a>
             <a href="#service-intro">서비스 소개</a>
-            <a href="/risk-map">전기세 위험 진단</a>
-            <a href="#service-intro-status">절감 시나리오</a>
-            <a href="#solar-feed">정책 지원</a>
+            <a href="#solar-feed">공지사항</a>
             <a href="#contact">고객센터</a>
           </nav>
 
@@ -92,23 +91,20 @@ function App() {
               로그인
             </button>
             <a className="primaryButton headerCta" href="/risk-map">
-              무료 진단 시작
+              주소 입력하기
             </a>
           </div>
         </header>
 
         <section className="heroSection" aria-labelledby="hero-title">
           <div className="heroCopy">
-            <span className="eyebrow">Apartment Solar MVP</span>
+            <span className="eyebrow">정책자금과 에너지 금융으로</span>
             <h1 id="hero-title">
-              우리 아파트 전기세 위험
+              부담 없이 태양광 설치하기
               <br />
-              먼저 지도에서 확인하세요
             </h1>
             <p className="heroDescription">
-              3D 지도에서 건물을 선택하면 전기세 상승 위험,
-              <br />
-              태양광 절감 시나리오, 정책 지원 가능성을 함께 봅니다.
+              (서비스 지역 : 경기도)
             </p>
             <p className="disclaimer">
               ※ 시뮬레이션 결과는 건축물 정보, 일사량,
@@ -117,10 +113,10 @@ function App() {
             </p>
             <div className="heroActions">
               <a className="primaryButton" href="/risk-map">
-                3D 지도에서 확인하기
+                주소 입력하기
               </a>
               <a className="secondaryButton" href="#service-intro-status">
-                절감 시나리오 보기
+                (서비스 지역 : 경기도)
               </a>
             </div>
           </div>
