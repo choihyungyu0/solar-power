@@ -1,13 +1,22 @@
 import { useEffect, useRef } from 'react';
-import type { PolygonCoordinates } from '../lib/roofGeometry';
+import { getPolygonCentroid, type Coordinate, type PolygonCoordinates } from '../lib/roofGeometry';
 
 export type VWorldSolarPanelLayerStatus = {
   state: 'idle' | 'rendered' | 'fallback' | 'error';
   message: string;
   panelPolygonCount: number;
   firstPanelCoordinates: PolygonCoordinates | null;
+  entityCountBefore: number | null;
+  entityCountAfter: number | null;
+  terrainHeightM: number | null;
   roofHeightM: number;
+  finalPanelHeightM: number | null;
   renderMethod: string;
+  renderMode: string;
+  depthTestAgainstTerrain: boolean | null;
+  viewerCanvasSize: { width: number; height: number } | null;
+  viewerEntityCount: number | null;
+  debugEntityAdded: boolean;
   heightMessage?: string;
 };
 
@@ -20,6 +29,7 @@ type VWorldSolarPanelLayerProps = {
   map: VWorldMapInstance | null;
   selectedBuildingFeature: VWorldSolarPanelBuildingFeature | null;
   selectedBuildingId: string | null;
+  selectedBuildingCentroid?: Coordinate | null;
   panelPolygons: PolygonCoordinates[];
   roofHeightM?: number;
   visible: boolean;
@@ -32,16 +42,45 @@ type AddedMapObject = {
   renderMethod: 'Cesium entities' | 'VWorld Feature layer';
 };
 
+type CesiumEntityLike = {
+  id?: unknown;
+};
+
+type CesiumEntityCollectionLike = {
+  add?: (entity: unknown) => unknown;
+  remove?: (entity: unknown) => boolean;
+  removeById?: (id: string) => boolean;
+  values?: CesiumEntityLike[];
+};
+
+type CanvasLike = {
+  clientWidth?: number;
+  clientHeight?: number;
+  width?: number;
+  height?: number;
+  isConnected?: boolean;
+  getBoundingClientRect?: () => DOMRect;
+};
+
 type CesiumViewerLike = {
-  entities?: {
-    add?: (entity: unknown) => unknown;
-    remove?: (entity: unknown) => boolean;
-    removeById?: (id: string) => boolean;
+  canvas?: CanvasLike;
+  entities?: CesiumEntityCollectionLike;
+  scene?: {
+    canvas?: CanvasLike;
+    globe?: {
+      depthTestAgainstTerrain?: boolean;
+      getHeight?: (cartographic: unknown) => number | undefined;
+    };
+    requestRender?: () => void;
   };
 };
 
 const DEFAULT_ROOF_HEIGHT_M = 20;
-const PANEL_Z_OFFSET_M = 0.5;
+const PANEL_ROOF_CLEARANCE_M = 2;
+const DEBUG_PANEL_HEIGHT_OFFSET_M = 80;
+const DEBUG_ENTITY_HEIGHT_OFFSET_M = 20;
+const PANEL_DEBUG_NOTE = '지형 높이 미확인 시 디버그 높이로 패널을 표시합니다.';
+const SHOW_PANEL_DEBUG_ENTITY = import.meta.env.VITE_SHOW_PANEL_DEBUG_ENTITY === 'true';
 const CONSTRUCTOR_ERROR_MESSAGE =
   '태양광 패널을 지도 좌표 객체로 표시하려면 VWorld 또는 Cesium polygon 객체 연결이 필요합니다.';
 const DEFAULT_HEIGHT_MESSAGE = '건물 높이 정보가 없어 기본 높이로 패널을 표시합니다.';
@@ -53,15 +92,39 @@ function createEmptyStatus(
   roofHeightM: number,
   renderMethod = '-',
   heightMessage?: string,
+  diagnostics: Partial<
+    Pick<
+      VWorldSolarPanelLayerStatus,
+      | 'entityCountBefore'
+      | 'entityCountAfter'
+      | 'terrainHeightM'
+      | 'finalPanelHeightM'
+      | 'renderMode'
+      | 'depthTestAgainstTerrain'
+      | 'viewerCanvasSize'
+      | 'viewerEntityCount'
+      | 'debugEntityAdded'
+    >
+  > = {},
 ): VWorldSolarPanelLayerStatus {
   return {
     state,
     message,
     panelPolygonCount: panelPolygons.length,
     firstPanelCoordinates: panelPolygons[0] ?? null,
+    entityCountBefore: null,
+    entityCountAfter: null,
+    terrainHeightM: null,
     roofHeightM,
+    finalPanelHeightM: null,
     renderMethod,
+    renderMode: renderMethod,
+    depthTestAgainstTerrain: null,
+    viewerCanvasSize: null,
+    viewerEntityCount: null,
+    debugEntityAdded: false,
     heightMessage,
+    ...diagnostics,
   };
 }
 
@@ -152,33 +215,110 @@ function getResolvedRoofHeightM(
   return featureHeightEstimate;
 }
 
-function getPanelHeightM(roofHeightM: number) {
-  return roofHeightM + PANEL_Z_OFFSET_M;
-}
-
 function getSafeSelectedBuildingId(selectedBuildingId: string | null, selectedBuildingFeature: VWorldSolarPanelBuildingFeature | null) {
   const fallbackId = selectedBuildingFeature?.id;
 
   return selectedBuildingId || (typeof fallbackId === 'string' || typeof fallbackId === 'number' ? String(fallbackId) : 'selected');
 }
 
-function getCesiumViewerCandidate(value: unknown): CesiumViewerLike | null {
-  if (!value || typeof value !== 'object') {
+function getPanelHeightCoordinate(panelPolygons: PolygonCoordinates[], selectedBuildingCentroid?: Coordinate | null) {
+  if (selectedBuildingCentroid) {
+    return selectedBuildingCentroid;
+  }
+
+  const firstPanelPolygon = panelPolygons[0];
+
+  if (!firstPanelPolygon || firstPanelPolygon.length === 0) {
     return null;
+  }
+
+  return getPolygonCentroid(firstPanelPolygon);
+}
+
+function getCesiumSdk() {
+  const cesium = window.Cesium;
+
+  return cesium && typeof cesium === 'object' ? (cesium as Record<string, any>) : null;
+}
+
+function getTerrainHeightM(viewer: CesiumViewerLike | null, coordinate: Coordinate | null) {
+  const cesium = getCesiumSdk();
+
+  if (!viewer?.scene?.globe?.getHeight || !coordinate || !cesium?.Cartographic?.fromDegrees) {
+    return null;
+  }
+
+  try {
+    const cartographic = cesium.Cartographic.fromDegrees(coordinate[0], coordinate[1]);
+    const terrainHeightM = viewer.scene.globe.getHeight(cartographic);
+
+    return typeof terrainHeightM === 'number' && Number.isFinite(terrainHeightM) ? terrainHeightM : null;
+  } catch {
+    return null;
+  }
+}
+
+function getPanelHeightDiagnostics({
+  viewer,
+  coordinate,
+  roofHeightM,
+  heightMessage,
+}: {
+  viewer: CesiumViewerLike | null;
+  coordinate: Coordinate | null;
+  roofHeightM: number;
+  heightMessage?: string;
+}) {
+  const terrainHeightM = getTerrainHeightM(viewer, coordinate);
+  const finalPanelHeightM =
+    typeof terrainHeightM === 'number'
+      ? terrainHeightM + roofHeightM + PANEL_ROOF_CLEARANCE_M
+      : roofHeightM + DEBUG_PANEL_HEIGHT_OFFSET_M;
+  const resolvedHeightMessage =
+    typeof terrainHeightM === 'number'
+      ? heightMessage
+      : [heightMessage, PANEL_DEBUG_NOTE].filter(Boolean).join(' ');
+
+  return {
+    terrainHeightM,
+    finalPanelHeightM,
+    heightMessage: resolvedHeightMessage || undefined,
+  };
+}
+
+function hasCesiumEntityCollection(value: unknown): value is CesiumViewerLike {
+  if (!value || typeof value !== 'object') {
+    return false;
   }
 
   const record = value as Record<string, unknown>;
 
-  if ((record.entities as CesiumViewerLike['entities'])?.add) {
-    return value as CesiumViewerLike;
+  return Boolean((record.entities as CesiumViewerLike['entities'])?.add);
+}
+
+function pushUniqueViewerCandidate(candidates: CesiumViewerLike[], value: unknown) {
+  if (!hasCesiumEntityCollection(value) || candidates.includes(value)) {
+    return;
   }
+
+  candidates.push(value);
+}
+
+function getCesiumViewerCandidates(value: unknown): CesiumViewerLike[] {
+  const candidates: CesiumViewerLike[] = [];
+
+  if (!value || typeof value !== 'object') {
+    return candidates;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  pushUniqueViewerCandidate(candidates, value);
 
   for (const key of ['viewer', '_viewer', 'cesiumViewer', '_cesiumViewer', 'sceneViewer', 'mapViewer']) {
     const candidate = record[key];
 
-    if (candidate && typeof candidate === 'object' && ((candidate as CesiumViewerLike).entities?.add)) {
-      return candidate as CesiumViewerLike;
-    }
+    pushUniqueViewerCandidate(candidates, candidate);
   }
 
   for (const key of ['getViewer', 'getCesiumViewer', 'getCesium', 'getMap']) {
@@ -191,91 +331,208 @@ function getCesiumViewerCandidate(value: unknown): CesiumViewerLike | null {
     try {
       const candidate = method.call(value);
 
-      if (candidate && typeof candidate === 'object' && ((candidate as CesiumViewerLike).entities?.add)) {
-        return candidate as CesiumViewerLike;
-      }
+      pushUniqueViewerCandidate(candidates, candidate);
     } catch {
       // VWorld builds expose different internals; keep looking for a safe viewer candidate.
     }
   }
 
-  return null;
+  return candidates;
+}
+
+function getViewerCanvas(viewer: CesiumViewerLike): CanvasLike | null {
+  return viewer.scene?.canvas ?? viewer.canvas ?? null;
+}
+
+function getViewerCanvasSize(viewer: CesiumViewerLike): VWorldSolarPanelLayerStatus['viewerCanvasSize'] {
+  const canvas = getViewerCanvas(viewer);
+
+  if (!canvas) {
+    return null;
+  }
+
+  const rect = canvas.getBoundingClientRect?.();
+  const width = Math.round(rect?.width || canvas.clientWidth || canvas.width || 0);
+  const height = Math.round(rect?.height || canvas.clientHeight || canvas.height || 0);
+
+  return width > 0 && height > 0 ? { width, height } : null;
+}
+
+function isViewerCanvasVisible(viewer: CesiumViewerLike) {
+  const canvas = getViewerCanvas(viewer);
+  const size = getViewerCanvasSize(viewer);
+
+  if (!canvas || !size) {
+    return false;
+  }
+
+  if (canvas.isConnected === false) {
+    return false;
+  }
+
+  if (canvas instanceof HTMLElement) {
+    const style = window.getComputedStyle(canvas);
+
+    return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) !== 0;
+  }
+
+  return true;
 }
 
 function findCesiumViewer(map: VWorldMapInstance | null): CesiumViewerLike | null {
-  return (
-    getCesiumViewerCandidate(map) ??
-    getCesiumViewerCandidate(window.ws3d) ??
-    getCesiumViewerCandidate(window.VW) ??
-    getCesiumViewerCandidate(window.vw) ??
-    null
-  );
+  const candidates = [map, window.ws3d, window.VW, window.vw].flatMap(getCesiumViewerCandidates);
+  const uniqueCandidates = candidates.filter((candidate, index) => candidates.indexOf(candidate) === index);
+
+  if (uniqueCandidates.length === 0) {
+    return null;
+  }
+
+  return uniqueCandidates.sort((left, right) => {
+    const rightVisible = isViewerCanvasVisible(right) ? 1 : 0;
+    const leftVisible = isViewerCanvasVisible(left) ? 1 : 0;
+    const rightSize = getViewerCanvasSize(right);
+    const leftSize = getViewerCanvasSize(left);
+    const rightArea = (rightSize?.width ?? 0) * (rightSize?.height ?? 0);
+    const leftArea = (leftSize?.width ?? 0) * (leftSize?.height ?? 0);
+
+    return rightVisible - leftVisible || rightArea - leftArea;
+  })[0];
 }
 
-function getCesiumSdk() {
-  const cesium = window.Cesium;
+function getCesiumEntityValues(viewer: CesiumViewerLike): CesiumEntityLike[] {
+  const entities = viewer.entities as (CesiumEntityCollectionLike & Record<string, unknown>) | undefined;
 
-  return cesium && typeof cesium === 'object' ? (cesium as Record<string, any>) : null;
+  if (Array.isArray(entities?.values)) {
+    return entities.values;
+  }
+
+  const privateEntities = entities?._entities as Record<string, unknown> | undefined;
+  const privateArray = privateEntities?._array;
+
+  if (Array.isArray(privateArray)) {
+    return privateArray as CesiumEntityLike[];
+  }
+
+  return [];
+}
+
+function getCesiumEntityCount(viewer: CesiumViewerLike) {
+  const values = getCesiumEntityValues(viewer);
+
+  return values.length;
+}
+
+function isSolarPanelEntityId(id: unknown) {
+  return typeof id === 'string' && (id.startsWith('solarmate-panel-') || id.startsWith('solarmate-panel-debug-'));
+}
+
+function removeSolarPanelEntities(viewer: CesiumViewerLike) {
+  const entities = viewer.entities;
+  const values = getCesiumEntityValues(viewer);
+
+  values.forEach((entity) => {
+    const id = entity.id;
+
+    if (!isSolarPanelEntityId(id)) {
+      return;
+    }
+
+    if (typeof id === 'string') {
+      try {
+        entities?.removeById?.(id);
+        return;
+      } catch {
+        // Fall back to object removal below.
+      }
+    }
+
+    try {
+      entities?.remove?.(entity);
+    } catch {
+      // Cleanup is best-effort across Cesium/VWorld builds.
+    }
+  });
+}
+
+function createLonLatHeightArray(polygon: PolygonCoordinates, heightM: number) {
+  return polygon.flatMap(([longitude, latitude]) => [longitude, latitude, heightM]);
+}
+
+function createDebugPolygonAtCentroid(centroid: Coordinate, sizeM = 24): PolygonCoordinates {
+  const metersPerDegreeLat = 111_320;
+  const metersPerDegreeLon = metersPerDegreeLat * Math.cos((centroid[1] * Math.PI) / 180);
+  const halfHeightDegrees = sizeM / 2 / metersPerDegreeLat;
+  const halfWidthDegrees = sizeM / 2 / metersPerDegreeLon;
+
+  return [
+    [centroid[0] - halfWidthDegrees, centroid[1] - halfHeightDegrees],
+    [centroid[0] + halfWidthDegrees, centroid[1] - halfHeightDegrees],
+    [centroid[0] + halfWidthDegrees, centroid[1] + halfHeightDegrees],
+    [centroid[0] - halfWidthDegrees, centroid[1] + halfHeightDegrees],
+    [centroid[0] - halfWidthDegrees, centroid[1] - halfHeightDegrees],
+  ];
 }
 
 function addPanelEntitiesWithCesium({
   viewer,
   selectedBuildingId,
+  selectedBuildingCentroid,
   panelPolygons,
-  heightM,
+  finalPanelHeightM,
 }: {
   viewer: CesiumViewerLike;
   selectedBuildingId: string;
+  selectedBuildingCentroid: Coordinate | null;
   panelPolygons: PolygonCoordinates[];
-  heightM: number;
+  finalPanelHeightM: number;
 }) {
   const cesium = getCesiumSdk();
   const entities = viewer.entities;
 
-  if (!cesium?.Cartesian3 || !entities?.add) {
+  if (!cesium?.Cartesian3?.fromDegreesArrayHeights || !entities?.add) {
     return null;
   }
 
+  const entityCountBefore = getCesiumEntityCount(viewer);
+  const previousDepthTestAgainstTerrain =
+    typeof viewer.scene?.globe?.depthTestAgainstTerrain === 'boolean'
+      ? viewer.scene.globe.depthTestAgainstTerrain
+      : null;
+
+  if (viewer.scene?.globe) {
+    viewer.scene.globe.depthTestAgainstTerrain = false;
+  }
+
+  removeSolarPanelEntities(viewer);
+
   const addEntity = entities.add.bind(entities);
   const addedObjects: AddedMapObject[] = [];
-  const fillMaterial = cesium.Color?.fromCssColorString
-    ? cesium.Color.fromCssColorString('#1e3a8a').withAlpha?.(0.78) ?? cesium.Color.fromCssColorString('#1e3a8a')
-    : undefined;
-  const outlineMaterial = cesium.Color?.fromCssColorString
-    ? cesium.Color.fromCssColorString('#67e8f9').withAlpha?.(0.98) ?? cesium.Color.fromCssColorString('#67e8f9')
-    : undefined;
+  const fillMaterial =
+    cesium.Color?.BLUE?.withAlpha?.(0.85) ??
+    cesium.Color?.fromCssColorString?.('#0000ff')?.withAlpha?.(0.85) ??
+    cesium.Color?.fromCssColorString?.('#0000ff');
+  const outlineMaterial = cesium.Color?.CYAN ?? cesium.Color?.fromCssColorString?.('#00ffff');
+  const heightReferenceNone = cesium.HeightReference?.NONE;
 
   let panelEntityCount = 0;
 
   panelPolygons.forEach((panelPolygon, index) => {
     const id = `solarmate-panel-${selectedBuildingId}-${index}`;
-    const outlineId = `${id}-outline`;
-    const flatDegrees = panelPolygon.flatMap(([longitude, latitude]) => [longitude, latitude]);
-    const flatDegreesWithHeight = panelPolygon.flatMap(([longitude, latitude]) => [longitude, latitude, heightM]);
-    const polygonPositions = cesium.Cartesian3.fromDegreesArray(flatDegrees);
-    const outlinePositions = cesium.Cartesian3.fromDegreesArrayHeights(flatDegreesWithHeight);
+    const flatDegreesWithHeight = createLonLatHeightArray(panelPolygon, finalPanelHeightM);
+    const polygonPositions = cesium.Cartesian3.fromDegreesArrayHeights(flatDegreesWithHeight);
     const hierarchy = cesium.PolygonHierarchy ? new cesium.PolygonHierarchy(polygonPositions) : polygonPositions;
 
     entities.removeById?.(id);
-    entities.removeById?.(outlineId);
 
     const panelEntity = addEntity({
       id,
       polygon: {
         hierarchy,
+        perPositionHeight: true,
         material: fillMaterial,
         outline: true,
         outlineColor: outlineMaterial,
-        height: heightM,
-      },
-    });
-    const outlineEntity = addEntity({
-      id: outlineId,
-      polyline: {
-        positions: outlinePositions,
-        width: 2,
-        material: outlineMaterial,
-        clampToGround: false,
+        ...(heightReferenceNone !== undefined ? { heightReference: heightReferenceNone } : {}),
       },
     });
 
@@ -283,14 +540,57 @@ function addPanelEntitiesWithCesium({
       panelEntityCount += 1;
       addedObjects.push({ id, object: panelEntity, renderMethod: 'Cesium entities' });
     }
-
-    if (outlineEntity) {
-      addedObjects.push({ id: outlineId, object: outlineEntity, renderMethod: 'Cesium entities' });
-    }
   });
+
+  let debugEntityAdded = false;
+
+  if (SHOW_PANEL_DEBUG_ENTITY && selectedBuildingCentroid) {
+    const debugId = `solarmate-panel-debug-${selectedBuildingId}`;
+    const debugPolygon = createDebugPolygonAtCentroid(selectedBuildingCentroid);
+    const debugPositions = cesium.Cartesian3.fromDegreesArrayHeights(
+      createLonLatHeightArray(debugPolygon, finalPanelHeightM + DEBUG_ENTITY_HEIGHT_OFFSET_M),
+    );
+    const debugHierarchy = cesium.PolygonHierarchy ? new cesium.PolygonHierarchy(debugPositions) : debugPositions;
+
+    entities.removeById?.(debugId);
+
+    const debugEntity = addEntity({
+      id: debugId,
+      polygon: {
+        hierarchy: debugHierarchy,
+        perPositionHeight: true,
+        material: fillMaterial,
+        outline: true,
+        outlineColor: outlineMaterial,
+        ...(heightReferenceNone !== undefined ? { heightReference: heightReferenceNone } : {}),
+      },
+    });
+
+    if (debugEntity) {
+      debugEntityAdded = true;
+      addedObjects.push({ id: debugId, object: debugEntity, renderMethod: 'Cesium entities' });
+    }
+  }
+
+  viewer.scene?.requestRender?.();
+
+  const entityCountAfter = getCesiumEntityCount(viewer);
+  const depthTestAgainstTerrain =
+    typeof viewer.scene?.globe?.depthTestAgainstTerrain === 'boolean'
+      ? viewer.scene.globe.depthTestAgainstTerrain
+      : null;
+  const viewerCanvasSize = getViewerCanvasSize(viewer);
 
   return {
     addedCount: panelEntityCount,
+    debugEntityAdded,
+    depthTestAgainstTerrain,
+    entityCountBefore,
+    entityCountAfter,
+    renderMethod: 'Cesium entities',
+    renderMode: 'Cesium entities / fromDegreesArrayHeights / perPositionHeight',
+    viewerCanvasSize,
+    viewerEntityCount: entityCountAfter,
     cleanup: () => {
       addedObjects.forEach((addedObject) => {
         try {
@@ -305,6 +605,12 @@ function addPanelEntitiesWithCesium({
           // Keep cleanup best-effort.
         }
       });
+
+      if (viewer.scene?.globe && previousDepthTestAgainstTerrain !== null) {
+        viewer.scene.globe.depthTestAgainstTerrain = previousDepthTestAgainstTerrain;
+      }
+
+      viewer.scene?.requestRender?.();
     },
   };
 }
@@ -440,6 +746,14 @@ function addPanelFeaturesWithVWorld({
 
   return {
     addedCount: addedObjects.length,
+    debugEntityAdded: false,
+    depthTestAgainstTerrain: null,
+    entityCountBefore: null,
+    entityCountAfter: null,
+    renderMethod: 'VWorld Feature layer',
+    renderMode: 'VWorld Feature layer / CoordZ absolute height',
+    viewerCanvasSize: null,
+    viewerEntityCount: null,
     cleanup: () => {
       addedObjects.forEach((addedObject) => removeVWorldObject(map, addedObject));
       panelPolygons.forEach((_, index) => {
@@ -461,6 +775,7 @@ function VWorldSolarPanelLayer({
   map,
   selectedBuildingFeature,
   selectedBuildingId,
+  selectedBuildingCentroid,
   panelPolygons,
   roofHeightM,
   visible,
@@ -473,8 +788,14 @@ function VWorldSolarPanelLayer({
     cleanupRef.current = null;
 
     const heightEstimate = getResolvedRoofHeightM(selectedBuildingFeature, roofHeightM);
-    const panelHeightM = getPanelHeightM(heightEstimate.roofHeightM);
     const stableBuildingId = getSafeSelectedBuildingId(selectedBuildingId, selectedBuildingFeature);
+    const heightCoordinate = getPanelHeightCoordinate(panelPolygons, selectedBuildingCentroid);
+    const fallbackHeightDiagnostics = getPanelHeightDiagnostics({
+      viewer: null,
+      coordinate: heightCoordinate,
+      roofHeightM: heightEstimate.roofHeightM,
+      heightMessage: heightEstimate.heightMessage,
+    });
 
     if (!visible) {
       onStatusChange(
@@ -484,7 +805,11 @@ function VWorldSolarPanelLayer({
           panelPolygons,
           heightEstimate.roofHeightM,
           '-',
-          heightEstimate.heightMessage,
+          fallbackHeightDiagnostics.heightMessage,
+          {
+            terrainHeightM: fallbackHeightDiagnostics.terrainHeightM,
+            finalPanelHeightM: fallbackHeightDiagnostics.finalPanelHeightM,
+          },
         ),
       );
       return undefined;
@@ -498,7 +823,11 @@ function VWorldSolarPanelLayer({
           panelPolygons,
           heightEstimate.roofHeightM,
           '-',
-          heightEstimate.heightMessage,
+          fallbackHeightDiagnostics.heightMessage,
+          {
+            terrainHeightM: fallbackHeightDiagnostics.terrainHeightM,
+            finalPanelHeightM: fallbackHeightDiagnostics.finalPanelHeightM,
+          },
         ),
       );
       return undefined;
@@ -512,7 +841,11 @@ function VWorldSolarPanelLayer({
           panelPolygons,
           heightEstimate.roofHeightM,
           '-',
-          heightEstimate.heightMessage,
+          fallbackHeightDiagnostics.heightMessage,
+          {
+            terrainHeightM: fallbackHeightDiagnostics.terrainHeightM,
+            finalPanelHeightM: fallbackHeightDiagnostics.finalPanelHeightM,
+          },
         ),
       );
       return undefined;
@@ -520,12 +853,19 @@ function VWorldSolarPanelLayer({
 
     try {
       const cesiumViewer = findCesiumViewer(map);
+      const heightDiagnostics = getPanelHeightDiagnostics({
+        viewer: cesiumViewer,
+        coordinate: heightCoordinate,
+        roofHeightM: heightEstimate.roofHeightM,
+        heightMessage: heightEstimate.heightMessage,
+      });
       const cesiumResult = cesiumViewer
         ? addPanelEntitiesWithCesium({
             viewer: cesiumViewer,
             selectedBuildingId: stableBuildingId,
+            selectedBuildingCentroid: selectedBuildingCentroid ?? heightCoordinate,
             panelPolygons,
-            heightM: panelHeightM,
+            finalPanelHeightM: heightDiagnostics.finalPanelHeightM,
           })
         : null;
       if (cesiumResult && cesiumResult.addedCount === 0) {
@@ -538,10 +878,11 @@ function VWorldSolarPanelLayer({
               map,
               selectedBuildingId: stableBuildingId,
               panelPolygons,
-              heightM: panelHeightM,
+              heightM: heightDiagnostics.finalPanelHeightM,
             });
       const renderResult = cesiumResult && cesiumResult.addedCount > 0 ? cesiumResult : vworldResult;
-      const renderMethod = cesiumResult && cesiumResult.addedCount > 0 ? 'Cesium entities' : 'VWorld Feature layer';
+      const renderMethod = renderResult?.renderMethod ?? '-';
+      const renderMode = renderResult?.renderMode ?? renderMethod;
 
       if (!renderResult || renderResult.addedCount === 0) {
         onStatusChange(
@@ -551,7 +892,17 @@ function VWorldSolarPanelLayer({
             panelPolygons,
             heightEstimate.roofHeightM,
             '-',
-            heightEstimate.heightMessage,
+            heightDiagnostics.heightMessage,
+            {
+              entityCountBefore: cesiumResult?.entityCountBefore ?? null,
+              entityCountAfter: cesiumResult?.entityCountAfter ?? null,
+              terrainHeightM: heightDiagnostics.terrainHeightM,
+              finalPanelHeightM: heightDiagnostics.finalPanelHeightM,
+              depthTestAgainstTerrain: cesiumResult?.depthTestAgainstTerrain ?? null,
+              viewerCanvasSize: cesiumResult?.viewerCanvasSize ?? getViewerCanvasSize(cesiumViewer ?? {}),
+              viewerEntityCount: cesiumResult?.viewerEntityCount ?? null,
+              debugEntityAdded: cesiumResult?.debugEntityAdded ?? false,
+            },
           ),
         );
         return undefined;
@@ -566,9 +917,18 @@ function VWorldSolarPanelLayer({
         }`,
         panelPolygonCount: panelPolygons.length,
         firstPanelCoordinates: panelPolygons[0] ?? null,
+        entityCountBefore: renderResult.entityCountBefore,
+        entityCountAfter: renderResult.entityCountAfter,
+        terrainHeightM: heightDiagnostics.terrainHeightM,
         roofHeightM: heightEstimate.roofHeightM,
+        finalPanelHeightM: heightDiagnostics.finalPanelHeightM,
         renderMethod,
-        heightMessage: heightEstimate.heightMessage,
+        renderMode,
+        depthTestAgainstTerrain: renderResult.depthTestAgainstTerrain,
+        viewerCanvasSize: renderResult.viewerCanvasSize,
+        viewerEntityCount: renderResult.viewerEntityCount,
+        debugEntityAdded: renderResult.debugEntityAdded,
+        heightMessage: heightDiagnostics.heightMessage,
       });
 
       return () => {
@@ -585,12 +945,25 @@ function VWorldSolarPanelLayer({
           panelPolygons,
           heightEstimate.roofHeightM,
           '-',
-          heightEstimate.heightMessage,
+          fallbackHeightDiagnostics.heightMessage,
+          {
+            terrainHeightM: fallbackHeightDiagnostics.terrainHeightM,
+            finalPanelHeightM: fallbackHeightDiagnostics.finalPanelHeightM,
+          },
         ),
       );
       return undefined;
     }
-  }, [map, onStatusChange, panelPolygons, roofHeightM, selectedBuildingFeature, selectedBuildingId, visible]);
+  }, [
+    map,
+    onStatusChange,
+    panelPolygons,
+    roofHeightM,
+    selectedBuildingCentroid,
+    selectedBuildingFeature,
+    selectedBuildingId,
+    visible,
+  ]);
 
   return null;
 }

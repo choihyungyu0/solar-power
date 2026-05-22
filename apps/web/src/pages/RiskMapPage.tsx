@@ -286,6 +286,24 @@ function formatDiagnosticNumber(value: number | null) {
   return typeof value === 'number' ? value.toFixed(7) : '-';
 }
 
+function formatDiagnosticMeters(value: number | null) {
+  return typeof value === 'number'
+    ? `${value.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}m`
+    : '-';
+}
+
+function formatDiagnosticCount(value: number | null) {
+  return typeof value === 'number' ? value.toLocaleString('ko-KR') : '-';
+}
+
+function formatDiagnosticBoolean(value: boolean | null) {
+  return typeof value === 'boolean' ? String(value) : '-';
+}
+
+function formatViewerCanvasSize(size: VWorldSolarPanelLayerStatus['viewerCanvasSize']) {
+  return size ? `${size.width.toLocaleString('ko-KR')} x ${size.height.toLocaleString('ko-KR')}` : '-';
+}
+
 function formatPanelCoordinates(polygon: PolygonCoordinates | null) {
   if (!polygon || polygon.length === 0) {
     return '-';
@@ -566,8 +584,17 @@ function RiskMapPage() {
     message: '태양광 패널 지도 레이어가 꺼져 있습니다.',
     panelPolygonCount: 0,
     firstPanelCoordinates: null,
+    entityCountBefore: null,
+    entityCountAfter: null,
+    terrainHeightM: null,
     roofHeightM: 20,
+    finalPanelHeightM: null,
     renderMethod: '-',
+    renderMode: '-',
+    depthTestAgainstTerrain: null,
+    viewerCanvasSize: null,
+    viewerEntityCount: null,
+    debugEntityAdded: false,
   });
   const hasMapAnchoredGeometry =
     selectionMode === 'geometry' || selectionMode === 'parcel-fallback' || selectionMode === 'building_footprint';
@@ -588,6 +615,10 @@ function RiskMapPage() {
   const roofHeightEstimate = useMemo(
     () => deriveRoofHeightMFromFeature(selectedBuildingFeature),
     [selectedBuildingFeature],
+  );
+  const selectedBuildingCentroid = useMemo(
+    () => (selectedRoofPolygon ? getPolygonCentroid(selectedRoofPolygon) : selectedCoordinate),
+    [selectedCoordinate, selectedRoofPolygon],
   );
   const selectedBuildingId = selectedBuildingFootprint?.buildingId ?? null;
   const geoJsonDiagnosticSourceStatus = getGeoJsonDiagnosticSourceStatus(buildingFootprintLoadState);
@@ -1319,6 +1350,7 @@ function RiskMapPage() {
               visible={isSolarPanelLayerVisible && hasMapAnchoredGeometry}
               selectedBuildingFeature={selectedBuildingFeature}
               selectedBuildingId={selectedBuildingId}
+              selectedBuildingCentroid={selectedBuildingCentroid}
               panelPolygons={solarPanelPolygons}
               roofHeightM={roofHeightEstimate.roofHeightM}
               onStatusChange={setPanelLayerStatus}
@@ -1538,7 +1570,7 @@ function RiskMapPage() {
                 </div>
                 <div>
                   <span>지도 객체 렌더링 방식</span>
-                  <strong>{panelLayerStatus.renderMethod}</strong>
+                  <strong>{panelLayerStatus.renderMode}</strong>
                 </div>
                 <div>
                   <span>roofHeightM</span>
@@ -1547,6 +1579,43 @@ function RiskMapPage() {
                     {panelLayerStatus.heightMessage ? ` · ${panelLayerStatus.heightMessage}` : ''}
                   </strong>
                 </div>
+                <div>
+                  <span>terrainHeightM</span>
+                  <strong>{formatDiagnosticMeters(panelLayerStatus.terrainHeightM)}</strong>
+                </div>
+                <div>
+                  <span>finalPanelHeightM</span>
+                  <strong>{formatDiagnosticMeters(panelLayerStatus.finalPanelHeightM)}</strong>
+                </div>
+                <div>
+                  <span>entityCountBefore</span>
+                  <strong>{formatDiagnosticCount(panelLayerStatus.entityCountBefore)}</strong>
+                </div>
+                <div>
+                  <span>entityCountAfter</span>
+                  <strong>{formatDiagnosticCount(panelLayerStatus.entityCountAfter)}</strong>
+                </div>
+                <div>
+                  <span>viewerEntityCount</span>
+                  <strong>{formatDiagnosticCount(panelLayerStatus.viewerEntityCount)}</strong>
+                </div>
+                <div>
+                  <span>viewerCanvasSize</span>
+                  <strong>{formatViewerCanvasSize(panelLayerStatus.viewerCanvasSize)}</strong>
+                </div>
+                <div>
+                  <span>depthTestAgainstTerrain</span>
+                  <strong>{formatDiagnosticBoolean(panelLayerStatus.depthTestAgainstTerrain)}</strong>
+                </div>
+                <div>
+                  <span>debug test entity</span>
+                  <strong>
+                    {panelLayerStatus.debugEntityAdded
+                      ? '추가됨'
+                      : '비활성 또는 미추가 · VITE_SHOW_PANEL_DEBUG_ENTITY=true 필요'}
+                  </strong>
+                </div>
+                <p>지형 높이 미확인 시 디버그 높이로 패널을 표시합니다.</p>
                 <p>{geometryQueryMessage}</p>
                 <p>{featureDataInfo.dataTypeNote}</p>
                 {hasSelectedBuildingPolygon && solarPanelPolygons.length === 0 && (
