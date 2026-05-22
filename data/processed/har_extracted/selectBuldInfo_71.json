@@ -1,0 +1,49 @@
+{
+  "index": 71,
+  "method": "POST",
+  "url": "https://climate.gg.go.kr/gcs/panel/selectBuldInfo.do",
+  "queryString": [],
+  "request_headers": {
+    "Accept": "application/json, text/javascript, */*; q=0.01",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "Content-Length": "22",
+    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "Host": "climate.gg.go.kr",
+    "Origin": "https://climate.gg.go.kr",
+    "Pragma": "no-cache",
+    "Referer": "https://climate.gg.go.kr/gcs/book/cmm/selectPanelMain.do?lang=kor",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-origin",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+    "X-Requested-With": "XMLHttpRequest",
+    "sec-ch-ua": "\"Chromium\";v=\"148\", \"Google Chrome\";v=\"148\", \"Not/A)Brand\";v=\"99\"",
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": "\"Windows\""
+  },
+  "request_postData": {
+    "mimeType": "application/x-www-form-urlencoded; charset=UTF-8",
+    "text": "unq_id=L1_41110_065712",
+    "params": [
+      {
+        "name": "unq_id",
+        "value": "L1_41110_065712"
+      }
+    ]
+  },
+  "response_status": 200,
+  "response_headers": {
+    "Cache-Control": "no-store",
+    "Content-Language": "ko-KR",
+    "Content-Type": "text/html;charset=UTF-8",
+    "Date": "Thu, 21 May 2026 13:24:09 GMT",
+    "Server": "nginx",
+    "Transfer-Encoding": "chunked"
+  },
+  "response_mimeType": "text/html",
+  "response_size": 632,
+  "response_text": "{\"list\":[{\"st_x\":null,\"st_y\":null,\"val\":null,\"min_val\":null,\"max_val\":null,\"sig_cd\":null,\"sig_kor_nm\":null,\"emd_cd\":null,\"emd_kor_nm\":null,\"range\":null,\"text\":null,\"feature\":null,\"bdrg_lnkg_id\":null,\"mng_bldg_id\":null,\"buld_maus_code\":null,\"use_confm_de\":null,\"etc_prpos_cn\":null,\"buld_totar\":null,\"engy_nm\":null,\"use_ym\":\"2024\\\\n09,2024\\\\n10,2024\\\\n11,2024\\\\n12,2025\\\\n01,2025\\\\n02,2025\\\\n03,2025\\\\n04,2025\\\\n05,2025\\\\n06\",\"usqty\":null,\"elpwr_usqty\":\"74074,49406,61041,88546,89782,90174,70015,57195,62299,76489\",\"gas_usqty\":\"585202,158970,46525,498985,424813,519333,228827,36611,147871,445298\",\"unq_id\":null,\"layer\":null,\"cnt\":0}]}"
+}

@@ -1,0 +1,72 @@
+{
+  "index": 69,
+  "method": "GET",
+  "url": "https://climate.gg.go.kr/geoserver/spggcee/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=spggcee%3ATM_BLDG_INFO&maxFeatures=50&outputFormat=application%2Fjson&SRS=EPSG%3A5186&CQL_FILTER=INTERSECTS(shape,%20Point(202428.152256053%20518672.9666061115))",
+  "queryString": [
+    {
+      "name": "service",
+      "value": "WFS"
+    },
+    {
+      "name": "version",
+      "value": "1.0.0"
+    },
+    {
+      "name": "request",
+      "value": "GetFeature"
+    },
+    {
+      "name": "typeName",
+      "value": "spggcee%3ATM_BLDG_INFO"
+    },
+    {
+      "name": "maxFeatures",
+      "value": "50"
+    },
+    {
+      "name": "outputFormat",
+      "value": "application%2Fjson"
+    },
+    {
+      "name": "SRS",
+      "value": "EPSG%3A5186"
+    },
+    {
+      "name": "CQL_FILTER",
+      "value": "INTERSECTS(shape,%20Point(202428.152256053%20518672.9666061115))"
+    }
+  ],
+  "request_headers": {
+    "Accept": "*/*",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "Host": "climate.gg.go.kr",
+    "Pragma": "no-cache",
+    "Referer": "https://climate.gg.go.kr/gcs/book/cmm/selectPanelMain.do?lang=kor",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-origin",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+    "X-Requested-With": "XMLHttpRequest",
+    "sec-ch-ua": "\"Chromium\";v=\"148\", \"Google Chrome\";v=\"148\", \"Not/A)Brand\";v=\"99\"",
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": "\"Windows\""
+  },
+  "request_postData": null,
+  "response_status": 200,
+  "response_headers": {
+    "Content-Disposition": "inline; filename=TM_BLDG_INFO.json",
+    "Content-Encoding": "gzip",
+    "Content-Type": "application/json;charset=UTF-8",
+    "Date": "Thu, 21 May 2026 13:24:06 GMT",
+    "Server": "nginx",
+    "Transfer-Encoding": "chunked",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "SAMEORIGIN"
+  },
+  "response_mimeType": "application/json",
+  "response_size": 1740,
+  "response_text": "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"id\":\"TM_BLDG_INFO.1092330\",\"geometry\":{\"type\":\"MultiPolygon\",\"coordinates\":[[[[202430.15624991,518665.28154667],[202430.12499991,518665.25029667],[202407.68749991,518672.43779667],[202407.67187492,518672.43779667],[202418.87499991,518707.37529667],[202418.89062491,518707.40654667],[202441.18749991,518700.03154667],[202441.20312492,518700.03154667],[202430.15624991,518665.28154667]]]]},\"geometry_name\":\"shape\",\"properties\":{\"bdrar_yn\":\"N\",\"pnu\":\"4111514100110170000\",\"pnu_mdfcn_yn\":null,\"chg_pnu\":\"4111514100110170001\",\"bldg_usg_cd\":\"BDU003\",\"bldg_se_cd\":\"BDC004\",\"bldg_nm\":\"경기벤쳐빌딩\",\"dtl_bldg_nm\":\"기아자동차남수원지점\",\"bldg_nofl\":10,\"use_aprv_ymd\":\"20001101\",\"road_nm_cd\":\"2012008     \",\"bmno\":464,\"bsno\":0,\"bdrg_pk_nm\":null,\"gis_bldg_intg_pk_nm\":null,\"ngii_bldg_uid\":null,\"bdrg_se_cd\":null,\"bdrg_se_nm\":null,\"bdrg_knd_cd\":null,\"bdrg_knd_nm\":null,\"siar\":null,\"bdar\":862.129,\"bdcvrt\":null,\"tfar\":null,\"fart_cmpttn_area\":null,\"fart\":null,\"bdst_strc_cd\":null,\"bdst_strc_nm\":null,\"main_usg_cd\":null,\"main_usg_nm\":null,\"roof_cd\":null,\"roof_nm\":null,\"hh_cnt\":null,\"hshd_cnt\":null,\"bldg_hgt\":45.6,\"grnd_nofl\":10,\"udgd_nofl\":null,\"prmsn_ymd\":null,\"bgncst_ymd\":null,\"etrs_design_yn\":null,\"unq_id\":\"L1_41110_065712\",\"engy_use_unq_id\":\"L1_41110_065712\",\"etc_usg_cd\":null,\"etc_usg_nm\":null,\"frst_rgtr_id\":\"system\",\"frst_reg_dt\":\"2025-09-30T14:06:09.415Z\",\"mdfr_id\":\"system\",\"mdfcn_dt\":\"2025-09-30T14:06:09.415Z\",\"sigun_cd\":\"41110\",\"new_usg_cd\":\"BDU003\",\"tmap_bldg_nm\":null,\"tmap_dtl_bldg_nm\":null}}],\"totalFeatures\":1,\"numberMatched\":1,\"numberReturned\":1,\"timeStamp\":\"2026-05-21T13:24:06.756Z\",\"crs\":{\"type\":\"name\",\"properties\":{\"name\":\"urn:ogc:def:crs:EPSG::5186\"}}}"
+}
