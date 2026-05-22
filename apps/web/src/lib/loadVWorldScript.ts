@@ -110,6 +110,7 @@ type CesiumViewerLike = {
   camera?: {
     setView?: (options: unknown) => void;
     flyTo?: (options: unknown) => void;
+    getPickRay?: (point: unknown) => unknown;
     pickEllipsoid?: (point: unknown, ellipsoid?: unknown) => unknown;
   };
   entities?: CesiumEntityCollectionLike;
@@ -118,10 +119,12 @@ type CesiumViewerLike = {
     camera?: {
       setView?: (options: unknown) => void;
       flyTo?: (options: unknown) => void;
+      getPickRay?: (point: unknown) => unknown;
       pickEllipsoid?: (point: unknown, ellipsoid?: unknown) => unknown;
     };
     globe?: {
       ellipsoid?: unknown;
+      pick?: (ray: unknown, scene: unknown) => unknown;
     };
     pickPosition?: (point: unknown) => unknown;
     pickPositionSupported?: boolean;
@@ -415,10 +418,6 @@ function normalizeLonLat(longitude: unknown, latitude: unknown, method: string):
       latitude: degreeLatitude,
       method: `${method}:radians`,
     };
-  }
-
-  if (isValidLonLat(longitude, latitude)) {
-    return { longitude, latitude, method };
   }
 
   return null;
@@ -744,16 +743,16 @@ function pickCoordinateFromCesiumCanvas(
   const cesiumPoint = new cesium.Cartesian2(screenPoint.x, screenPoint.y);
 
   try {
-    if (viewer.scene?.pickPositionSupported && viewer.scene.pickPosition) {
-      const pickedCartesian = viewer.scene.pickPosition(cesiumPoint);
-      const pickedCoordinate = getLonLatFromCartesian(pickedCartesian, 'cesium.pickPosition');
+    const camera = viewer.scene?.camera ?? viewer.camera;
+    const pickRay = camera?.getPickRay?.(cesiumPoint);
+    const pickedCartesian = pickRay ? viewer.scene?.globe?.pick?.(pickRay, viewer.scene) : null;
+    const pickedCoordinate = getLonLatFromCartesian(pickedCartesian, 'cesium.globe.pick');
 
-      if (pickedCoordinate) {
-        return pickedCoordinate;
-      }
+    if (pickedCoordinate) {
+      return pickedCoordinate;
     }
   } catch {
-    // Terrain/building picking can fail for some VWorld tiles. Use ellipsoid picking below.
+    // Fall back to ellipsoid picking below.
   }
 
   try {
@@ -1188,23 +1187,17 @@ export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWo
     onSelect?.(selection);
   }
 
-  // 건물 피처 선택 API 연결 전까지는 클릭 좌표 기반의 1차 선택 흐름을 사용합니다.
+  // VWorld native click usually provides the most stable map-coordinate payload.
+  // React shell click capture remains as a delayed fallback from RiskMapPage.
   const clickHandler = (...args: unknown[]) => {
     emitSelection(extractSelectionFromVWorldClick(args, map, 'vworld.onClick'));
   };
-  const domClickHandler = (event: MouseEvent) => {
-    emitSelection(extractSelectionFromVWorldClick([event], map, 'dom.canvas.click'));
-  };
-  const mapElement = document.getElementById(mapId);
-
   map.onClick?.addEventListener?.(clickHandler);
-  mapElement?.addEventListener('click', domClickHandler, true);
 
   return {
     map,
     dispose: () => {
       map?.onClick?.removeEventListener?.(clickHandler);
-      mapElement?.removeEventListener('click', domClickHandler, true);
       map?.destroy?.();
       document.getElementById(mapId)?.replaceChildren();
     },
