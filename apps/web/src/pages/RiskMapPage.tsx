@@ -14,7 +14,6 @@ import {
   createVWorldSelectionFromMouseEvent,
   initVWorld3DMap,
   loadVWorldScript,
-  markVWorldMapSelection,
   type VWorldMapController,
   type VWorldSelection,
 } from '../lib/loadVWorldScript';
@@ -31,7 +30,11 @@ import {
   estimateCapacityKw,
   estimateInstallableArea,
 } from '../lib/solarSimulation';
-import { generateSolarPanelLayout, type SolarPanelLayoutResult } from '../lib/solarPanelLayout';
+import {
+  DEFAULT_SOLAR_PANEL_LAYOUT_OPTIONS,
+  generateSolarPanelLayout,
+  type SolarPanelLayoutResult,
+} from '../lib/solarPanelLayout';
 import { requestPvAnalysis } from '../lib/pvAnalysisClient';
 import { requestSelectedBuildingPolygon } from '../lib/buildingPolygonClient';
 import {
@@ -295,6 +298,14 @@ function formatDiagnosticMeters(value: number | null) {
   return typeof value === 'number'
     ? `${value.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}m`
     : '-';
+}
+
+function formatMeters(value: number) {
+  return `${value.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}m`;
+}
+
+function formatPercent(value: number) {
+  return `${Math.round(value * 100).toLocaleString('ko-KR')}%`;
 }
 
 function formatDiagnosticCount(value: number | null) {
@@ -674,6 +685,11 @@ function RiskMapPage() {
   const hasSelectedBuildingPolygon = hasSelectedBuilding && Boolean(selectedRoofPolygon);
   const hasGeneratedPanelLayout = hasSelectedBuildingPolygon && solarPanelPolygons.length > 0;
   const hasPvAnalysisCompleted = pvAnalysisStatus === 'success' || pvAnalysisStatus === 'fallback';
+  const panelSpacingText = `행 ${formatMeters(DEFAULT_SOLAR_PANEL_LAYOUT_OPTIONS.rowGapM)} · 열 ${formatMeters(
+    DEFAULT_SOLAR_PANEL_LAYOUT_OPTIONS.colGapM,
+  )}`;
+  const roofMarginText = formatMeters(DEFAULT_SOLAR_PANEL_LAYOUT_OPTIONS.roofMarginM);
+  const installationExclusionRateText = formatPercent(1 - DEFAULT_SOLAR_PANEL_LAYOUT_OPTIONS.usableAreaRatio);
   const riskProcessSteps: RiskProcessStep[] = [
     {
       title: '건물 선택',
@@ -762,12 +778,8 @@ function RiskMapPage() {
         height: 160,
         pitch: -82,
       });
-      const refinedMarkerAdded = markVWorldMapSelection(vworldMapRef.current, {
-        longitude: coordinate[0],
-        latitude: coordinate[1],
-        label: '선택 건물',
-      });
 
+      setSelectedCoordinate(coordinate);
       setSelectedBuildingFootprint(match.metadata);
       setSelectedBuildingFeature(match.feature);
       setSelectedBuildingGeometry(polygon);
@@ -781,7 +793,7 @@ function RiskMapPage() {
         selectionSource: selection?.source,
         selectionMethod: selection?.method,
         moved: refinedFocusResult.moved,
-        markerAdded: refinedMarkerAdded,
+        markerAdded: false,
       });
       setSelectionMode('building_footprint');
       setGeometryQueryStatus('found');
@@ -795,7 +807,7 @@ function RiskMapPage() {
         dataTypeLabel: getBuildingPolygonSourceLabel(buildingPolygonSource),
         isActualRoofPolygon: false,
         dataTypeNote:
-          '건물 footprint 기반 옥상 추정입니다. 정확한 옥상 polygon 또는 장애물 데이터가 아니므로 현장조사가 필요합니다.',
+          '건물 footprint 기반 옥상 추정입니다. 정밀 옥상·장애물 데이터가 아니므로 현장조사가 필요합니다.',
         sourceKind: 'building-or-roof',
       });
       setFeatureQueryDiagnostics({
@@ -888,9 +900,6 @@ function RiskMapPage() {
       return;
     }
 
-    setSelectedCoordinate(coordinate);
-    setSelectedBuildingFootprint(null);
-    setSelectedBuildingFeature(null);
     const dataId = getConfiguredVWorldBuildingDataId();
     const buffer = 10;
     const requestPath = buildVWorldFeatureProxyPath({
@@ -899,26 +908,17 @@ function RiskMapPage() {
       dataId,
       bufferMeters: buffer,
     });
-    const initialFocusResult = focusVWorldMapOnCoordinate(vworldMapRef.current, {
-      longitude: coordinate[0],
-      latitude: coordinate[1],
-      height: 180,
-      pitch: -82,
-    });
-    const markerAdded = markVWorldMapSelection(vworldMapRef.current, {
-      longitude: coordinate[0],
-      latitude: coordinate[1],
-    });
 
     setMapFocusStatus({
-      message: initialFocusResult.message,
-      method: initialFocusResult.method,
+      message: '건물 polygon 매칭 후 선택 건물 중심으로 시점 이동합니다.',
       selectionSource: selection?.source,
       selectionMethod: selection?.method,
-      moved: initialFocusResult.moved,
-      markerAdded,
+      moved: false,
+      markerAdded: false,
     });
-    setSelectionMode('coordinate-fallback');
+    if (!selectedBuildingFootprint) {
+      setSelectionMode('coordinate-fallback');
+    }
     setGeometryQueryStatus('loading');
     setGeometryQueryMessage(
       buildingPolygonSource === 'admdong_index'
@@ -955,12 +955,15 @@ function RiskMapPage() {
         };
       });
     }
-    setSelectedBuildingGeometry(null);
-    setSelectedRoofPolygon(null);
-    setSelectableBuildingPolygons([]);
-    setSolarPanelPolygons([]);
-    setIsSolarPanelLayerVisible(false);
-    panelVisibilityUserOverrideRef.current = false;
+    if (!selectedBuildingFootprint) {
+      setSelectedBuildingFeature(null);
+      setSelectedBuildingGeometry(null);
+      setSelectedRoofPolygon(null);
+      setSelectableBuildingPolygons([]);
+      setSolarPanelPolygons([]);
+      setIsSolarPanelLayerVisible(false);
+      panelVisibilityUserOverrideRef.current = false;
+    }
 
     const buildingPolygonResult = await requestSelectedBuildingPolygon({
       longitude: coordinate[0],
@@ -1002,7 +1005,7 @@ function RiskMapPage() {
         dataTypeLabel: buildingPolygonResult.building.sourceLabel,
         isActualRoofPolygon: false,
         dataTypeNote:
-          '건물 footprint 기반 옥상 추정입니다. 정확한 옥상 polygon 또는 장애물 데이터가 아니므로 현장조사가 필요합니다.',
+          '건물 footprint 기반 옥상 추정입니다. 정밀 옥상·장애물 데이터가 아니므로 현장조사가 필요합니다.',
         sourceKind: 'building-or-roof',
       });
       setFeatureQueryDiagnostics({
@@ -1032,6 +1035,18 @@ function RiskMapPage() {
       }));
     }
     setSelectableBuildingPolygons(createSelectableBuildingPolygons(buildingPolygonResult.candidateFeatures ?? []));
+    const fallbackMessage = selectedBuildingFootprint
+      ? `${buildingPolygonResult.message} 기존 선택 건물은 유지했습니다.`
+      : buildingPolygonResult.message;
+    setMapFocusStatus({
+      message: selectedBuildingFootprint
+        ? '건물 매칭 실패로 시점 이동을 건너뛰고 기존 선택을 유지했습니다.'
+        : '건물 매칭 실패로 시점 이동을 실행하지 않았습니다.',
+      selectionSource: selection?.source,
+      selectionMethod: selection?.method,
+      moved: false,
+      markerAdded: false,
+    });
     setGeometryQueryStatus(
       buildingPolygonResult.status === 'unconfigured'
         ? 'unconfigured'
@@ -1039,7 +1054,7 @@ function RiskMapPage() {
           ? 'not-found'
           : 'error',
     );
-    setGeometryQueryMessage(buildingPolygonResult.message);
+    setGeometryQueryMessage(fallbackMessage);
     setFeatureDataInfo({
       dataId: getBuildingSourceDataId(buildingPolygonResult.source),
       dataTypeLabel: buildingPolygonResult.sourceLabel,
@@ -1065,14 +1080,16 @@ function RiskMapPage() {
       requestPath: getBuildingSourceRequestPath(buildingPolygonResult.source, buildingPolygonResult.diagnostics),
       errorMessage: buildingPolygonResult.status === 'error' ? buildingPolygonResult.message : undefined,
     });
-    setSelectedBuilding({
-      ...demoBuilding,
-      selectionNote: buildingPolygonResult.message,
-      simulationConfidence: '건물 polygon 미선택',
-      simulationNote: buildingPolygonResult.message,
-    });
+    if (!selectedBuildingFootprint) {
+      setSelectedBuilding({
+        ...demoBuilding,
+        selectionNote: buildingPolygonResult.message,
+        simulationConfidence: '건물 polygon 미선택',
+        simulationNote: buildingPolygonResult.message,
+      });
+    }
     return;
-  }, [applyBuildingFootprintSelection, buildingPolygonSource, shouldSkipDuplicateSelection]);
+  }, [applyBuildingFootprintSelection, buildingPolygonSource, selectedBuildingFootprint, shouldSkipDuplicateSelection]);
 
   const handlePvAnalysisRequest = useCallback(async () => {
     if (!selectedCoordinate || selectionMode !== 'building_footprint') {
@@ -1181,7 +1198,7 @@ function RiskMapPage() {
         dataTypeLabel: getBuildingPolygonSourceLabel('admdong_index'),
         isActualRoofPolygon: false,
         dataTypeNote:
-          '건물 footprint 기반 옥상 추정입니다. 정확한 옥상 polygon 또는 장애물 데이터가 아니므로 현장조사가 필요합니다.',
+          '건물 footprint 기반 옥상 추정입니다. 정밀 옥상·장애물 데이터가 아니므로 현장조사가 필요합니다.',
         sourceKind: 'building-or-roof',
       });
 
@@ -1658,7 +1675,7 @@ function RiskMapPage() {
                   </strong>
                 </div>
                 <div>
-                  <span>실제 옥상 polygon 여부</span>
+                  <span>정밀 옥상 데이터 여부</span>
                   <strong>{featureDataInfo.isActualRoofPolygon ? '예' : '아님'}</strong>
                 </div>
                 <div>
@@ -1688,8 +1705,24 @@ function RiskMapPage() {
                   </strong>
                 </div>
                 <div>
-                  <span>옥상 polygon 상태</span>
+                  <span>옥상 추정 상태</span>
                   <strong>{getRoofPolygonStatusText(selectionMode, selectedRoofPolygon)}</strong>
+                </div>
+                <div>
+                  <span>패널 간격</span>
+                  <strong>{panelSpacingText}</strong>
+                </div>
+                <div>
+                  <span>옥상 여백</span>
+                  <strong>{roofMarginText}</strong>
+                </div>
+                <div>
+                  <span>설치 제외율</span>
+                  <strong>{installationExclusionRateText}</strong>
+                </div>
+                <div>
+                  <span>패널 수</span>
+                  <strong>{selectedBuilding.estimatedPanelCount.toLocaleString('ko-KR')}개</strong>
                 </div>
                 <div>
                   <span>패널 polygon 수</span>

@@ -51,7 +51,11 @@ export function getCesiumSdk() {
 }
 
 export function getViewerCanvas(viewer: CesiumViewerLike): CanvasLike | null {
-  return viewer.scene?.canvas ?? viewer.canvas ?? null;
+  try {
+    return viewer.scene?.canvas ?? viewer.canvas ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function getViewerCanvasSize(viewer: CesiumViewerLike): ViewerCanvasSize | null {
@@ -86,7 +90,11 @@ export function isViewerCanvasVisible(viewer: CesiumViewerLike) {
 }
 
 function hasCesiumEntityCollection(value: unknown): value is CesiumViewerLike {
-  return Boolean(value && typeof value === 'object' && ((value as CesiumViewerLike).entities?.add));
+  try {
+    return Boolean(value && typeof value === 'object' && ((value as CesiumViewerLike).entities?.add));
+  } catch {
+    return false;
+  }
 }
 
 function pushUniqueViewerCandidate(candidates: CesiumViewerLike[], value: unknown) {
@@ -95,6 +103,14 @@ function pushUniqueViewerCandidate(candidates: CesiumViewerLike[], value: unknow
   }
 
   candidates.push(value);
+}
+
+function readObjectValue(record: Record<string, unknown>, key: string) {
+  try {
+    return record[key];
+  } catch {
+    return undefined;
+  }
 }
 
 function getCesiumViewerCandidates(value: unknown): CesiumViewerLike[] {
@@ -109,11 +125,11 @@ function getCesiumViewerCandidates(value: unknown): CesiumViewerLike[] {
   pushUniqueViewerCandidate(candidates, value);
 
   for (const key of ['viewer', '_viewer', 'cesiumViewer', '_cesiumViewer', 'sceneViewer', 'mapViewer']) {
-    pushUniqueViewerCandidate(candidates, record[key]);
+    pushUniqueViewerCandidate(candidates, readObjectValue(record, key));
   }
 
   for (const key of ['getViewer', 'getCesiumViewer', 'getCesium', 'getMap']) {
-    const method = record[key];
+    const method = readObjectValue(record, key);
 
     if (typeof method !== 'function') {
       continue;
@@ -239,13 +255,21 @@ export function closePolygon(polygon: PolygonCoordinates): PolygonCoordinates {
 export function getTerrainHeightM(viewer: CesiumViewerLike | null, coordinate: Coordinate | null) {
   const cesium = getCesiumSdk();
 
-  if (!viewer?.scene?.globe?.getHeight || !coordinate || !cesium?.Cartographic?.fromDegrees) {
+  let getHeight: ((cartographic: unknown) => number | undefined) | undefined;
+
+  try {
+    getHeight = viewer?.scene?.globe?.getHeight;
+  } catch {
+    getHeight = undefined;
+  }
+
+  if (!getHeight || !coordinate || !cesium?.Cartographic?.fromDegrees) {
     return null;
   }
 
   try {
     const cartographic = cesium.Cartographic.fromDegrees(coordinate[0], coordinate[1]);
-    const terrainHeightM = viewer.scene.globe.getHeight(cartographic);
+    const terrainHeightM = getHeight.call(viewer?.scene?.globe, cartographic);
 
     return typeof terrainHeightM === 'number' && Number.isFinite(terrainHeightM) ? terrainHeightM : null;
   } catch {

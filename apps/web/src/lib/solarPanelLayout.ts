@@ -37,13 +37,13 @@ type ResolvedSolarPanelLayoutOptions = {
   maxPanels: number;
 };
 
-const DEFAULT_PANEL_OPTIONS: ResolvedSolarPanelLayoutOptions = {
+export const DEFAULT_SOLAR_PANEL_LAYOUT_OPTIONS: ResolvedSolarPanelLayoutOptions = {
   panelWidthM: 1.1,
   panelHeightM: 1.8,
-  rowGapM: 0.4,
-  colGapM: 0.2,
-  roofMarginM: 2.0,
-  usableAreaRatio: 0.45,
+  rowGapM: 0.8,
+  colGapM: 0.45,
+  roofMarginM: 5.0,
+  usableAreaRatio: 0.58,
   maxPanels: 1000,
 };
 
@@ -53,9 +53,9 @@ const PANEL_CAP_WARNING = '패널 개수가 비정상적으로 많아 상한을 
 
 function resolveLayoutOptions(options: SolarPanelLayoutOptions): ResolvedSolarPanelLayoutOptions {
   return {
-    ...DEFAULT_PANEL_OPTIONS,
+    ...DEFAULT_SOLAR_PANEL_LAYOUT_OPTIONS,
     ...options,
-    colGapM: options.colGapM ?? options.columnGapM ?? DEFAULT_PANEL_OPTIONS.colGapM,
+    colGapM: options.colGapM ?? options.columnGapM ?? DEFAULT_SOLAR_PANEL_LAYOUT_OPTIONS.colGapM,
   };
 }
 
@@ -157,7 +157,12 @@ function getRectangleCentroid(rectangle: LocalPoint[]) {
 }
 
 function canPlacePanel(rectangle: LocalPoint[], roofPolygon: LocalPoint[]) {
-  return isPointInsidePolygon(getRectangleCentroid(rectangle), roofPolygon);
+  const rectangleCorners = rectangle.slice(0, 4);
+
+  return (
+    isPointInsidePolygon(getRectangleCentroid(rectangle), roofPolygon) &&
+    rectangleCorners.every((corner) => isPointInsidePolygon(corner, roofPolygon))
+  );
 }
 
 export function createPanelRectanglesInsideRoof(

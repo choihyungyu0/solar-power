@@ -28,6 +28,7 @@ const VWORLD_ENGINE_SCRIPT_DEFINITIONS = [
 const HWASEONG_INITIAL_LONGITUDE = 127.073;
 const HWASEONG_INITIAL_LATITUDE = 37.1995;
 const HWASEONG_INITIAL_HEIGHT = 8_000;
+const ENABLE_VWORLD_CAMERA_FALLBACK = import.meta.env.VITE_ENABLE_VWORLD_CAMERA_FALLBACK === 'true';
 
 let vworldScriptPromise: Promise<void> | null = null;
 const scriptLoadPromises = new Map<string, Promise<void>>();
@@ -107,12 +108,16 @@ type CesiumEntityCollectionLike = {
 type CesiumViewerLike = {
   canvas?: CanvasLike;
   camera?: {
+    setView?: (options: unknown) => void;
+    flyTo?: (options: unknown) => void;
     pickEllipsoid?: (point: unknown, ellipsoid?: unknown) => unknown;
   };
   entities?: CesiumEntityCollectionLike;
   scene?: {
     canvas?: CanvasLike;
     camera?: {
+      setView?: (options: unknown) => void;
+      flyTo?: (options: unknown) => void;
       pickEllipsoid?: (point: unknown, ellipsoid?: unknown) => unknown;
     };
     globe?: {
@@ -578,7 +583,11 @@ function getCesiumSdk() {
 }
 
 function hasCesiumEntityCollection(value: unknown): value is CesiumViewerLike {
-  return Boolean(value && typeof value === 'object' && ((value as CesiumViewerLike).entities?.add));
+  try {
+    return Boolean(value && typeof value === 'object' && ((value as CesiumViewerLike).entities?.add));
+  } catch {
+    return false;
+  }
 }
 
 function pushUniqueViewerCandidate(candidates: CesiumViewerLike[], value: unknown) {
@@ -587,6 +596,14 @@ function pushUniqueViewerCandidate(candidates: CesiumViewerLike[], value: unknow
   }
 
   candidates.push(value);
+}
+
+function readObjectValue(record: Record<string, unknown>, key: string) {
+  try {
+    return record[key];
+  } catch {
+    return undefined;
+  }
 }
 
 function getCesiumViewerCandidates(value: unknown): CesiumViewerLike[] {
@@ -601,11 +618,11 @@ function getCesiumViewerCandidates(value: unknown): CesiumViewerLike[] {
   pushUniqueViewerCandidate(candidates, value);
 
   for (const key of ['viewer', '_viewer', 'cesiumViewer', '_cesiumViewer', 'sceneViewer', 'mapViewer']) {
-    pushUniqueViewerCandidate(candidates, record[key]);
+    pushUniqueViewerCandidate(candidates, readObjectValue(record, key));
   }
 
   for (const key of ['getViewer', 'getCesiumViewer', 'getCesium', 'getMap']) {
-    const method = record[key];
+    const method = readObjectValue(record, key);
 
     if (typeof method !== 'function') {
       continue;
@@ -622,7 +639,11 @@ function getCesiumViewerCandidates(value: unknown): CesiumViewerLike[] {
 }
 
 function getViewerCanvas(viewer: CesiumViewerLike): CanvasLike | null {
-  return viewer.scene?.canvas ?? viewer.canvas ?? null;
+  try {
+    return viewer.scene?.canvas ?? viewer.canvas ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function getViewerCanvasArea(viewer: CesiumViewerLike) {
@@ -811,7 +832,7 @@ function createVWorldCoordZ(longitude: number, latitude: number, height: number)
 }
 
 function invokeMapMethod(map: VWorldMapInstance, methodName: string, argument: unknown) {
-  const method = (map as unknown as Record<string, unknown>)[methodName];
+  const method = readObjectValue(map as unknown as Record<string, unknown>, methodName);
 
   if (typeof method !== 'function') {
     return false;
@@ -819,6 +840,80 @@ function invokeMapMethod(map: VWorldMapInstance, methodName: string, argument: u
 
   method.call(map, argument);
   return true;
+}
+
+function focusCesiumViewerOnCoordinate(
+  map: VWorldMapInstance | null,
+  {
+    longitude,
+    latitude,
+    height,
+    heading,
+    pitch,
+    roll,
+  }: {
+    longitude: number;
+    latitude: number;
+    height: number;
+    heading: number;
+    pitch: number;
+    roll: number;
+  },
+): VWorldMapFocusResult | null {
+  const cesium = getCesiumSdk();
+  const viewer = findCesiumViewer(map);
+  let camera: CesiumViewerLike['camera'] | undefined;
+
+  try {
+    camera = viewer?.scene?.camera ?? viewer?.camera;
+  } catch {
+    camera = undefined;
+  }
+
+  if (!cesium?.Cartesian3?.fromDegrees || !camera) {
+    return null;
+  }
+
+  const destination = cesium.Cartesian3.fromDegrees(longitude, latitude, height);
+  const orientation =
+    cesium.Math?.toRadians && (heading !== 0 || pitch !== 0 || roll !== 0)
+      ? {
+          heading: cesium.Math.toRadians(heading),
+          pitch: cesium.Math.toRadians(pitch),
+          roll: cesium.Math.toRadians(roll),
+        }
+      : undefined;
+  const cameraOptions = orientation ? { destination, orientation } : { destination };
+
+  try {
+    if (typeof camera.setView === 'function') {
+      camera.setView(cameraOptions);
+
+      return {
+        moved: true,
+        method: 'cesium.camera.setView',
+        message: '선택 건물 중심으로 Cesium 카메라를 이동했습니다.',
+      };
+    }
+  } catch {
+    // Try flyTo below.
+  }
+
+  try {
+    if (typeof camera.flyTo === 'function') {
+      camera.flyTo({ ...cameraOptions, duration: 0.4 });
+
+      return {
+        moved: true,
+        method: 'cesium.camera.flyTo',
+        message: '선택 건물 중심으로 Cesium 카메라 이동을 예약했습니다.',
+      };
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 }
 
 export function focusVWorldMapOnCoordinate(
@@ -844,6 +939,27 @@ export function focusVWorldMapOnCoordinate(
       moved: false,
       method: '',
       message: '지도 객체가 아직 준비되지 않아 선택 위치로 이동하지 못했습니다.',
+    };
+  }
+
+  const cesiumFocusResult = focusCesiumViewerOnCoordinate(map, {
+    longitude,
+    latitude,
+    height,
+    heading,
+    pitch,
+    roll,
+  });
+
+  if (cesiumFocusResult) {
+    return cesiumFocusResult;
+  }
+
+  if (!ENABLE_VWORLD_CAMERA_FALLBACK) {
+    return {
+      moved: false,
+      method: '',
+      message: 'Cesium 카메라를 찾지 못해 VWorld wrapper 이동 호출을 건너뛰었습니다.',
     };
   }
 

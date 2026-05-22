@@ -256,13 +256,21 @@ function getCesiumSdk() {
 function getTerrainHeightM(viewer: CesiumViewerLike | null, coordinate: Coordinate | null) {
   const cesium = getCesiumSdk();
 
-  if (!viewer?.scene?.globe?.getHeight || !coordinate || !cesium?.Cartographic?.fromDegrees) {
+  let getHeight: ((cartographic: unknown) => number | undefined) | undefined;
+
+  try {
+    getHeight = viewer?.scene?.globe?.getHeight;
+  } catch {
+    getHeight = undefined;
+  }
+
+  if (!getHeight || !coordinate || !cesium?.Cartographic?.fromDegrees) {
     return null;
   }
 
   try {
     const cartographic = cesium.Cartographic.fromDegrees(coordinate[0], coordinate[1]);
-    const terrainHeightM = viewer.scene.globe.getHeight(cartographic);
+    const terrainHeightM = getHeight.call(viewer?.scene?.globe, cartographic);
 
     return typeof terrainHeightM === 'number' && Number.isFinite(terrainHeightM) ? terrainHeightM : null;
   } catch {
@@ -308,9 +316,13 @@ function hasCesiumEntityCollection(value: unknown): value is CesiumViewerLike {
     return false;
   }
 
-  const record = value as Record<string, unknown>;
+  try {
+    const record = value as Record<string, unknown>;
 
-  return Boolean((record.entities as CesiumViewerLike['entities'])?.add);
+    return Boolean((record.entities as CesiumViewerLike['entities'])?.add);
+  } catch {
+    return false;
+  }
 }
 
 function pushUniqueViewerCandidate(candidates: CesiumViewerLike[], value: unknown) {
@@ -319,6 +331,14 @@ function pushUniqueViewerCandidate(candidates: CesiumViewerLike[], value: unknow
   }
 
   candidates.push(value);
+}
+
+function readObjectValue(record: Record<string, unknown>, key: string) {
+  try {
+    return record[key];
+  } catch {
+    return undefined;
+  }
 }
 
 function getCesiumViewerCandidates(value: unknown): CesiumViewerLike[] {
@@ -333,13 +353,13 @@ function getCesiumViewerCandidates(value: unknown): CesiumViewerLike[] {
   pushUniqueViewerCandidate(candidates, value);
 
   for (const key of ['viewer', '_viewer', 'cesiumViewer', '_cesiumViewer', 'sceneViewer', 'mapViewer']) {
-    const candidate = record[key];
+    const candidate = readObjectValue(record, key);
 
     pushUniqueViewerCandidate(candidates, candidate);
   }
 
   for (const key of ['getViewer', 'getCesiumViewer', 'getCesium', 'getMap']) {
-    const method = record[key];
+    const method = readObjectValue(record, key);
 
     if (typeof method !== 'function') {
       continue;
@@ -358,7 +378,11 @@ function getCesiumViewerCandidates(value: unknown): CesiumViewerLike[] {
 }
 
 function getViewerCanvas(viewer: CesiumViewerLike): CanvasLike | null {
-  return viewer.scene?.canvas ?? viewer.canvas ?? null;
+  try {
+    return viewer.scene?.canvas ?? viewer.canvas ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function getViewerCanvasSize(viewer: CesiumViewerLike): VWorldSolarPanelLayerStatus['viewerCanvasSize'] {
@@ -525,13 +549,13 @@ function addPanelEntitiesWithCesium({
   const addEntity = entities.add.bind(entities);
   const addedObjects: AddedMapObject[] = [];
   const fillMaterial =
-    cesium.Color?.fromCssColorString?.('#0b1f78')?.withAlpha?.(0.9) ??
-    cesium.Color?.BLUE?.withAlpha?.(0.9) ??
-    cesium.Color?.fromCssColorString?.('#0b1f78');
+    cesium.Color?.fromCssColorString?.('#06145f')?.withAlpha?.(0.94) ??
+    cesium.Color?.BLUE?.withAlpha?.(0.94) ??
+    cesium.Color?.fromCssColorString?.('#06145f');
   const outlineMaterial =
-    cesium.Color?.fromCssColorString?.('#67e8f9')?.withAlpha?.(0.98) ??
+    cesium.Color?.fromCssColorString?.('#22d3ee')?.withAlpha?.(1) ??
     cesium.Color?.CYAN ??
-    cesium.Color?.fromCssColorString?.('#67e8f9');
+    cesium.Color?.fromCssColorString?.('#22d3ee');
   const heightReferenceNone = cesium.HeightReference?.NONE;
 
   let panelEntityCount = 0;
@@ -561,9 +585,9 @@ function addPanelEntitiesWithCesium({
       id: outlineId,
       polyline: {
         positions: polygonPositions,
-        width: 1.6,
+        width: 2.2,
         material:
-          cesium.Color?.fromCssColorString?.('#e0fbff')?.withAlpha?.(0.98) ??
+          cesium.Color?.fromCssColorString?.('#f8fdff')?.withAlpha?.(1) ??
           cesium.Color?.WHITE ??
           outlineMaterial,
         clampToGround: false,
@@ -682,10 +706,10 @@ function createVWorldPanelStyle() {
   }
 
   const style = new vw.style.Style();
-  const fill = new vw.style.Fill('rgba(11, 31, 120, 0.9)');
-  const stroke = new vw.style.Stroke('#e0fbff');
+  const fill = new vw.style.Fill('rgba(6, 20, 95, 0.94)');
+  const stroke = new vw.style.Stroke('#f8fdff');
 
-  stroke.setWidth?.(2);
+  stroke.setWidth?.(2.2);
   fill.setStroke?.(stroke);
   style.fill = fill;
   style.stroke = stroke;

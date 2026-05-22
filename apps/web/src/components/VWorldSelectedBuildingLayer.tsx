@@ -105,8 +105,8 @@ function addSelectedPolygonWithCesium({
     cesium.Color?.RED?.withAlpha?.(0.42) ??
     cesium.Color?.fromCssColorString?.('#ef4444')?.withAlpha?.(0.42) ??
     cesium.Color?.fromCssColorString?.('#ef4444');
-  const outlineMaterial = cesium.Color?.fromCssColorString?.('#ff1744') ?? cesium.Color?.RED;
-  const labelBackground = cesium.Color?.fromCssColorString?.('#dc2626')?.withAlpha?.(0.9) ?? cesium.Color?.RED;
+  const outlineMaterial = cesium.Color?.fromCssColorString?.('#ff0f3d') ?? cesium.Color?.RED;
+  const labelBackground = cesium.Color?.fromCssColorString?.('#b91c1c')?.withAlpha?.(0.82) ?? cesium.Color?.RED;
   const labelFill = cesium.Color?.WHITE;
   const addedObjects: unknown[] = [];
   const addEntity = entities.add.bind(entities);
@@ -127,7 +127,7 @@ function addSelectedPolygonWithCesium({
     id: SELECTED_BUILDING_OUTLINE_ID,
     polyline: {
       positions: outlinePositions,
-      width: 5,
+      width: 6,
       material: outlineMaterial,
       clampToGround: false,
       ...(outlineMaterial ? { depthFailMaterial: outlineMaterial } : {}),
@@ -142,8 +142,8 @@ function addSelectedPolygonWithCesium({
       fillColor: labelFill,
       showBackground: true,
       backgroundColor: labelBackground,
-      font: '700 16px sans-serif',
-      pixelOffset: cesium.Cartesian2 ? new cesium.Cartesian2(0, -22) : undefined,
+      font: '700 13px sans-serif',
+      pixelOffset: cesium.Cartesian2 ? new cesium.Cartesian2(0, -16) : undefined,
       horizontalOrigin: cesium.HorizontalOrigin?.CENTER,
       verticalOrigin: cesium.VerticalOrigin?.BOTTOM,
       disableDepthTestDistance: Number.POSITIVE_INFINITY,
