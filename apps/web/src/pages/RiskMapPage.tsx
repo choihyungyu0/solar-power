@@ -1,14 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import VWorldSelectableBuildingLayer, {
   type VWorldSelectableBuildingLayerStatus,
 } from '../components/VWorldSelectableBuildingLayer';
-import VWorldSelectedBuildingLayer from '../components/VWorldSelectedBuildingLayer';
+import VWorldSelectedBuildingLayer, {
+  type VWorldSelectedBuildingLayerStatus,
+} from '../components/VWorldSelectedBuildingLayer';
 import VWorldSolarPanelLayer, {
   deriveRoofHeightMFromFeature,
   type VWorldSolarPanelLayerStatus,
 } from '../components/VWorldSolarPanelLayer';
 import {
   focusVWorldMapOnCoordinate,
+  createVWorldSelectionFromMouseEvent,
   initVWorld3DMap,
   loadVWorldScript,
   markVWorldMapSelection,
@@ -88,6 +91,8 @@ type FeatureDataInfo = ReturnType<typeof getVWorldFeatureDataTypeInfo> & {
 type MapFocusStatus = {
   message: string;
   method?: string;
+  selectionSource?: string;
+  selectionMethod?: string;
   moved: boolean;
   markerAdded: boolean;
 };
@@ -298,6 +303,18 @@ function formatDiagnosticCount(value: number | null) {
 
 function formatDiagnosticBoolean(value: boolean | null) {
   return typeof value === 'boolean' ? String(value) : '-';
+}
+
+function formatDiagnosticMatch(value: boolean | null) {
+  if (value === true) {
+    return '같음';
+  }
+
+  if (value === false) {
+    return '다름';
+  }
+
+  return '-';
 }
 
 function formatViewerCanvasSize(size: VWorldSolarPanelLayerStatus['viewerCanvasSize']) {
@@ -550,6 +567,7 @@ function RiskMapPage() {
   const panelVisibilityUserOverrideRef = useRef(false);
   const [vworldMap, setVworldMap] = useState<VWorldMapInstance | null>(null);
   const vworldMapRef = useRef<VWorldMapInstance | null>(null);
+  const lastMapSelectionRef = useRef<{ longitude: number; latitude: number; selectedAt: number } | null>(null);
   const [selectedCoordinate, setSelectedCoordinate] = useState<Coordinate | null>(null);
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('screen-fallback');
   const [geometryQueryStatus, setGeometryQueryStatus] = useState<GeometryQueryStatus>('idle');
@@ -578,11 +596,24 @@ function RiskMapPage() {
   const [selectableLayerStatus, setSelectableLayerStatus] = useState<VWorldSelectableBuildingLayerStatus>({
     state: 'idle',
     message: '선택 가능한 건물 테두리는 후보 파일 로드 후 표시됩니다.',
+    candidateEntityCount: 0,
+    renderMethod: '-',
+    viewerDebugId: null,
+    viewerEntityCount: null,
+  });
+  const [selectedBuildingLayerStatus, setSelectedBuildingLayerStatus] = useState<VWorldSelectedBuildingLayerStatus>({
+    state: 'idle',
+    message: '건물 polygon을 선택하면 선택 건물을 지도에 강조 표시합니다.',
+    selectedBuildingEntityStatus: '대기',
+    renderMethod: '-',
+    viewerDebugId: null,
+    viewerEntityCount: null,
   });
   const [panelLayerStatus, setPanelLayerStatus] = useState<VWorldSolarPanelLayerStatus>({
     state: 'idle',
     message: '태양광 패널 지도 레이어가 꺼져 있습니다.',
     panelPolygonCount: 0,
+    panelEntityCount: 0,
     firstPanelCoordinates: null,
     entityCountBefore: null,
     entityCountAfter: null,
@@ -594,7 +625,9 @@ function RiskMapPage() {
     depthTestAgainstTerrain: null,
     viewerCanvasSize: null,
     viewerEntityCount: null,
+    viewerDebugId: null,
     debugEntityAdded: false,
+    debugLiftApplied: false,
   });
   const hasMapAnchoredGeometry =
     selectionMode === 'geometry' || selectionMode === 'parcel-fallback' || selectionMode === 'building_footprint';
@@ -621,6 +654,10 @@ function RiskMapPage() {
     [selectedCoordinate, selectedRoofPolygon],
   );
   const selectedBuildingId = selectedBuildingFootprint?.buildingId ?? null;
+  const sameViewerAsBuildingLayer =
+    selectedBuildingLayerStatus.viewerDebugId && panelLayerStatus.viewerDebugId
+      ? selectedBuildingLayerStatus.viewerDebugId === panelLayerStatus.viewerDebugId
+      : null;
   const geoJsonDiagnosticSourceStatus = getGeoJsonDiagnosticSourceStatus(buildingFootprintLoadState);
   const buildingFootprintDiagnostics = buildingFootprintLoadState.diagnostics;
   const buildingPolygonSource = getConfiguredBuildingPolygonSource();
@@ -698,7 +735,7 @@ function RiskMapPage() {
   }, [activeTab, hasSelectedBuildingPolygon, solarPanelPolygons.length]);
 
   const applyBuildingFootprintSelection = useCallback(
-    (match: BuildingFootprintMatch, coordinate: Coordinate) => {
+    (match: BuildingFootprintMatch, coordinate: Coordinate, selection?: VWorldSelection) => {
       const polygon = normalizeGeoJsonPolygon(match.feature);
 
       if (!polygon) {
@@ -741,6 +778,8 @@ function RiskMapPage() {
       setMapFocusStatus({
         message: refinedFocusResult.message,
         method: refinedFocusResult.method,
+        selectionSource: selection?.source,
+        selectionMethod: selection?.method,
         moved: refinedFocusResult.moved,
         markerAdded: refinedMarkerAdded,
       });
@@ -781,6 +820,33 @@ function RiskMapPage() {
     [buildingPolygonSource],
   );
 
+  const shouldSkipDuplicateSelection = useCallback((coordinate: Coordinate) => {
+    const previousSelection = lastMapSelectionRef.current;
+
+    if (!previousSelection || Date.now() - previousSelection.selectedAt > 450) {
+      lastMapSelectionRef.current = {
+        longitude: coordinate[0],
+        latitude: coordinate[1],
+        selectedAt: Date.now(),
+      };
+      return false;
+    }
+
+    const isSameArea =
+      Math.abs(previousSelection.longitude - coordinate[0]) < 0.00006 &&
+      Math.abs(previousSelection.latitude - coordinate[1]) < 0.00006;
+
+    if (!isSameArea) {
+      lastMapSelectionRef.current = {
+        longitude: coordinate[0],
+        latitude: coordinate[1],
+        selectedAt: Date.now(),
+      };
+    }
+
+    return isSameArea;
+  }, []);
+
   const handleMapSelection = useCallback(async (selection?: VWorldSelection) => {
     const coordinate =
       typeof selection?.longitude === 'number' && typeof selection.latitude === 'number'
@@ -806,6 +872,8 @@ function RiskMapPage() {
       panelVisibilityUserOverrideRef.current = false;
       setMapFocusStatus({
         message: '지도 좌표가 없어 시점 이동을 실행하지 못했습니다.',
+        selectionSource: selection?.source,
+        selectionMethod: selection?.method,
         moved: false,
         markerAdded: false,
       });
@@ -813,6 +881,10 @@ function RiskMapPage() {
         ...demoBuilding,
         selectionNote: '선택 위치 기준 1차 추정입니다. 실제 건물 도형을 찾지 못해 화면 기준 예시 배치를 표시합니다.',
       });
+      return;
+    }
+
+    if (shouldSkipDuplicateSelection(coordinate)) {
       return;
     }
 
@@ -841,6 +913,8 @@ function RiskMapPage() {
     setMapFocusStatus({
       message: initialFocusResult.message,
       method: initialFocusResult.method,
+      selectionSource: selection?.source,
+      selectionMethod: selection?.method,
       moved: initialFocusResult.moved,
       markerAdded,
     });
@@ -912,6 +986,7 @@ function RiskMapPage() {
           },
         },
         coordinate,
+        selection,
       );
       if (diagnostics) {
         setBuildingFootprintLoadState((current) => ({
@@ -997,8 +1072,7 @@ function RiskMapPage() {
       simulationNote: buildingPolygonResult.message,
     });
     return;
-
-  }, [applyBuildingFootprintSelection, buildingPolygonSource]);
+  }, [applyBuildingFootprintSelection, buildingPolygonSource, shouldSkipDuplicateSelection]);
 
   const handlePvAnalysisRequest = useCallback(async () => {
     if (!selectedCoordinate || selectionMode !== 'building_footprint') {
@@ -1044,6 +1118,42 @@ function RiskMapPage() {
     setActiveTab('solar');
     await handlePvAnalysisRequest();
   }, [handlePvAnalysisRequest]);
+
+  const handleMapShellClickCapture = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      const targetElement = event.target instanceof Element ? event.target : null;
+
+      if (
+        targetElement?.closest('.mapControlOverlay') ||
+        targetElement?.closest('.riskLegend') ||
+        targetElement?.closest('.scenarioComparisonStrip')
+      ) {
+        return;
+      }
+
+      const startedAt = Date.now();
+      const nativeEvent = event.nativeEvent;
+
+      window.setTimeout(() => {
+        if (lastMapSelectionRef.current && lastMapSelectionRef.current.selectedAt >= startedAt) {
+          return;
+        }
+
+        const selection = createVWorldSelectionFromMouseEvent(
+          vworldMapRef.current,
+          nativeEvent,
+          'react.mapShell.clickCapture',
+        );
+
+        if (typeof selection.longitude !== 'number' || typeof selection.latitude !== 'number') {
+          return;
+        }
+
+        void handleMapSelection(selection);
+      }, 120);
+    },
+    [handleMapSelection],
+  );
 
   useEffect(() => {
     if (isBuildingAdmdongIndexEnabled()) {
@@ -1291,6 +1401,7 @@ function RiskMapPage() {
         <div className="riskMapCanvasColumn">
           <div
             className={`vworldMapShell ${isSolarPanelLayerVisible ? 'isSolarMode' : ''}`}
+            onClickCapture={handleMapShellClickCapture}
             onClick={(event) => {
               if (event.target === event.currentTarget) {
                 void handleMapSelection();
@@ -1343,6 +1454,8 @@ function RiskMapPage() {
               map={vworldMap}
               isActive={hasMapAnchoredGeometry}
               polygon={selectedBuildingGeometry ?? selectedRoofPolygon}
+              roofHeightM={roofHeightEstimate.roofHeightM}
+              onStatusChange={setSelectedBuildingLayerStatus}
             />
 
             <VWorldSolarPanelLayer
@@ -1451,6 +1564,9 @@ function RiskMapPage() {
                 지도 이동: {mapFocusStatus.message}
                 {mapFocusStatus.method ? ` (${mapFocusStatus.method})` : ''}
                 {mapFocusStatus.markerAdded ? ' · 선택 마커 표시' : ''}
+                {mapFocusStatus.selectionSource || mapFocusStatus.selectionMethod
+                  ? ` · 클릭 ${mapFocusStatus.selectionSource ?? '-'} / ${mapFocusStatus.selectionMethod ?? '-'}`
+                  : ''}
               </p>
 
               <button
@@ -1487,6 +1603,9 @@ function RiskMapPage() {
                     {mapFocusStatus.moved ? '이동 시도됨' : '이동 미완료'}
                     {mapFocusStatus.method ? ` · ${mapFocusStatus.method}` : ''}
                     {mapFocusStatus.markerAdded ? ' · 마커 표시' : ''}
+                    {mapFocusStatus.selectionSource || mapFocusStatus.selectionMethod
+                      ? ` · 클릭 ${mapFocusStatus.selectionSource ?? '-'} / ${mapFocusStatus.selectionMethod ?? '-'}`
+                      : ''}
                   </strong>
                 </div>
                 <div>
@@ -1526,6 +1645,19 @@ function RiskMapPage() {
                   <strong>{selectedBuildingFootprint?.geometryType ?? '-'}</strong>
                 </div>
                 <div>
+                  <span>건물 polygon 매칭</span>
+                  <strong>{hasSelectedBuildingPolygon ? '건물 polygon 매칭 완료' : '건물 polygon 매칭 대기'}</strong>
+                </div>
+                <div>
+                  <span>선택 건물 지도 표시</span>
+                  <strong>
+                    {selectedBuildingLayerStatus.selectedBuildingEntityStatus}
+                    {selectedBuildingLayerStatus.renderMethod !== '-'
+                      ? ` · ${selectedBuildingLayerStatus.renderMethod}`
+                      : ''}
+                  </strong>
+                </div>
+                <div>
                   <span>실제 옥상 polygon 여부</span>
                   <strong>{featureDataInfo.isActualRoofPolygon ? '예' : '아님'}</strong>
                 </div>
@@ -1549,6 +1681,13 @@ function RiskMapPage() {
                   <strong>{selectableLayerStatus.message}</strong>
                 </div>
                 <div>
+                  <span>candidateEntityCount</span>
+                  <strong>
+                    {selectableLayerStatus.candidateEntityCount.toLocaleString('ko-KR')}개
+                    {selectableLayerStatus.renderMethod !== '-' ? ` · ${selectableLayerStatus.renderMethod}` : ''}
+                  </strong>
+                </div>
+                <div>
                   <span>옥상 polygon 상태</span>
                   <strong>{getRoofPolygonStatusText(selectionMode, selectedRoofPolygon)}</strong>
                 </div>
@@ -1564,9 +1703,13 @@ function RiskMapPage() {
                   <span>패널 레이어 상태</span>
                   <strong>
                     {panelLayerStatus.state === 'rendered'
-                      ? `좌표 고정 지도 객체 ${panelLayerStatus.panelPolygonCount.toLocaleString('ko-KR')}개 표시`
+                      ? `패널 표시 완료 · 좌표 고정 지도 객체 ${panelLayerStatus.panelEntityCount.toLocaleString('ko-KR')}개 표시`
                       : panelLayerStatus.message}
                   </strong>
+                </div>
+                <div>
+                  <span>panelEntityCount</span>
+                  <strong>{panelLayerStatus.panelEntityCount.toLocaleString('ko-KR')}개</strong>
                 </div>
                 <div>
                   <span>지도 객체 렌더링 방식</span>
@@ -1600,6 +1743,14 @@ function RiskMapPage() {
                   <strong>{formatDiagnosticCount(panelLayerStatus.viewerEntityCount)}</strong>
                 </div>
                 <div>
+                  <span>selectedBuildingEntityStatus</span>
+                  <strong>{selectedBuildingLayerStatus.selectedBuildingEntityStatus}</strong>
+                </div>
+                <div>
+                  <span>sameViewerAsBuildingLayer</span>
+                  <strong>{formatDiagnosticMatch(sameViewerAsBuildingLayer)}</strong>
+                </div>
+                <div>
                   <span>viewerCanvasSize</span>
                   <strong>{formatViewerCanvasSize(panelLayerStatus.viewerCanvasSize)}</strong>
                 </div>
@@ -1613,6 +1764,14 @@ function RiskMapPage() {
                     {panelLayerStatus.debugEntityAdded
                       ? '추가됨'
                       : '비활성 또는 미추가 · VITE_SHOW_PANEL_DEBUG_ENTITY=true 필요'}
+                  </strong>
+                </div>
+                <div>
+                  <span>panel debug lift</span>
+                  <strong>
+                    {panelLayerStatus.debugLiftApplied
+                      ? '적용 중 · VITE_LIFT_SOLAR_PANELS_DEBUG=true'
+                      : '비활성 · VITE_LIFT_SOLAR_PANELS_DEBUG=true로 +20m'}
                   </strong>
                 </div>
                 <p>지형 높이 미확인 시 디버그 높이로 패널을 표시합니다.</p>

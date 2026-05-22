@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { getPolygonCentroid, type Coordinate, type PolygonCoordinates } from '../lib/roofGeometry';
+import { getViewerDebugId } from '../lib/vworldCesiumViewer';
 
 export type VWorldSolarPanelLayerStatus = {
   state: 'idle' | 'rendered' | 'fallback' | 'error';
   message: string;
   panelPolygonCount: number;
+  panelEntityCount: number;
   firstPanelCoordinates: PolygonCoordinates | null;
   entityCountBefore: number | null;
   entityCountAfter: number | null;
@@ -16,7 +18,9 @@ export type VWorldSolarPanelLayerStatus = {
   depthTestAgainstTerrain: boolean | null;
   viewerCanvasSize: { width: number; height: number } | null;
   viewerEntityCount: number | null;
+  viewerDebugId: string | null;
   debugEntityAdded: boolean;
+  debugLiftApplied: boolean;
   heightMessage?: string;
 };
 
@@ -79,8 +83,10 @@ const DEFAULT_ROOF_HEIGHT_M = 20;
 const PANEL_ROOF_CLEARANCE_M = 2;
 const DEBUG_PANEL_HEIGHT_OFFSET_M = 80;
 const DEBUG_ENTITY_HEIGHT_OFFSET_M = 20;
+const DEBUG_PANEL_LIFT_M = 20;
 const PANEL_DEBUG_NOTE = '지형 높이 미확인 시 디버그 높이로 패널을 표시합니다.';
 const SHOW_PANEL_DEBUG_ENTITY = import.meta.env.VITE_SHOW_PANEL_DEBUG_ENTITY === 'true';
+const LIFT_SOLAR_PANELS_FOR_DEBUG = import.meta.env.VITE_LIFT_SOLAR_PANELS_DEBUG === 'true';
 const CONSTRUCTOR_ERROR_MESSAGE =
   '태양광 패널을 지도 좌표 객체로 표시하려면 VWorld 또는 Cesium polygon 객체 연결이 필요합니다.';
 const DEFAULT_HEIGHT_MESSAGE = '건물 높이 정보가 없어 기본 높이로 패널을 표시합니다.';
@@ -97,13 +103,16 @@ function createEmptyStatus(
       VWorldSolarPanelLayerStatus,
       | 'entityCountBefore'
       | 'entityCountAfter'
+      | 'panelEntityCount'
       | 'terrainHeightM'
       | 'finalPanelHeightM'
       | 'renderMode'
       | 'depthTestAgainstTerrain'
       | 'viewerCanvasSize'
       | 'viewerEntityCount'
+      | 'viewerDebugId'
       | 'debugEntityAdded'
+      | 'debugLiftApplied'
     >
   > = {},
 ): VWorldSolarPanelLayerStatus {
@@ -111,6 +120,7 @@ function createEmptyStatus(
     state,
     message,
     panelPolygonCount: panelPolygons.length,
+    panelEntityCount: 0,
     firstPanelCoordinates: panelPolygons[0] ?? null,
     entityCountBefore: null,
     entityCountAfter: null,
@@ -122,7 +132,9 @@ function createEmptyStatus(
     depthTestAgainstTerrain: null,
     viewerCanvasSize: null,
     viewerEntityCount: null,
+    viewerDebugId: null,
     debugEntityAdded: false,
+    debugLiftApplied: false,
     heightMessage,
     ...diagnostics,
   };
@@ -274,15 +286,20 @@ function getPanelHeightDiagnostics({
     typeof terrainHeightM === 'number'
       ? terrainHeightM + roofHeightM + PANEL_ROOF_CLEARANCE_M
       : roofHeightM + DEBUG_PANEL_HEIGHT_OFFSET_M;
+  const debugLiftM = LIFT_SOLAR_PANELS_FOR_DEBUG ? DEBUG_PANEL_LIFT_M : 0;
   const resolvedHeightMessage =
-    typeof terrainHeightM === 'number'
-      ? heightMessage
-      : [heightMessage, PANEL_DEBUG_NOTE].filter(Boolean).join(' ');
+    [
+      typeof terrainHeightM === 'number' ? heightMessage : [heightMessage, PANEL_DEBUG_NOTE].filter(Boolean).join(' '),
+      LIFT_SOLAR_PANELS_FOR_DEBUG ? `패널 디버그 리프트 +${DEBUG_PANEL_LIFT_M}m 적용 중입니다.` : undefined,
+    ]
+      .filter(Boolean)
+      .join(' ');
 
   return {
     terrainHeightM,
-    finalPanelHeightM,
+    finalPanelHeightM: finalPanelHeightM + debugLiftM,
     heightMessage: resolvedHeightMessage || undefined,
+    debugLiftApplied: LIFT_SOLAR_PANELS_FOR_DEBUG,
   };
 }
 
@@ -508,21 +525,26 @@ function addPanelEntitiesWithCesium({
   const addEntity = entities.add.bind(entities);
   const addedObjects: AddedMapObject[] = [];
   const fillMaterial =
-    cesium.Color?.BLUE?.withAlpha?.(0.85) ??
-    cesium.Color?.fromCssColorString?.('#0000ff')?.withAlpha?.(0.85) ??
-    cesium.Color?.fromCssColorString?.('#0000ff');
-  const outlineMaterial = cesium.Color?.CYAN ?? cesium.Color?.fromCssColorString?.('#00ffff');
+    cesium.Color?.fromCssColorString?.('#0b1f78')?.withAlpha?.(0.9) ??
+    cesium.Color?.BLUE?.withAlpha?.(0.9) ??
+    cesium.Color?.fromCssColorString?.('#0b1f78');
+  const outlineMaterial =
+    cesium.Color?.fromCssColorString?.('#67e8f9')?.withAlpha?.(0.98) ??
+    cesium.Color?.CYAN ??
+    cesium.Color?.fromCssColorString?.('#67e8f9');
   const heightReferenceNone = cesium.HeightReference?.NONE;
 
   let panelEntityCount = 0;
 
   panelPolygons.forEach((panelPolygon, index) => {
     const id = `solarmate-panel-${selectedBuildingId}-${index}`;
+    const outlineId = `${id}-outline`;
     const flatDegreesWithHeight = createLonLatHeightArray(panelPolygon, finalPanelHeightM);
     const polygonPositions = cesium.Cartesian3.fromDegreesArrayHeights(flatDegreesWithHeight);
     const hierarchy = cesium.PolygonHierarchy ? new cesium.PolygonHierarchy(polygonPositions) : polygonPositions;
 
     entities.removeById?.(id);
+    entities.removeById?.(outlineId);
 
     const panelEntity = addEntity({
       id,
@@ -535,10 +557,27 @@ function addPanelEntitiesWithCesium({
         ...(heightReferenceNone !== undefined ? { heightReference: heightReferenceNone } : {}),
       },
     });
+    const outlineEntity = addEntity({
+      id: outlineId,
+      polyline: {
+        positions: polygonPositions,
+        width: 1.6,
+        material:
+          cesium.Color?.fromCssColorString?.('#e0fbff')?.withAlpha?.(0.98) ??
+          cesium.Color?.WHITE ??
+          outlineMaterial,
+        clampToGround: false,
+        depthFailMaterial: outlineMaterial,
+      },
+    });
 
     if (panelEntity) {
       panelEntityCount += 1;
       addedObjects.push({ id, object: panelEntity, renderMethod: 'Cesium entities' });
+    }
+
+    if (outlineEntity) {
+      addedObjects.push({ id: outlineId, object: outlineEntity, renderMethod: 'Cesium entities' });
     }
   });
 
@@ -591,6 +630,7 @@ function addPanelEntitiesWithCesium({
     renderMode: 'Cesium entities / fromDegreesArrayHeights / perPositionHeight',
     viewerCanvasSize,
     viewerEntityCount: entityCountAfter,
+    viewerDebugId: getViewerDebugId(viewer),
     cleanup: () => {
       addedObjects.forEach((addedObject) => {
         try {
@@ -642,8 +682,8 @@ function createVWorldPanelStyle() {
   }
 
   const style = new vw.style.Style();
-  const fill = new vw.style.Fill('rgba(30, 58, 138, 0.78)');
-  const stroke = new vw.style.Stroke('#67e8f9');
+  const fill = new vw.style.Fill('rgba(11, 31, 120, 0.9)');
+  const stroke = new vw.style.Stroke('#e0fbff');
 
   stroke.setWidth?.(2);
   fill.setStroke?.(stroke);
@@ -754,6 +794,7 @@ function addPanelFeaturesWithVWorld({
     renderMode: 'VWorld Feature layer / CoordZ absolute height',
     viewerCanvasSize: null,
     viewerEntityCount: null,
+    viewerDebugId: null,
     cleanup: () => {
       addedObjects.forEach((addedObject) => removeVWorldObject(map, addedObject));
       panelPolygons.forEach((_, index) => {
@@ -809,6 +850,7 @@ function VWorldSolarPanelLayer({
           {
             terrainHeightM: fallbackHeightDiagnostics.terrainHeightM,
             finalPanelHeightM: fallbackHeightDiagnostics.finalPanelHeightM,
+            debugLiftApplied: fallbackHeightDiagnostics.debugLiftApplied,
           },
         ),
       );
@@ -827,6 +869,7 @@ function VWorldSolarPanelLayer({
           {
             terrainHeightM: fallbackHeightDiagnostics.terrainHeightM,
             finalPanelHeightM: fallbackHeightDiagnostics.finalPanelHeightM,
+            debugLiftApplied: fallbackHeightDiagnostics.debugLiftApplied,
           },
         ),
       );
@@ -845,6 +888,7 @@ function VWorldSolarPanelLayer({
           {
             terrainHeightM: fallbackHeightDiagnostics.terrainHeightM,
             finalPanelHeightM: fallbackHeightDiagnostics.finalPanelHeightM,
+            debugLiftApplied: fallbackHeightDiagnostics.debugLiftApplied,
           },
         ),
       );
@@ -901,7 +945,9 @@ function VWorldSolarPanelLayer({
               depthTestAgainstTerrain: cesiumResult?.depthTestAgainstTerrain ?? null,
               viewerCanvasSize: cesiumResult?.viewerCanvasSize ?? getViewerCanvasSize(cesiumViewer ?? {}),
               viewerEntityCount: cesiumResult?.viewerEntityCount ?? null,
+              viewerDebugId: cesiumResult?.viewerDebugId ?? null,
               debugEntityAdded: cesiumResult?.debugEntityAdded ?? false,
+              debugLiftApplied: heightDiagnostics.debugLiftApplied,
             },
           ),
         );
@@ -916,6 +962,7 @@ function VWorldSolarPanelLayer({
           heightEstimate.usedDefault ? ` ${DEFAULT_HEIGHT_MESSAGE}` : ''
         }`,
         panelPolygonCount: panelPolygons.length,
+        panelEntityCount: renderResult.addedCount,
         firstPanelCoordinates: panelPolygons[0] ?? null,
         entityCountBefore: renderResult.entityCountBefore,
         entityCountAfter: renderResult.entityCountAfter,
@@ -927,7 +974,9 @@ function VWorldSolarPanelLayer({
         depthTestAgainstTerrain: renderResult.depthTestAgainstTerrain,
         viewerCanvasSize: renderResult.viewerCanvasSize,
         viewerEntityCount: renderResult.viewerEntityCount,
+        viewerDebugId: renderResult.viewerDebugId,
         debugEntityAdded: renderResult.debugEntityAdded,
+        debugLiftApplied: heightDiagnostics.debugLiftApplied,
         heightMessage: heightDiagnostics.heightMessage,
       });
 
@@ -949,6 +998,7 @@ function VWorldSolarPanelLayer({
           {
             terrainHeightM: fallbackHeightDiagnostics.terrainHeightM,
             finalPanelHeightM: fallbackHeightDiagnostics.finalPanelHeightM,
+            debugLiftApplied: fallbackHeightDiagnostics.debugLiftApplied,
           },
         ),
       );

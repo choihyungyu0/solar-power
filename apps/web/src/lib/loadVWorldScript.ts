@@ -36,6 +36,8 @@ export type VWorldSelection = {
   longitude?: number;
   latitude?: number;
   rawEvent?: unknown;
+  source?: string;
+  method?: string;
 };
 
 export type VWorldMapFocusResult = {
@@ -77,6 +79,57 @@ type InitVWorld3DMapParams = {
 };
 
 type VWorldLoadStatus = Omit<VWorldLoadDiagnostics, 'detectedGlobals' | 'jqueryLoaded' | 'dollarLoaded'>;
+
+type LonLatCoordinate = {
+  longitude: number;
+  latitude: number;
+  method: string;
+};
+
+type ScreenPoint = {
+  x: number;
+  y: number;
+};
+
+type CanvasLike = {
+  clientWidth?: number;
+  clientHeight?: number;
+  width?: number;
+  height?: number;
+  isConnected?: boolean;
+  getBoundingClientRect?: () => DOMRect;
+};
+
+type CesiumEntityCollectionLike = {
+  add?: (entity: unknown) => unknown;
+};
+
+type CesiumViewerLike = {
+  canvas?: CanvasLike;
+  camera?: {
+    pickEllipsoid?: (point: unknown, ellipsoid?: unknown) => unknown;
+  };
+  entities?: CesiumEntityCollectionLike;
+  scene?: {
+    canvas?: CanvasLike;
+    camera?: {
+      pickEllipsoid?: (point: unknown, ellipsoid?: unknown) => unknown;
+    };
+    globe?: {
+      ellipsoid?: unknown;
+    };
+    pickPosition?: (point: unknown) => unknown;
+    pickPositionSupported?: boolean;
+  };
+};
+
+const KOREA_BOUNDS = {
+  minLongitude: 124,
+  maxLongitude: 132,
+  minLatitude: 33,
+  maxLatitude: 39.5,
+};
+const DUPLICATE_CLICK_WINDOW_MS = 350;
 
 class VWorldScriptLoadError extends Error {
   diagnostics: VWorldLoadDiagnostics;
@@ -318,13 +371,412 @@ export function loadVWorldScript() {
   return vworldScriptPromise;
 }
 
-function extractSelectionFromVWorldClick(args: unknown[]): VWorldSelection {
-  const cartographic = args[2] as { longitudeDD?: number; latitudeDD?: number } | undefined;
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function toDegrees(radians: number) {
+  return (radians * 180) / Math.PI;
+}
+
+function isValidLonLat(longitude: number, latitude: number) {
+  return Math.abs(longitude) <= 180 && Math.abs(latitude) <= 90;
+}
+
+function isLikelyKoreaLonLat(longitude: number, latitude: number) {
+  return (
+    longitude >= KOREA_BOUNDS.minLongitude &&
+    longitude <= KOREA_BOUNDS.maxLongitude &&
+    latitude >= KOREA_BOUNDS.minLatitude &&
+    latitude <= KOREA_BOUNDS.maxLatitude
+  );
+}
+
+function normalizeLonLat(longitude: unknown, latitude: unknown, method: string): LonLatCoordinate | null {
+  if (!isFiniteNumber(longitude) || !isFiniteNumber(latitude)) {
+    return null;
+  }
+
+  if (isValidLonLat(longitude, latitude) && isLikelyKoreaLonLat(longitude, latitude)) {
+    return { longitude, latitude, method };
+  }
+
+  const degreeLongitude = toDegrees(longitude);
+  const degreeLatitude = toDegrees(latitude);
+
+  if (isValidLonLat(degreeLongitude, degreeLatitude) && isLikelyKoreaLonLat(degreeLongitude, degreeLatitude)) {
+    return {
+      longitude: degreeLongitude,
+      latitude: degreeLatitude,
+      method: `${method}:radians`,
+    };
+  }
+
+  if (isValidLonLat(longitude, latitude)) {
+    return { longitude, latitude, method };
+  }
+
+  return null;
+}
+
+function getRecordNumber(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+
+    if (isFiniteNumber(value)) {
+      return value;
+    }
+
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function extractCoordinateFromValue(
+  value: unknown,
+  methodPrefix: string,
+  visited = new WeakSet<object>(),
+): LonLatCoordinate | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  if (visited.has(value)) {
+    return null;
+  }
+
+  visited.add(value);
+
+  if (Array.isArray(value)) {
+    if (methodPrefix !== 'vworld.args' && value.length >= 2) {
+      const arrayCoordinate = normalizeLonLat(value[0], value[1], `${methodPrefix}:array`);
+
+      if (arrayCoordinate) {
+        return arrayCoordinate;
+      }
+    }
+
+    for (const [index, item] of value.entries()) {
+      const nested = extractCoordinateFromValue(item, `${methodPrefix}[${index}]`, visited);
+
+      if (nested) {
+        return nested;
+      }
+    }
+
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const isMouseLikeRecord = isFiniteNumber(record.clientX) && isFiniteNumber(record.clientY);
+  const explicitCoordinate = normalizeLonLat(
+    getRecordNumber(record, [
+      'longitudeDD',
+      'lonDD',
+      'lngDD',
+      'longitudeDeg',
+      'lonDeg',
+      'lngDeg',
+      'longitude',
+      'lon',
+      'lng',
+      ...(isMouseLikeRecord ? [] : ['x']),
+    ]),
+    getRecordNumber(record, [
+      'latitudeDD',
+      'latDD',
+      'latitudeDeg',
+      'latDeg',
+      'latitude',
+      'lat',
+      ...(isMouseLikeRecord ? [] : ['y']),
+    ]),
+    `${methodPrefix}:fields`,
+  );
+
+  if (explicitCoordinate) {
+    return explicitCoordinate;
+  }
+
+  for (const key of [
+    'cartographic',
+    'coordinate',
+    'coord',
+    'coords',
+    'position',
+    'mapPosition',
+    'mapCoordinate',
+    'point',
+    'pickedPosition',
+    'location',
+    'data',
+    'detail',
+  ]) {
+    const nested = extractCoordinateFromValue(record[key], `${methodPrefix}.${key}`, visited);
+
+    if (nested) {
+      return nested;
+    }
+  }
+
+  return null;
+}
+
+function findMouseEvent(value: unknown, visited = new WeakSet<object>()): MouseEvent | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  if (visited.has(value)) {
+    return null;
+  }
+
+  visited.add(value);
+
+  if (value instanceof MouseEvent) {
+    return value;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  if (isFiniteNumber(record.clientX) && isFiniteNumber(record.clientY)) {
+    return value as MouseEvent;
+  }
+
+  for (const key of ['rawEvent', 'event', 'originalEvent', 'srcEvent', 'domEvent', 'nativeEvent']) {
+    const nested = findMouseEvent(record[key], visited);
+
+    if (nested) {
+      return nested;
+    }
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = findMouseEvent(item, visited);
+
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+
+  return null;
+}
+
+function getCesiumSdk() {
+  const cesium = window.Cesium;
+
+  return cesium && typeof cesium === 'object' ? (cesium as Record<string, any>) : null;
+}
+
+function hasCesiumEntityCollection(value: unknown): value is CesiumViewerLike {
+  return Boolean(value && typeof value === 'object' && ((value as CesiumViewerLike).entities?.add));
+}
+
+function pushUniqueViewerCandidate(candidates: CesiumViewerLike[], value: unknown) {
+  if (!hasCesiumEntityCollection(value) || candidates.includes(value)) {
+    return;
+  }
+
+  candidates.push(value);
+}
+
+function getCesiumViewerCandidates(value: unknown): CesiumViewerLike[] {
+  const candidates: CesiumViewerLike[] = [];
+
+  if (!value || typeof value !== 'object') {
+    return candidates;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  pushUniqueViewerCandidate(candidates, value);
+
+  for (const key of ['viewer', '_viewer', 'cesiumViewer', '_cesiumViewer', 'sceneViewer', 'mapViewer']) {
+    pushUniqueViewerCandidate(candidates, record[key]);
+  }
+
+  for (const key of ['getViewer', 'getCesiumViewer', 'getCesium', 'getMap']) {
+    const method = record[key];
+
+    if (typeof method !== 'function') {
+      continue;
+    }
+
+    try {
+      pushUniqueViewerCandidate(candidates, method.call(value));
+    } catch {
+      // VWorld builds expose different internals; keep looking for a safe viewer candidate.
+    }
+  }
+
+  return candidates;
+}
+
+function getViewerCanvas(viewer: CesiumViewerLike): CanvasLike | null {
+  return viewer.scene?.canvas ?? viewer.canvas ?? null;
+}
+
+function getViewerCanvasArea(viewer: CesiumViewerLike) {
+  const canvas = getViewerCanvas(viewer);
+  const rect = canvas?.getBoundingClientRect?.();
+  const width = rect?.width || canvas?.clientWidth || canvas?.width || 0;
+  const height = rect?.height || canvas?.clientHeight || canvas?.height || 0;
+
+  return width * height;
+}
+
+function isViewerCanvasVisible(viewer: CesiumViewerLike) {
+  const canvas = getViewerCanvas(viewer);
+
+  if (!canvas || canvas.isConnected === false || getViewerCanvasArea(viewer) <= 0) {
+    return false;
+  }
+
+  if (canvas instanceof HTMLElement) {
+    const style = window.getComputedStyle(canvas);
+
+    return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) !== 0;
+  }
+
+  return true;
+}
+
+function findCesiumViewer(map: VWorldMapInstance | null): CesiumViewerLike | null {
+  const candidates = [map, window.ws3d, window.VW, window.vw].flatMap(getCesiumViewerCandidates);
+  const uniqueCandidates = candidates.filter((candidate, index) => candidates.indexOf(candidate) === index);
+
+  if (uniqueCandidates.length === 0) {
+    return null;
+  }
+
+  return uniqueCandidates.sort((left, right) => {
+    const rightVisible = isViewerCanvasVisible(right) ? 1 : 0;
+    const leftVisible = isViewerCanvasVisible(left) ? 1 : 0;
+
+    return rightVisible - leftVisible || getViewerCanvasArea(right) - getViewerCanvasArea(left);
+  })[0];
+}
+
+function getScreenPointFromMouseEvent(event: MouseEvent, viewer: CesiumViewerLike): ScreenPoint | null {
+  const canvas = getViewerCanvas(viewer);
+  const rect = canvas?.getBoundingClientRect?.();
+
+  if (!rect) {
+    return null;
+  }
+
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 || x > rect.width || y > rect.height) {
+    return null;
+  }
+
+  return { x, y };
+}
+
+function getLonLatFromCartesian(cartesian: unknown, method: string): LonLatCoordinate | null {
+  const cesium = getCesiumSdk();
+
+  if (!cartesian || !cesium?.Cartographic?.fromCartesian) {
+    return null;
+  }
+
+  try {
+    const cartographic = cesium.Cartographic.fromCartesian(cartesian);
+
+    if (!cartographic) {
+      return null;
+    }
+
+    return normalizeLonLat(cartographic.longitude, cartographic.latitude, method);
+  } catch {
+    return null;
+  }
+}
+
+function pickCoordinateFromCesiumCanvas(
+  map: VWorldMapInstance | null,
+  event: MouseEvent | null,
+): LonLatCoordinate | null {
+  if (!event) {
+    return null;
+  }
+
+  const cesium = getCesiumSdk();
+  const viewer = findCesiumViewer(map);
+  const screenPoint = viewer ? getScreenPointFromMouseEvent(event, viewer) : null;
+
+  if (!cesium?.Cartesian2 || !viewer || !screenPoint) {
+    return null;
+  }
+
+  const cesiumPoint = new cesium.Cartesian2(screenPoint.x, screenPoint.y);
+
+  try {
+    if (viewer.scene?.pickPositionSupported && viewer.scene.pickPosition) {
+      const pickedCartesian = viewer.scene.pickPosition(cesiumPoint);
+      const pickedCoordinate = getLonLatFromCartesian(pickedCartesian, 'cesium.pickPosition');
+
+      if (pickedCoordinate) {
+        return pickedCoordinate;
+      }
+    }
+  } catch {
+    // Terrain/building picking can fail for some VWorld tiles. Use ellipsoid picking below.
+  }
+
+  try {
+    const camera = viewer.scene?.camera ?? viewer.camera;
+    const ellipsoid = viewer.scene?.globe?.ellipsoid;
+    const pickedCartesian = camera?.pickEllipsoid?.(cesiumPoint, ellipsoid);
+
+    return getLonLatFromCartesian(pickedCartesian, 'cesium.camera.pickEllipsoid');
+  } catch {
+    return null;
+  }
+}
+
+function extractSelectionFromVWorldClick(
+  args: unknown[],
+  map: VWorldMapInstance | null,
+  source: string,
+): VWorldSelection {
+  const coordinateFromArgs = extractCoordinateFromValue(args, 'vworld.args');
+  const rawEvent = findMouseEvent(args) ?? args[4] ?? args[0];
+  const coordinate = coordinateFromArgs ?? pickCoordinateFromCesiumCanvas(map, rawEvent instanceof MouseEvent ? rawEvent : null);
 
   return {
-    longitude: cartographic?.longitudeDD,
-    latitude: cartographic?.latitudeDD,
-    rawEvent: args[4] ?? args[0],
+    longitude: coordinate?.longitude,
+    latitude: coordinate?.latitude,
+    method: coordinate?.method,
+    source,
+    rawEvent,
+  };
+}
+
+export function createVWorldSelectionFromMouseEvent(
+  map: VWorldMapInstance | null,
+  event: MouseEvent,
+  source = 'dom.click',
+): VWorldSelection {
+  const coordinate = pickCoordinateFromCesiumCanvas(map, event);
+
+  return {
+    longitude: coordinate?.longitude,
+    latitude: coordinate?.latitude,
+    method: coordinate?.method,
+    source,
+    rawEvent: event,
   };
 }
 
@@ -524,6 +976,13 @@ function getErrorMessage(error: unknown) {
 
 export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWorldMapController {
   let map: VWorldMapInstance | null = null;
+  let lastSelection:
+    | {
+        longitude: number;
+        latitude: number;
+        selectedAt: number;
+      }
+    | null = null;
 
   if (!ensureJQueryGlobal()) {
     throw new Error(VWORLD_JQUERY_FAILURE_MESSAGE);
@@ -563,17 +1022,73 @@ export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWo
     pitch: -70,
   });
 
+  function updateClickDiagnostics(selection: VWorldSelection, status: 'selected' | 'ignored') {
+    window.__solarMateMapDiagnostics = {
+      ...(window.__solarMateMapDiagnostics ?? {}),
+      lastClickSelection: {
+        status,
+        source: selection.source ?? '-',
+        method: selection.method ?? '-',
+        longitude: selection.longitude ?? null,
+        latitude: selection.latitude ?? null,
+        selectedAt: new Date().toISOString(),
+      },
+    };
+  }
+
+  function isDuplicateSelection(selection: VWorldSelection) {
+    if (
+      !lastSelection ||
+      !isFiniteNumber(selection.longitude) ||
+      !isFiniteNumber(selection.latitude) ||
+      Date.now() - lastSelection.selectedAt > DUPLICATE_CLICK_WINDOW_MS
+    ) {
+      return false;
+    }
+
+    return (
+      Math.abs(lastSelection.longitude - selection.longitude) < 0.00005 &&
+      Math.abs(lastSelection.latitude - selection.latitude) < 0.00005
+    );
+  }
+
+  function emitSelection(selection: VWorldSelection) {
+    if (!isFiniteNumber(selection.longitude) || !isFiniteNumber(selection.latitude)) {
+      updateClickDiagnostics(selection, 'ignored');
+      return;
+    }
+
+    if (isDuplicateSelection(selection)) {
+      updateClickDiagnostics(selection, 'ignored');
+      return;
+    }
+
+    lastSelection = {
+      longitude: selection.longitude,
+      latitude: selection.latitude,
+      selectedAt: Date.now(),
+    };
+    updateClickDiagnostics(selection, 'selected');
+    onSelect?.(selection);
+  }
+
   // 건물 피처 선택 API 연결 전까지는 클릭 좌표 기반의 1차 선택 흐름을 사용합니다.
   const clickHandler = (...args: unknown[]) => {
-    onSelect?.(extractSelectionFromVWorldClick(args));
+    emitSelection(extractSelectionFromVWorldClick(args, map, 'vworld.onClick'));
   };
+  const domClickHandler = (event: MouseEvent) => {
+    emitSelection(extractSelectionFromVWorldClick([event], map, 'dom.canvas.click'));
+  };
+  const mapElement = document.getElementById(mapId);
 
   map.onClick?.addEventListener?.(clickHandler);
+  mapElement?.addEventListener('click', domClickHandler, true);
 
   return {
     map,
     dispose: () => {
       map?.onClick?.removeEventListener?.(clickHandler);
+      mapElement?.removeEventListener('click', domClickHandler, true);
       map?.destroy?.();
       document.getElementById(mapId)?.replaceChildren();
     },
