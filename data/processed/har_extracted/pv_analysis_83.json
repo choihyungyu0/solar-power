@@ -1,0 +1,44 @@
+{
+  "index": 83,
+  "method": "POST",
+  "url": "https://climate.gg.go.kr/spsvc/pv/analysis",
+  "queryString": [],
+  "request_headers": {
+    "Accept": "application/json, text/javascript, */*; q=0.01",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "Content-Length": "202",
+    "Content-Type": "application/json; charset=UTF-8",
+    "Host": "climate.gg.go.kr",
+    "Origin": "https://climate.gg.go.kr",
+    "Pragma": "no-cache",
+    "Referer": "https://climate.gg.go.kr/gcs/book/cmm/selectPanelMain.do?lang=kor",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-origin",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+    "X-Requested-With": "XMLHttpRequest",
+    "sec-ch-ua": "\"Chromium\";v=\"148\", \"Google Chrome\";v=\"148\", \"Not/A)Brand\";v=\"99\"",
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": "\"Windows\""
+  },
+  "request_postData": {
+    "mimeType": "application/json; charset=UTF-8",
+    "text": "{\"latitude\":37.26737234141205,\"longitude\":127.02733330232314,\"shading_index_average\":3.277444331542305,\"solar_panel_angle\":\"35\",\"solar_panel_info\":{\"panel_capacity\":500,\"panel_count\":46,\"panel_type\":1}}"
+  },
+  "response_status": 200,
+  "response_headers": {
+    "Content-Length": "2051",
+    "Content-Type": "application/json",
+    "Date": "Thu, 21 May 2026 13:24:21 GMT",
+    "Server": "nginx",
+    "access-control-allow-credentials": "true",
+    "access-control-allow-origin": "https://climate.gg.go.kr",
+    "vary": "Origin"
+  },
+  "response_mimeType": "application/json",
+  "response_size": 2051,
+  "response_text": "{\"status_code\":200,\"detail\":\"태양광 분석 시뮬레이션 완료\",\"data\":{\"annual_generation\":33356.0,\"expected_revenue\":{\"install_kw\":23.46,\"first_year_revenue\":6337640,\"first_year_save_cost\":5737232,\"expected_investment\":27870480},\"environmental_contribution\":{\"pine_tree_effect\":114188,\"carbon_reduction\":15948},\"annual_revenue\":[{\"year\":1,\"revenue\":6337640.0},{\"year\":2,\"revenue\":6305952.0},{\"year\":3,\"revenue\":6274422.0},{\"year\":4,\"revenue\":6243050.0},{\"year\":5,\"revenue\":6211835.0},{\"year\":6,\"revenue\":6180776.0},{\"year\":7,\"revenue\":6149872.0},{\"year\":8,\"revenue\":6119122.0},{\"year\":9,\"revenue\":6088527.0},{\"year\":10,\"revenue\":6058084.0},{\"year\":11,\"revenue\":6027794.0},{\"year\":12,\"revenue\":5997655.0},{\"year\":13,\"revenue\":5967666.0},{\"year\":14,\"revenue\":5937828.0},{\"year\":15,\"revenue\":5908139.0},{\"year\":16,\"revenue\":5878598.0},{\"year\":17,\"revenue\":5849205.0},{\"year\":18,\"revenue\":5819959.0},{\"year\":19,\"revenue\":5790859.0},{\"year\":20,\"revenue\":5761905.0}],\"annual_saveCost\":[{\"year\":1,\"saveCost\":5737232.0},{\"year\":2,\"saveCost\":5708546.0},{\"year\":3,\"saveCost\":5680003.0},{\"year\":4,\"saveCost\":5651603.0},{\"year\":5,\"saveCost\":5623345.0},{\"year\":6,\"saveCost\":5595228.0},{\"year\":7,\"saveCost\":5567252.0},{\"year\":8,\"saveCost\":5539416.0},{\"year\":9,\"saveCost\":5511719.0},{\"year\":10,\"saveCost\":5484160.0},{\"year\":11,\"saveCost\":5456739.0},{\"year\":12,\"saveCost\":5429456.0},{\"year\":13,\"saveCost\":5402308.0},{\"year\":14,\"saveCost\":5375297.0},{\"year\":15,\"saveCost\":5348420.0},{\"year\":16,\"saveCost\":5321678.0},{\"year\":17,\"saveCost\":5295070.0},{\"year\":18,\"saveCost\":5268595.0},{\"year\":19,\"saveCost\":5242252.0},{\"year\":20,\"saveCost\":5216040.0}],\"monthly_generation\":[{\"month\":1,\"generation\":1569.0},{\"month\":2,\"generation\":1435.0},{\"month\":3,\"generation\":2758.0},{\"month\":4,\"generation\":3282.0},{\"month\":5,\"generation\":3961.0},{\"month\":6,\"generation\":4055.0},{\"month\":7,\"generation\":2555.0},{\"month\":8,\"generation\":3260.0},{\"month\":9,\"generation\":2533.0},{\"month\":10,\"generation\":2057.0},{\"month\":11,\"generation\":1620.0},{\"month\":12,\"generation\":1577.0}]}}"
+}

@@ -1,0 +1,6 @@
+case_id,longitude,latitude,category,bldg_nm,bldg_nofl,bdar_sqm,unq_id,sigun_cd,verified_at
+dongtan_01,127.0715,37.2025,apt_high_rise,동탄현대하이페리온,37,3652.05,L1_41590_067829,41590,2026-05-22
+dongtan_02,127.0715,37.203,apt_mid_rise,동탄 지웰 에스테이트,20,3338.73,L1_41590_123084,41590,2026-05-22
+dongtan_03,127.072,37.2,commercial_mixed,워터밸리,8,1434.91,L1_41590_120842,41590,2026-05-22
+dongtan_04,127.0715,37.1995,apt_low_rise,제일프라자,9,1334,L1_41590_121381,41590,2026-05-22
+dongtan_05,127.0715,37.2015,officetel,원영빌딩,11,509.34,L1_41590_122206,41590,2026-05-22

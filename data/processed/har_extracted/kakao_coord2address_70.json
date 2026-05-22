@@ -1,0 +1,57 @@
+{
+  "index": 70,
+  "method": "GET",
+  "url": "https://dapi.kakao.com/v2/local/geo/coord2address.json?x=127.02732836884516&y=37.26736938333499&input_coord=WGS84",
+  "queryString": [
+    {
+      "name": "x",
+      "value": "127.02732836884516"
+    },
+    {
+      "name": "y",
+      "value": "37.26736938333499"
+    },
+    {
+      "name": "input_coord",
+      "value": "WGS84"
+    }
+  ],
+  "request_headers": {
+    ":authority": "dapi.kakao.com",
+    ":method": "GET",
+    ":path": "/v2/local/geo/coord2address.json?x=127.02732836884516&y=37.26736938333499&input_coord=WGS84",
+    ":scheme": "https",
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-encoding": "gzip, deflate, br, zstd",
+    "accept-language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+    "cache-control": "no-cache",
+    "content-type": "application/json; charset=utf-8",
+    "origin": "https://climate.gg.go.kr",
+    "pragma": "no-cache",
+    "priority": "u=1, i",
+    "referer": "https://climate.gg.go.kr/",
+    "sec-ch-ua": "\"Chromium\";v=\"148\", \"Google Chrome\";v=\"148\", \"Not/A)Brand\";v=\"99\"",
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": "\"Windows\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "cross-site",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
+  },
+  "request_postData": null,
+  "response_status": 200,
+  "response_headers": {
+    "access-control-allow-headers": "Authorization, KA, Origin, X-Requested-With, Content-Type, Accept",
+    "access-control-allow-methods": "GET, OPTIONS",
+    "access-control-allow-origin": "*",
+    "access-control-max-age": "86400",
+    "content-encoding": "gzip",
+    "content-type": "application/json;charset=UTF-8",
+    "date": "Thu, 21 May 2026 13:24:10 GMT",
+    "vary": "Accept-Encoding",
+    "x-request-id": "b9a3d4f23fda795aa5b74e51e7693b52"
+  },
+  "response_mimeType": "application/json",
+  "response_size": 617,
+  "response_text": "{\"meta\":{\"total_count\":1},\"documents\":[{\"road_address\":{\"address_name\":\"경기도 수원시 팔달구 경수대로 464\",\"region_1depth_name\":\"경기\",\"region_2depth_name\":\"수원시 팔달구\",\"region_3depth_name\":\"\",\"road_name\":\"경수대로\",\"underground_yn\":\"N\",\"main_building_no\":\"464\",\"sub_building_no\":\"\",\"building_name\":\"기아빌딩\",\"zone_no\":\"16489\"},\"address\":{\"address_name\":\"경기 수원시 팔달구 인계동 1017\",\"region_1depth_name\":\"경기\",\"region_2depth_name\":\"수원시 팔달구\",\"region_3depth_name\":\"인계동\",\"mountain_yn\":\"N\",\"main_address_no\":\"1017\",\"sub_address_no\":\"\",\"zip_code\":\"\"}}]}"
+}
