@@ -1,261 +1,397 @@
 """
-화성시 옥상 태양광 MVP 검증 앱.
+솔라메이트 MVP 검증 앱 — climate.gg 8단계 옥상 파이프라인 라이브 시각화.
+
+목적:
+- 좌표 1점 클릭 -> 옥상 polygon + 셀별 음영 + WFS 메타 + 사용량 + 발전 시뮬
+- 셀 음영 히트맵을 folium 지도 위에 직접 표시 (climate.gg UI 와 동등 수준)
 
 실행:
-  pip install streamlit streamlit-folium folium httpx pandas
-  cd C:\\Users\\Administrator\\Desktop\\solar-power
+  pip install streamlit streamlit-folium folium branca requests pyproj shapely
+  cd C:\\Users\\insung\\solar-power
   streamlit run scripts/mvp_app.py
 
-기능:
-- 화성 행정동 선택 -> 정제된 건물 폴리곤을 folium 지도에 표시
-- 폴리곤 클릭 -> properties.bld_id 기준 확인 -> 경기기후플랫폼 PV API 호출 -> 결과 카드
-- 사이드바: 패널 사양, 각도, 활용계수, shading 조정
-
-주의:
-- 이 파일은 GIS/API 검증용 보조 스크립트입니다.
-- 현재 제품 MVP의 활성 화면은 React + TypeScript + Supabase 기반 apps/web입니다.
+문서:
+- docs/api_spec_climate_har.md (API 명세)
+- docs/DEV_HANDOFF_CLIMATE_APIS.md (개발자 핸드오프)
+- scripts/poc_rooftop_pipeline.py (재사용 함수 본체)
 """
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 
+import branca.colormap as cm
 import folium
-import httpx
 import pandas as pd
 import streamlit as st
+from folium.plugins import MarkerCluster
 from streamlit_folium import st_folium
 
-ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DATA_DIR = ROOT / "data" / "processed" / "hwaseong_buildings_v1_by_admdong"
-LEGACY_DATA_DIR = ROOT / "data" / "processed" / "mvp" / "by_admdong"
-DATA_DIR = DEFAULT_DATA_DIR if DEFAULT_DATA_DIR.exists() else LEGACY_DATA_DIR
-INDEX_FP = DATA_DIR / "index.json"
-PV_API = "https://climate.gg.go.kr/spsvc/pv/analysis"
+from poc_rooftop_pipeline import (
+    CELL_H_DEFAULT,
+    CELL_W_DEFAULT,
+    PipelineResult,
+    result_to_bundle,
+    run_pipeline,
+)
 
-PANEL_AREA_M2 = {500: 1.038 * 2.228, 640: 2.465 * 1.134}
-
-
-def _index_rows(index_payload: Any) -> list[dict[str, Any]]:
-    if isinstance(index_payload, dict) and isinstance(index_payload.get("files"), list):
-        return index_payload["files"]
-    if isinstance(index_payload, list):
-        return index_payload
-    return []
-
-
-def _feature_area(props: dict[str, Any]) -> float:
-    for key in ("effective_area_m2", "building_area_m2", "total_floor_area_m2", "site_area_m2"):
-        value = props.get(key)
-        if isinstance(value, (int, float)) and value > 0:
-            return float(value)
-    return 0.0
-
-
-def _polygon_centroid(feature: dict[str, Any]) -> tuple[float | None, float | None]:
-    geometry = feature.get("geometry") or {}
-    coordinates = geometry.get("coordinates") or []
-    geometry_type = geometry.get("type")
-
-    if geometry_type == "Polygon" and coordinates:
-        ring = coordinates[0]
-    elif geometry_type == "MultiPolygon" and coordinates and coordinates[0]:
-        ring = coordinates[0][0]
-    else:
-        return None, None
-
-    points = [point for point in ring if isinstance(point, list) and len(point) >= 2]
-    if not points:
-        return None, None
-
-    lng = sum(float(point[0]) for point in points) / len(points)
-    lat = sum(float(point[1]) for point in points) / len(points)
-    return lat, lng
+# ----------------------------- 상수 -----------------------------
+DEFAULT_CLICK = (127.0715, 37.2025)   # 화성 동탄 현대하이페리온 (37층 아파트, 적중 검증)
+# 화성시 동탄 신도시 일대 (반경 ~500m 내 5건). 2026-05-22 라이브 API 적중 검증 완료.
+# 원본: data/processed/sample_coords.csv
+PRESET_LOCATIONS = {
+    "화성 동탄 현대하이페리온 (37층 아파트)": (127.0715, 37.2025),
+    "화성 동탄 지웰 에스테이트 (20층 아파트)": (127.0715, 37.2030),
+    "화성 동탄 원영빌딩 (11층 오피스텔)": (127.0715, 37.2015),
+    "화성 동탄 워터밸리 (8층 상가)": (127.0720, 37.2000),
+    "화성 동탄 제일프라자 (9층)": (127.0715, 37.1995),
+}
+REGULATION_LABELS = {
+    "ldsld_grd1": "산사태 1등급 위험지역",
+    "landscape": "경관지구",
+    "watershed_conservation_area": "수계보전구역",
+    "forest_genetic_resource_protection_area": "산림유전자원보호구역",
+    "disaster_prevention_protection_area": "재해방지보호구역",
+    "national_cultural_property": "국가문화재",
+    "national_cultural_property_zone": "국가문화재 보호구역",
+    "national_registered_property": "국가등록문화재",
+    "local_cultural_property": "지방문화재",
+    "local_cultural_property_zone": "지방문화재 보호구역",
+    "national_park": "국립공원",
+    "provincial_park": "도립공원",
+    "county_park": "군립공원",
+    "provincial_ecological_landscape_conservation_area": "도지정 생태경관보전지역",
+    "wildlife_protection_area": "야생생물보호구역",
+    "drinking_water_protection_area": "상수원보호구역",
+    "riparian_zone": "수변구역",
+    "wetland_protection_area": "습지보호구역",
+    "eco1_mgmt_area": "생태자연도 1등급",
+}
 
 
-def _prepare_feature(feature: dict[str, Any], capacity: int) -> dict[str, Any]:
-    props = feature.setdefault("properties", {})
-    effective_area = _feature_area(props)
-    lat, lng = _polygon_centroid(feature)
-
-    props["effective_area_m2"] = round(effective_area, 1)
-    props["centroid_lat"] = props.get("centroid_lat") or lat
-    props["centroid_lng"] = props.get("centroid_lng") or lng
-    props[f"panel_count_{capacity}w"] = max(2, int(effective_area * 0.5 / PANEL_AREA_M2[capacity]))
-    props["usage_name"] = props.get("usage_name") or "미상"
-    props["address"] = props.get("address") or "(주소 없음)"
-    props["floors_above"] = props.get("floors_above") or "-"
-    return feature
+# ----------------------------- Streamlit 설정 -----------------------------
+st.set_page_config(page_title="솔라메이트 MVP 검증", layout="wide")
+st.title("솔라메이트 — climate.gg 8단계 옥상 파이프라인 검증")
+st.caption(
+    "좌표 1점 → selectBuld + WFS + selectSunList + selectBuldInfo + pv/analysis 라이브 호출. "
+    "셀별 음영을 지도 위에 히트맵으로 표시합니다."
+)
 
 
-@st.cache_data
-def load_index() -> list[dict[str, Any]]:
-    with open(INDEX_FP, "r", encoding="utf-8") as file:
-        return _index_rows(json.load(file))
-
-
-@st.cache_data
-def load_admdong_geojson(filename: str) -> dict[str, Any]:
-    with open(DATA_DIR / filename, "r", encoding="utf-8") as file:
-        return json.load(file)
-
-
+# ----------------------------- 캐시된 호출 -----------------------------
 @st.cache_data(show_spinner=False)
-def call_pv_api(lat: float, lng: float, shading: float, angle: int, capacity: int, count: int, panel_type: int = 1) -> dict[str, Any]:
-    payload = {
-        "latitude": lat,
-        "longitude": lng,
-        "shading_index_average": shading,
-        "solar_panel_angle": angle,
-        "solar_panel_info": {
-            "panel_capacity": capacity,
-            "panel_count": count,
-            "panel_type": panel_type,
-        },
+def cached_run_pipeline(
+    lon: float,
+    lat: float,
+    panel_capacity_w: int,
+    panel_type: int,
+    cells_per_panel: int,
+    angle: str,
+    skip_rule_check: bool,
+) -> dict[str, Any]:
+    """캐시 가능한 dict 형태로 결과 반환 (PipelineResult 는 dataclass 라 캐시에 부적합)."""
+    res: PipelineResult = run_pipeline(
+        lon=lon,
+        lat=lat,
+        panel_capacity_w=panel_capacity_w,
+        panel_type=panel_type,
+        cells_per_panel=cells_per_panel,
+        angle=angle,
+        skip_rule_check=skip_rule_check,
+    )
+    bundle = result_to_bundle(res)
+    return {
+        "bundle": bundle,
+        "panels_geojson": res.panels_geojson,
+        "errors": res.errors,
+        "cells_total": len(res.cells),
+        "shading_per_cell": {str(k): v for k, v in res.shading.items()},
     }
-    response = httpx.post(
-        PV_API,
-        json=payload,
-        headers={
-            "Content-Type": "application/json; charset=UTF-8",
-            "User-Agent": "solarmate-mvp/0.1",
-        },
-        timeout=15.0,
-    )
-    response.raise_for_status()
-    return response.json()
 
 
-st.set_page_config(page_title="솔라메이트 - 화성 MVP", layout="wide")
-st.title("솔라메이트 - 화성 옥상 PV MVP")
-st.caption("정제된 화성 GIS 건물정보로 경기기후플랫폼 시뮬레이션 API를 검증합니다.")
-
-if not INDEX_FP.exists():
-    st.error(f"index.json을 찾을 수 없습니다: {INDEX_FP}")
-    st.stop()
-
-idx_df = pd.DataFrame(load_index()).sort_values("feature_count", ascending=False)
-
+# ----------------------------- 사이드바 -----------------------------
 with st.sidebar:
-    st.header("시뮬레이션 옵션")
-    capacity = st.radio("패널 사양", [500, 640], format_func=lambda value: f"{value}W", horizontal=True)
-    angle = st.radio("경사각", [30, 35], format_func=lambda value: f"{value}°", horizontal=True)
-    shading = st.slider("음영지수", 1.0, 5.0, 3.5, 0.1)
-    util = st.slider("옥상 활용계수", 0.2, 0.8, 0.5, 0.05)
+    st.header("입력")
+
+    preset = st.selectbox("좌표 프리셋", list(PRESET_LOCATIONS.keys()))
+    default_lon, default_lat = PRESET_LOCATIONS[preset]
+
+    col_lon, col_lat = st.columns(2)
+    input_lon = col_lon.number_input("경도 (lon)", value=float(default_lon), format="%.7f")
+    input_lat = col_lat.number_input("위도 (lat)", value=float(default_lat), format="%.7f")
+
+    st.caption("지도를 직접 클릭하면 좌표가 자동 갱신됩니다.")
+
     st.divider()
-    st.subheader("행정동 선택")
-    admdong = st.selectbox(
-        "동",
-        idx_df["admdong_name"].tolist(),
-        format_func=lambda name: f"{name} ({idx_df.loc[idx_df.admdong_name == name, 'feature_count'].iloc[0]:,}건)",
-    )
-    max_features = st.slider("최대 표시 건물 수", 50, 1500, 400, 50, help="많이 그리면 지도가 무거워집니다.")
-    show_area_label = st.checkbox("툴팁에 면적 표시", value=True)
+    st.header("패널 옵션")
+    panel_capacity_w = st.radio("패널 사양 (W)", [500, 640], index=1, horizontal=True)
+    panel_angle = st.radio("패널 경사각 (°)", ["30", "35"], index=1, horizontal=True)
+    panel_type = st.radio("패널 타입 코드", [1, 2], index=0, horizontal=True, help="climate.gg API panel_type 코드 (1 추정 표준)")
+    cells_per_panel = st.slider("1 패널 당 셀 개수", 1, 4, 2, help="climate.gg 셀 1m×3.5m, 실패널 1.1m×1.8m 기준 잠정 가정")
 
-row = idx_df.loc[idx_df.admdong_name == admdong].iloc[0]
-geojson = load_admdong_geojson(row["file"])
-bbox = row["bbox"]
-center = [(bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2]
+    st.divider()
+    skip_rules = st.checkbox("규제 매칭 호출 스킵 (MVP)", value=True)
+    auto_run = st.checkbox("좌표 변경 시 자동 호출", value=True)
 
-features = sorted(
-    (_prepare_feature(feature, capacity) for feature in geojson["features"]),
-    key=lambda feature: -float(feature["properties"]["effective_area_m2"]),
-)[:max_features]
-
-map_obj = folium.Map(location=center, zoom_start=15, tiles="CartoDB Positron")
+    run_button = st.button("파이프라인 실행", type="primary", use_container_width=True)
 
 
-def style_fn(_: Any) -> dict[str, Any]:
-    return {"color": "#1f77b4", "weight": 1, "fillColor": "#1f77b4", "fillOpacity": 0.3}
+# ----------------------------- 클릭 좌표 상태 관리 -----------------------------
+if "click_lon" not in st.session_state:
+    st.session_state["click_lon"] = input_lon
+    st.session_state["click_lat"] = input_lat
+
+# 수동 입력 변경 시 동기화
+if input_lon != st.session_state["click_lon"] or input_lat != st.session_state["click_lat"]:
+    st.session_state["click_lon"] = input_lon
+    st.session_state["click_lat"] = input_lat
+
+lon = float(st.session_state["click_lon"])
+lat = float(st.session_state["click_lat"])
 
 
-def highlight_fn(_: Any) -> dict[str, Any]:
-    return {"color": "#d62728", "weight": 2, "fillColor": "#d62728", "fillOpacity": 0.5}
+# ----------------------------- 파이프라인 호출 -----------------------------
+should_run = run_button or auto_run
+result: dict[str, Any] | None = None
 
+if should_run:
+    with st.spinner(f"climate.gg API 호출 중 ({lon:.6f}, {lat:.6f})..."):
+        result = cached_run_pipeline(
+            lon=lon,
+            lat=lat,
+            panel_capacity_w=int(panel_capacity_w),
+            panel_type=int(panel_type),
+            cells_per_panel=int(cells_per_panel),
+            angle=str(panel_angle),
+            skip_rule_check=bool(skip_rules),
+        )
 
-fields = ["bld_id", "address", "usage_name", "effective_area_m2", f"panel_count_{capacity}w", "floors_above"]
-aliases = ["ID", "주소", "용도", "면적(㎡)", f"추정패널수({capacity}W)", "지상층"]
-
-folium.GeoJson(
-    {"type": "FeatureCollection", "features": features},
-    name="buildings",
-    style_function=style_fn,
-    highlight_function=highlight_fn,
-    tooltip=folium.GeoJsonTooltip(fields=fields, aliases=aliases, localize=True) if show_area_label else None,
-    popup=folium.GeoJsonPopup(fields=fields, aliases=aliases, localize=True, max_width=400),
+# ----------------------------- 지도 빌드 -----------------------------
+map_obj = folium.Map(location=[lat, lon], zoom_start=18, tiles="CartoDB Positron")
+folium.TileLayer(
+    tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    attr="Esri",
+    name="위성영상",
+    overlay=False,
+    control=True,
 ).add_to(map_obj)
 
-col_map, col_result = st.columns([3, 2])
+# 클릭 마커
+folium.Marker(
+    [lat, lon],
+    icon=folium.Icon(color="red", icon="crosshairs", prefix="fa"),
+    tooltip=f"입력 좌표 ({lon:.5f}, {lat:.5f})",
+).add_to(map_obj)
+
+if result and result["bundle"].get("roof_polygon_4326"):
+    bundle = result["bundle"]
+
+    # 옥상 polygon 외곽선
+    folium.GeoJson(
+        {
+            "type": "Feature",
+            "geometry": bundle["roof_polygon_4326"],
+            "properties": {},
+        },
+        name="옥상 polygon (selectBuld)",
+        style_function=lambda _: {"color": "#d62728", "weight": 3, "fill": False},
+    ).add_to(map_obj)
+
+    # 셀 음영 히트맵
+    panels_geojson = result["panels_geojson"]
+    if panels_geojson and panels_geojson.get("features"):
+        scores = [f["properties"]["shading_score"] for f in panels_geojson["features"]]
+        s_min, s_max = (min(scores), max(scores)) if scores else (0, 1)
+        if s_max - s_min < 1e-6:
+            s_max = s_min + 1
+        colormap = cm.LinearColormap(
+            colors=["#440154", "#3b528b", "#21918c", "#5ec962", "#fde725"],
+            vmin=s_min, vmax=s_max,
+            caption="셀별 음영점수 (높을수록 일조 양호)",
+        )
+        for feature in panels_geojson["features"]:
+            score = feature["properties"]["shading_score"]
+            folium.GeoJson(
+                feature,
+                style_function=lambda _f, s=score: {
+                    "fillColor": colormap(s),
+                    "color": colormap(s),
+                    "weight": 0.5,
+                    "fillOpacity": 0.85,
+                },
+                tooltip=f"cell {feature['properties']['cell_id']} · score {score:.3f}",
+            ).add_to(map_obj)
+        colormap.add_to(map_obj)
+
+folium.LayerControl(collapsed=False).add_to(map_obj)
+
+
+# ----------------------------- 레이아웃 -----------------------------
+col_map, col_side = st.columns([3, 2])
+
 with col_map:
-    st.markdown(f"**{admdong}** - 표시 {len(features):,} / 전체 {row['feature_count']:,}건 (면적 큰 순)")
-    map_state = st_folium(map_obj, height=620, width=None, returned_objects=["last_object_clicked", "last_active_drawing"])
+    st.subheader("지도")
+    map_state = st_folium(
+        map_obj,
+        height=620,
+        width=None,
+        returned_objects=["last_clicked"],
+        key="mainmap",
+    )
 
-with col_result:
-    st.subheader("시뮬레이션 결과")
-    clicked = map_state.get("last_active_drawing") or map_state.get("last_object_clicked")
-    props = clicked.get("properties") if isinstance(clicked, dict) else None
+    clicked = map_state.get("last_clicked") if isinstance(map_state, dict) else None
+    if clicked and isinstance(clicked, dict):
+        new_lat = float(clicked.get("lat"))
+        new_lon = float(clicked.get("lng"))
+        if abs(new_lon - st.session_state["click_lon"]) > 1e-7 or abs(new_lat - st.session_state["click_lat"]) > 1e-7:
+            st.session_state["click_lon"] = new_lon
+            st.session_state["click_lat"] = new_lat
+            st.rerun()
 
-    if props:
-        eff_area = float(props.get("effective_area_m2") or 0)
-        panel_count = max(2, int(eff_area * util / PANEL_AREA_M2[capacity]))
-        lat = props.get("centroid_lat")
-        lng = props.get("centroid_lng")
+with col_side:
+    st.subheader("8단계 결과 요약")
 
-        st.markdown(f"**주소** {props.get('address') or '(미상)'}")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("면적", f"{eff_area:,.0f} ㎡")
-        c2.metric("용도", props.get("usage_name") or "미상")
-        c3.metric("지상층", str(props.get("floors_above") or "-"))
-
-        if lat is None or lng is None:
-            st.error("중심 좌표를 계산할 수 없습니다.")
-        else:
-            try:
-                with st.spinner("시뮬레이션 호출 중..."):
-                    response_payload = call_pv_api(float(lat), float(lng), shading, angle, capacity, panel_count)
-                data = response_payload["data"]
-                expected_revenue = data["expected_revenue"]
-                environmental = data["environmental_contribution"]
-
-                st.success(f"API 응답 OK · 패널 {panel_count}장 ({expected_revenue['install_kw']} kW)")
-                m1, m2, m3 = st.columns(3)
-                m1.metric("연간 발전량", f"{data['annual_generation']:,.0f} kWh")
-                m2.metric("1년차 수익", f"{expected_revenue['first_year_revenue']:,} 원")
-                m3.metric("1년차 절감", f"{expected_revenue['first_year_save_cost']:,} 원")
-                m4, m5, m6 = st.columns(3)
-                m4.metric("설치비", f"{expected_revenue['expected_investment']:,} 원")
-                m5.metric("CO2 저감", f"{environmental['carbon_reduction']:,} kg/년")
-                m6.metric("소나무 환산", f"{environmental['pine_tree_effect']:,} 그루")
-
-                revenue = pd.DataFrame(data["annual_revenue"]).rename(columns={"revenue": "수익(원)"})
-                saving = pd.DataFrame(data["annual_saveCost"]).rename(columns={"saveCost": "절감(원)"})
-                monthly = pd.DataFrame(data["monthly_generation"]).rename(columns={"generation": "발전량(kWh)"})
-
-                tab1, tab2, tab3, tab4 = st.tabs(["연차별 수익", "연차별 절감", "월별 발전량", "원본 JSON"])
-                tab1.line_chart(revenue.set_index("year"))
-                tab2.line_chart(saving.set_index("year"))
-                tab3.bar_chart(monthly.set_index("month"))
-                tab4.json(response_payload)
-
-                cumulative_revenue = revenue["수익(원)"].cumsum()
-                payback = next(
-                    (int(year) for year, value in zip(revenue["year"], cumulative_revenue) if value >= expected_revenue["expected_investment"]),
-                    None,
-                )
-                cumulative_10_year = saving["절감(원)"].head(10).sum()
-                cumulative_20_year = saving["절감(원)"].sum()
-                st.info(
-                    f"파생값 · 회수기간 **{payback}년** · 10년 누적절감 **{cumulative_10_year:,.0f}원** · "
-                    f"20년 누적절감 **{cumulative_20_year:,.0f}원**"
-                )
-            except Exception as exc:  # noqa: BLE001 - Streamlit should surface external API failures.
-                st.error(f"API 호출 실패: {exc}")
+    if not result:
+        st.info("좌측 사이드바에서 좌표 입력 후 '파이프라인 실행' 또는 지도 클릭.")
     else:
-        st.info("지도에서 건물 폴리곤을 클릭하세요.")
+        bundle = result["bundle"]
+        errs = result["errors"]
+        meta = bundle["meta"]
+        shading = bundle["shading"]
+        pv_out = bundle.get("pv_analysis_output") or {}
 
-with st.expander("현재 표시 데이터셋 메타"):
-    st.write(f"- 동: **{admdong}** / 건물 {row['feature_count']:,}건")
-    st.write(f"- 표시 한도: {max_features} (면적 큰 순)")
-    st.write(f"- 옵션 적용: 패널 {capacity}W / 경사 {angle}° / 활용계수 {util} / 음영 {shading}")
-    st.write(f"- 패널면적: {PANEL_AREA_M2[capacity]:.3f} ㎡/장")
+        if errs:
+            for err in errs:
+                st.error(err)
+
+        # 단계별 상태 칩
+        steps = [
+            ("1 selectBuld", bool(bundle.get("roof_polygon_4326")), f"면적 {bundle['roof_area_sqm_5186']:.0f}㎡"),
+            ("2 WFS 메타", bool(meta.get("unq_id")), meta.get("bldg_nm") or "-"),
+            ("3 셀 격자", shading["cells_total"] > 0, f"{shading['cells_total']}장"),
+            ("4 selectSunList", shading["cells_with_score"] > 0, f"평균 {shading['score_mean']:.2f}" if shading.get("score_mean") is not None else "-"),
+            ("5 selectBuldInfo", len(bundle["usage_monthly"]["electricity_kwh"]) > 0, f"{len(bundle['usage_monthly']['electricity_kwh'])}개월"),
+            ("6 selectRuleList", not skip_rules, "양성 " + str(len(bundle["regulation_hits"])) if not skip_rules else "스킵"),
+            ("7 pv/analysis", bool(pv_out), f"{pv_out.get('annual_generation', 0):,.0f}kWh/년" if pv_out else "-"),
+        ]
+        df_steps = pd.DataFrame(
+            [{"단계": s, "상태": "✅" if ok else "✖", "비고": note} for s, ok, note in steps]
+        )
+        st.dataframe(df_steps, hide_index=True, use_container_width=True)
+
+
+# ----------------------------- 상세 탭 -----------------------------
+if result:
+    bundle = result["bundle"]
+    meta = bundle["meta"]
+    pv_out = bundle.get("pv_analysis_output") or {}
+    pv_in = bundle.get("pv_analysis_input") or {}
+
+    tab_meta, tab_shading, tab_usage, tab_rules, tab_pv, tab_raw = st.tabs(
+        ["건물 메타 (WFS)", "셀 음영 (selectSunList)", "사용량 (selectBuldInfo)", "규제 (selectRuleList)", "발전·경제성 (pv/analysis)", "Raw JSON"]
+    )
+
+    with tab_meta:
+        cols = st.columns(4)
+        cols[0].metric("건물명", meta.get("bldg_nm") or "-")
+        cols[1].metric("층수", f"{meta.get('bldg_nofl') or '-'}")
+        cols[2].metric("높이", f"{meta.get('bldg_hgt') or '-'} m")
+        cols[3].metric("건축면적", f"{meta.get('bdar') or 0:,} ㎡")
+        st.write({
+            "unq_id": meta.get("unq_id"),
+            "용도코드": meta.get("bldg_usg_cd"),
+            "시군코드": meta.get("sigun_cd"),
+            "사용승인일": meta.get("use_aprv_ymd"),
+            "옥상 polygon 면적 (5186 계산)": f"{bundle['roof_area_sqm_5186']} ㎡",
+        })
+
+    with tab_shading:
+        shading = bundle["shading"]
+        cols = st.columns(4)
+        cols[0].metric("총 셀", shading["cells_total"])
+        cols[1].metric("음영 반환", shading["cells_with_score"])
+        cols[2].metric("평균 score", f"{shading['score_mean']:.3f}" if shading.get("score_mean") is not None else "-")
+        cols[3].metric("범위", f"{shading['score_min']:.2f} ~ {shading['score_max']:.2f}" if shading.get("score_min") is not None else "-")
+        st.caption(f"셀 크기: {shading['cell_w_m']}m × {shading['cell_h_m']}m (EPSG:5186)")
+
+        if result.get("shading_per_cell"):
+            sc_df = pd.DataFrame(
+                [{"cell_id": int(k), "shading_score": v} for k, v in result["shading_per_cell"].items()]
+            ).sort_values("cell_id")
+            st.bar_chart(sc_df.set_index("cell_id"))
+
+    with tab_usage:
+        u = bundle["usage_monthly"]
+        if not u["electricity_kwh"]:
+            st.warning("이 건물은 selectBuldInfo 사용량 미수집 (unq_id 결손 또는 비대상 건물)")
+        else:
+            df_u = pd.DataFrame({
+                "월": u["labels"],
+                "전력 (kWh)": u["electricity_kwh"],
+                "가스 (m³)": u["gas_m3"],
+            })
+            cols = st.columns(3)
+            cols[0].metric("평균 전력", f"{sum(u['electricity_kwh']) / len(u['electricity_kwh']):,.0f} kWh/월")
+            cols[1].metric("평균 가스", f"{sum(u['gas_m3']) / len(u['gas_m3']):,.0f} m³/월")
+            cols[2].metric("측정 개월", f"{len(u['electricity_kwh'])}")
+            st.dataframe(df_u, hide_index=True, use_container_width=True)
+            st.line_chart(df_u.set_index("월")[["전력 (kWh)"]])
+            st.line_chart(df_u.set_index("월")[["가스 (m³)"]])
+
+    with tab_rules:
+        if skip_rules:
+            st.info("규제 매칭 호출이 스킵되었습니다 (사이드바 옵션).")
+        else:
+            hits = bundle["regulation_hits"]
+            if not hits:
+                st.success("19종 규제 모두 무관 (cnt=0). 설치 검토에 추가 제약 없음.")
+            else:
+                st.warning(f"{len(hits)}개 규제 매칭")
+                for layer, cnt in hits:
+                    st.write(f"- **{REGULATION_LABELS.get(layer, layer)}** ({layer}) · cnt={cnt}")
+
+    with tab_pv:
+        if not pv_out:
+            st.info("pv/analysis 응답이 비어 있습니다.")
+        else:
+            er = pv_out["expected_revenue"]
+            env = pv_out["environmental_contribution"]
+            cols = st.columns(4)
+            cols[0].metric("설치 용량", f"{er['install_kw']} kW")
+            cols[1].metric("연간 발전", f"{pv_out['annual_generation']:,.0f} kWh")
+            cols[2].metric("1년차 수익", f"{er['first_year_revenue']:,} 원")
+            cols[3].metric("1년차 절감", f"{er['first_year_save_cost']:,} 원")
+            cols = st.columns(4)
+            cols[0].metric("설치비", f"{er['expected_investment']:,} 원")
+            cols[1].metric("CO₂ 저감", f"{env['carbon_reduction']:,} kg/년")
+            cols[2].metric("소나무 환산", f"{env['pine_tree_effect']:,} 그루")
+            payback = er["expected_investment"] / max(1, er["first_year_save_cost"])
+            cols[3].metric("회수기간(추정)", f"{payback:.1f} 년")
+
+            st.caption(f"입력 요약: shading_avg={pv_in.get('shading_index_average', 0):.3f}, "
+                       f"panel_count={pv_in.get('solar_panel_info', {}).get('panel_count')}, "
+                       f"panel_capacity={pv_in.get('solar_panel_info', {}).get('panel_capacity')}W")
+
+            monthly = pd.DataFrame(pv_out.get("monthly_generation", [])).rename(columns={"generation": "발전량(kWh)"})
+            if not monthly.empty:
+                st.bar_chart(monthly.set_index("month"))
+            annual_rev = pd.DataFrame(pv_out.get("annual_revenue", [])).rename(columns={"revenue": "수익(원)"})
+            annual_save = pd.DataFrame(pv_out.get("annual_saveCost", [])).rename(columns={"saveCost": "절감(원)"})
+            if not annual_rev.empty:
+                merged = annual_rev.set_index("year").join(annual_save.set_index("year"), how="outer")
+                st.line_chart(merged)
+
+    with tab_raw:
+        st.download_button(
+            "bundle.json 다운로드",
+            data=json.dumps(bundle, ensure_ascii=False, indent=2).encode("utf-8"),
+            file_name=f"bundle_{meta.get('unq_id') or 'unknown'}.json",
+            mime="application/json",
+        )
+        st.download_button(
+            "panels_4326.geojson 다운로드",
+            data=json.dumps(result["panels_geojson"], ensure_ascii=False).encode("utf-8"),
+            file_name=f"panels_{meta.get('unq_id') or 'unknown'}.geojson",
+            mime="application/geo+json",
+        )
+        st.json(bundle, expanded=False)

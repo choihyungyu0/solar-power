@@ -27,9 +27,9 @@ venv/
 *.log
 /data/raw/*
 !/data/raw/.gitkeep
-/data/processed/*
 !/data/processed/.gitkeep
 
 # Generated
 coverage/
 htmlcov/
+.vercel

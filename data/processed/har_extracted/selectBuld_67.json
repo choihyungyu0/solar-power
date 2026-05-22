@@ -1,0 +1,57 @@
+{
+  "index": 67,
+  "method": "POST",
+  "url": "https://climate.gg.go.kr/gcs/book/cmm/selectBuld.do",
+  "queryString": [],
+  "request_headers": {
+    "Accept": "application/json, text/javascript, */*; q=0.01",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "Content-Length": "51",
+    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "Host": "climate.gg.go.kr",
+    "Origin": "https://climate.gg.go.kr",
+    "Pragma": "no-cache",
+    "Referer": "https://climate.gg.go.kr/gcs/book/cmm/selectPanelMain.do?lang=kor",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-origin",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+    "X-Requested-With": "XMLHttpRequest",
+    "sec-ch-ua": "\"Chromium\";v=\"148\", \"Google Chrome\";v=\"148\", \"Not/A)Brand\";v=\"99\"",
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": "\"Windows\""
+  },
+  "request_postData": {
+    "mimeType": "application/x-www-form-urlencoded; charset=UTF-8",
+    "text": "x=202420.74599778836&y=518668.0851109524&type=PANEL",
+    "params": [
+      {
+        "name": "x",
+        "value": "202420.74599778836"
+      },
+      {
+        "name": "y",
+        "value": "518668.0851109524"
+      },
+      {
+        "name": "type",
+        "value": "PANEL"
+      }
+    ]
+  },
+  "response_status": 200,
+  "response_headers": {
+    "Cache-Control": "no-store",
+    "Content-Language": "ko-KR",
+    "Content-Type": "text/html;charset=UTF-8",
+    "Date": "Thu, 21 May 2026 13:24:04 GMT",
+    "Server": "nginx",
+    "Transfer-Encoding": "chunked"
+  },
+  "response_mimeType": "text/html",
+  "response_size": 13,
+  "response_text": "{\"buld\":null}"
+}
