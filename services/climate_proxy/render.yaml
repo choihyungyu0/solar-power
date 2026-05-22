@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: solarmate-climate-proxy
+    runtime: python
+    rootDir: services/climate_proxy
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        value: "https://solarmate.vercel.app,http://localhost:5173,http://localhost:3000"
+      - key: CLIMATE_GG_RATE_LIMIT
+        value: "5"
