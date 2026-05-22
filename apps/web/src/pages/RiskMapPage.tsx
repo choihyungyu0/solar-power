@@ -1091,6 +1091,12 @@ function RiskMapPage() {
     return;
   }, [applyBuildingFootprintSelection, buildingPolygonSource, selectedBuildingFootprint, shouldSkipDuplicateSelection]);
 
+  const handleMapSelectionRef = useRef(handleMapSelection);
+
+  useEffect(() => {
+    handleMapSelectionRef.current = handleMapSelection;
+  }, [handleMapSelection]);
+
   const handlePvAnalysisRequest = useCallback(async () => {
     if (!selectedCoordinate || selectionMode !== 'building_footprint') {
       setPvAnalysisStatus('error');
@@ -1350,7 +1356,9 @@ function RiskMapPage() {
 
         controller = initVWorld3DMap({
           mapId: MAP_CONTAINER_ID,
-          onSelect: handleMapSelection,
+          onSelect: (selection) => {
+            void handleMapSelectionRef.current(selection);
+          },
         });
         vworldMapRef.current = controller.map;
         setVworldMap(controller.map);
@@ -1373,7 +1381,7 @@ function RiskMapPage() {
       setVworldMap(null);
       controller?.dispose();
     };
-  }, [handleMapSelection]);
+  }, []);
 
   return (
     <main className="riskMapPage">
