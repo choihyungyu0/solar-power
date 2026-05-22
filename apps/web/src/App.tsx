@@ -3,6 +3,7 @@ import SafeLocalImage from './components/SafeLocalImage';
 import SolarFeedSection from './components/SolarFeedSection';
 import ServiceIntroSection from './components/ServiceIntroSection';
 import RiskMapPage from './pages/RiskMapPage';
+import SimulationSetupPage from './pages/SimulationSetupPage';
 
 const heroMetrics = [
   {
@@ -52,6 +53,7 @@ const featureCards = [
 function App() {
   const pathname = window.location.pathname.replace(/\/$/, '') || '/';
   const isRiskMapPage = pathname === '/risk-map';
+  const isSimulationSetupPage = pathname === '/simulation/setup';
 
   useEffect(() => {
     if (!window.location.hash) {
@@ -67,6 +69,10 @@ function App() {
     return <RiskMapPage />;
   }
 
+  if (isSimulationSetupPage) {
+    return <SimulationSetupPage />;
+  }
+
   return (
     <main className="pageShell">
       <div className="siteFrame">
@@ -80,7 +86,7 @@ function App() {
           </a>
 
           <nav className="desktopNav" aria-label="주요 메뉴">
-            <a href="/risk-map">태양광 도입</a>
+            <a href="/simulation/setup">우리 아파트 가상설치</a>
             <a href="#service-intro">서비스 소개</a>
             <a href="#solar-feed">공지사항</a>
             <a href="#contact">고객센터</a>
@@ -90,8 +96,8 @@ function App() {
             <button className="loginButton" type="button">
               로그인
             </button>
-            <a className="primaryButton headerCta" href="/risk-map">
-              주소 입력하기
+            <a className="primaryButton headerCta" href="/simulation/setup">
+              우리 아파트 가능성 확인하기
             </a>
           </div>
         </header>
@@ -112,7 +118,7 @@ function App() {
               전기사용량, 정책 데이터 기준의 예상값입니다.
             </p>
             <div className="heroActions">
-              <a className="primaryButton" href="/risk-map">
+              <a className="primaryButton" href="/simulation/setup">
                 주소 입력하기
               </a>
               <a className="secondaryButton" href="#service-intro-status">
@@ -171,7 +177,7 @@ function App() {
               현재 화면은 MVP 서비스 흐름을 보여주는 프론트엔드 예시입니다.
             </p>
           </div>
-          <a className="primaryButton" href="#service-intro">
+          <a className="primaryButton" href="/simulation/setup">
             우리 아파트 태양광 설치하기
           </a>
         </section>
