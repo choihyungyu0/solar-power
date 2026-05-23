@@ -2220,7 +2220,7 @@ function RiskMapPage() {
         </nav>
 
         <div className="headerActions">
-          <button className="loginButton" type="button">
+          <button className="loginButton" type="button" onClick={() => window.location.assign('/member/dashboard')}>
             로그인
           </button>
           <a className="primaryButton headerCta" href="/risk-map">

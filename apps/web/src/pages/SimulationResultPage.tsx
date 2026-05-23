@@ -322,7 +322,7 @@ function ResultHeader() {
       </nav>
 
       <div className="resultHeaderActions">
-        <button className="resultLoginButton" type="button">
+        <button className="resultLoginButton" type="button" onClick={() => window.location.assign('/member/dashboard')}>
           로그인
         </button>
         <a className="resultHeaderCta" href="/simulation/setup">

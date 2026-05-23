@@ -124,7 +124,11 @@ function CompletionHeader() {
         <a href="/">회사소개</a>
       </nav>
 
-      <button className="consultation-complete-login-button" type="button">
+      <button
+        className="consultation-complete-login-button"
+        type="button"
+        onClick={() => window.location.assign('/member/dashboard')}
+      >
         <LuUserRound aria-hidden="true" />
         로그인
       </button>

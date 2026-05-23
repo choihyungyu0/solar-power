@@ -70,7 +70,11 @@ function SolarAdoptionHeader() {
         <a href="/#contact">고객센터</a>
       </nav>
 
-      <button className="solar-adoption-login-button" type="button">
+      <button
+        className="solar-adoption-login-button"
+        type="button"
+        onClick={() => window.location.assign('/member/dashboard')}
+      >
         <LuUserRound aria-hidden="true" />
         로그인
       </button>

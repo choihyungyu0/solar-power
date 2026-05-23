@@ -279,7 +279,11 @@ function ConsultationHeader() {
         <a href="/">회사소개</a>
       </nav>
 
-      <button className="consultation-login-button" type="button">
+      <button
+        className="consultation-login-button"
+        type="button"
+        onClick={() => window.location.assign('/member/dashboard')}
+      >
         <LuUserRound aria-hidden="true" />
         로그인
       </button>

@@ -4,6 +4,7 @@ import SolarFeedSection from './components/SolarFeedSection';
 import ServiceIntroSection from './components/ServiceIntroSection';
 import ConsultationCompletePage from './pages/ConsultationCompletePage';
 import ConsultationPage from './pages/ConsultationPage';
+import MemberDashboardPage from './pages/MemberDashboardPage';
 import NoticePage from './pages/NoticePage';
 import RiskMapPage from './pages/RiskMapPage';
 import SolarAdoptionPage from './pages/SolarAdoptionPage';
@@ -64,6 +65,7 @@ function App() {
   const isConsultationCompletePage = pathname === '/consultation/complete';
   const isSolarAdoptionPage = pathname === '/solar-adoption';
   const isNoticePage = pathname === '/notice';
+  const isMemberDashboardPage = pathname === '/member/dashboard';
 
   useEffect(() => {
     if (!window.location.hash) {
@@ -103,6 +105,14 @@ function App() {
     return <NoticePage />;
   }
 
+  if (isMemberDashboardPage) {
+    return <MemberDashboardPage />;
+  }
+
+  const goMemberDashboard = () => {
+    window.location.assign('/member/dashboard');
+  };
+
   return (
     <main className="pageShell">
       <div className="siteFrame">
@@ -123,7 +133,7 @@ function App() {
           </nav>
 
           <div className="headerActions">
-            <button className="loginButton" type="button">
+            <button className="loginButton" type="button" onClick={goMemberDashboard}>
               로그인
             </button>
             <a className="primaryButton headerCta" href="/simulation/setup">
