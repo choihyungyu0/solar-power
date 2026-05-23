@@ -75,8 +75,14 @@ export async function runClimateRooftopAnalysis(
   return {
     ok: false,
     source: 'climate.gg-live-hybrid',
+    selectedBuildingId: input.selectedBuildingId ?? null,
+    selectedAnalysisSessionId: input.selectedAnalysisSessionId ?? null,
     message: 'climate.gg 라이브 분석 프록시 응답을 받지 못했습니다.',
     fallbackRecommended: true,
-    diagnostics: {},
+    diagnostics: {
+      requestSelectedBuildingId: input.selectedBuildingId ?? null,
+      requestSessionId: input.selectedAnalysisSessionId ?? null,
+      ignoredStaleLiveResponse: false,
+    },
   };
 }

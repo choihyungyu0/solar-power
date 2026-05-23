@@ -105,13 +105,19 @@ export type ClimateSelectedBuildingFeature = {
 };
 
 export type ClimateLiveRoofSource = 'climate.gg-selectBuld' | 'vworld-building-footprint-fallback';
-export type ClimateLiveSelectBuldStatus = 'success' | 'timeout' | 'not_found' | 'skipped';
+export type ClimateLiveSelectBuldStatus =
+  | 'success'
+  | 'timeout'
+  | 'not_found'
+  | 'skipped'
+  | 'mismatch_selected_building';
 export type ClimateLiveApiSource = 'climate.gg-live-hybrid';
 
 export type ClimateLiveAnalysisRequest = {
   longitude: number;
   latitude: number;
   selectedBuildingId?: string;
+  selectedAnalysisSessionId?: string;
   selectedBuildingFeature?: ClimateSelectedBuildingFeature;
   panelCapacityW?: 500 | 640;
   panelAngle?: 30 | 35;
@@ -122,6 +128,10 @@ export type ClimateLiveAnalysisRequest = {
 export type ClimateLiveAnalysisDiagnostics = {
   inputWgs84?: { longitude: number; latitude: number };
   input5186?: { x: number; y: number };
+  requestSelectedBuildingId?: string | null;
+  requestSessionId?: string | null;
+  selectedFeatureBuildingId?: string | null;
+  ignoredStaleLiveResponse?: boolean;
   roofAreaM2?: number;
   cellCount?: number;
   shadingCellCount?: number;
@@ -129,6 +139,10 @@ export type ClimateLiveAnalysisDiagnostics = {
   panelCount?: number;
   roofSource?: ClimateLiveRoofSource;
   selectBuldStatus?: ClimateLiveSelectBuldStatus;
+  selectBuldRoofMatchesSelectedBuilding?: boolean | null;
+  selectBuldCentroidInsideSelectedBuilding?: boolean;
+  selectBuldCentroidDistanceToSelectedBuildingM?: number | null;
+  selectBuldCentroidWgs84?: { longitude: number; latitude: number } | null;
   liveHybridMode?: boolean;
   maxCellsApplied?: boolean;
   apiTimingsMs?: Record<string, number>;
@@ -153,6 +167,9 @@ export type ClimateLiveAnalysisDiagnostics = {
 export type ClimateLiveAnalysisSuccessResponse = {
   ok: true;
   source: ClimateLiveApiSource;
+  selectedBuildingId?: string | null;
+  selectedAnalysisSessionId?: string | null;
+  selectedFeatureBuildingId?: string | null;
   roofSource: ClimateLiveRoofSource;
   bundle: ClimateBundle;
   panelsGeojson: ClimatePanelsGeoJson;
@@ -162,6 +179,9 @@ export type ClimateLiveAnalysisSuccessResponse = {
 export type ClimateLiveAnalysisFailureResponse = {
   ok: false;
   source: ClimateLiveApiSource;
+  selectedBuildingId?: string | null;
+  selectedAnalysisSessionId?: string | null;
+  selectedFeatureBuildingId?: string | null;
   roofSource?: ClimateLiveRoofSource;
   message: string;
   fallbackRecommended: true;

@@ -18,6 +18,7 @@ const DEFAULT_PANEL_CAPACITY_W = 640;
 const DEFAULT_PANEL_ANGLE = 35;
 const DEFAULT_PANEL_TYPE = 1;
 const DEFAULT_CELLS_PER_PANEL = 2;
+const SELECT_BULD_MATCH_DISTANCE_THRESHOLD_M = 15;
 
 const COMMON_HEADERS = {
   Accept: 'application/json, text/javascript, */*; q=0.01',
@@ -46,7 +47,7 @@ type Coordinate5186 = [number, number];
 type Coordinate4326 = [number, number];
 type Ring5186 = Coordinate5186[];
 type Ring4326 = Coordinate4326[];
-type SelectBuldStatus = 'success' | 'timeout' | 'not_found' | 'skipped';
+type SelectBuldStatus = 'success' | 'timeout' | 'not_found' | 'skipped' | 'mismatch_selected_building';
 
 type Cell = {
   id: number;
@@ -73,6 +74,10 @@ type SelectBuldDiagnostics = {
 type LiveDiagnostics = {
   inputWgs84: { longitude: number; latitude: number };
   input5186: { x: number; y: number };
+  requestSelectedBuildingId?: string | null;
+  requestSessionId?: string | null;
+  selectedFeatureBuildingId?: string | null;
+  ignoredStaleLiveResponse?: boolean;
   roofAreaM2: number;
   cellCount: number;
   shadingCellCount: number;
@@ -80,6 +85,10 @@ type LiveDiagnostics = {
   panelCount: number;
   roofSource: ClimateLiveRoofSource;
   selectBuldStatus: SelectBuldStatus;
+  selectBuldRoofMatchesSelectedBuilding?: boolean | null;
+  selectBuldCentroidInsideSelectedBuilding?: boolean;
+  selectBuldCentroidDistanceToSelectedBuildingM?: number | null;
+  selectBuldCentroidWgs84?: { longitude: number; latitude: number } | null;
   liveHybridMode: boolean;
   maxCellsApplied: boolean;
   apiTimingsMs: Record<string, number>;
@@ -138,6 +147,29 @@ function readNumber(value: unknown, fallback: number | null = null) {
 
 function readString(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function readFeatureBuildingId(feature: unknown) {
+  if (!isRecord(feature)) {
+    return null;
+  }
+
+  if (typeof feature.id === 'string' || typeof feature.id === 'number') {
+    return String(feature.id);
+  }
+
+  const properties = isRecord(feature.properties) ? feature.properties : null;
+  const candidateKeys = ['id', 'building_id', 'buildingId', 'bldg_id', 'BD_MGT_SN', 'pnu', 'PNU'];
+
+  for (const key of candidateKeys) {
+    const value = properties?.[key];
+
+    if (typeof value === 'string' || typeof value === 'number') {
+      return String(value);
+    }
+  }
+
+  return null;
 }
 
 function readPositiveInteger(value: unknown, fallback: number) {
@@ -264,6 +296,8 @@ function validateLiveHybridRequestBody(payload: unknown) {
   return {
     ...input,
     selectedBuildingId: readString(payload.selectedBuildingId) ?? 'selected-building',
+    selectedAnalysisSessionId: readString(payload.selectedAnalysisSessionId),
+    selectedFeatureBuildingId: readFeatureBuildingId(payload.selectedBuildingFeature),
     selectedBuildingFeature: payload.selectedBuildingFeature,
     selectedBuildingRing4326,
     selectedBuildingRing5186: convertRing4326To5186(selectedBuildingRing4326),
@@ -274,15 +308,34 @@ function createFailureResponse(
   message: string,
   diagnostics: Partial<LiveDiagnostics> & Record<string, unknown> = {},
   status = 200,
+  identity: {
+    selectedBuildingId?: string | null;
+    selectedAnalysisSessionId?: string | null;
+    selectedFeatureBuildingId?: string | null;
+  } = {},
 ) {
+  const responseDiagnostics = {
+    ...diagnostics,
+    requestSelectedBuildingId:
+      identity.selectedBuildingId ?? (diagnostics.requestSelectedBuildingId as string | null | undefined) ?? null,
+    requestSessionId:
+      identity.selectedAnalysisSessionId ?? (diagnostics.requestSessionId as string | null | undefined) ?? null,
+    selectedFeatureBuildingId:
+      identity.selectedFeatureBuildingId ?? (diagnostics.selectedFeatureBuildingId as string | null | undefined) ?? null,
+    ignoredStaleLiveResponse: false,
+  };
+
   return jsonResponse(
     {
       ok: false,
       source: 'climate.gg-live-hybrid',
       ...(diagnostics.roofSource ? { roofSource: diagnostics.roofSource as ClimateLiveRoofSource } : {}),
+      selectedBuildingId: responseDiagnostics.requestSelectedBuildingId,
+      selectedAnalysisSessionId: responseDiagnostics.requestSessionId,
+      selectedFeatureBuildingId: responseDiagnostics.selectedFeatureBuildingId,
       message,
       fallbackRecommended: true,
-      diagnostics,
+      diagnostics: responseDiagnostics,
     },
     status,
   );
@@ -670,6 +723,85 @@ function polygonAreaM2(ring: Ring5186) {
   return Math.abs(sum) / 2;
 }
 
+function polygonCentroid(ring: Ring5186): Coordinate5186 {
+  let twiceArea = 0;
+  let centroidX = 0;
+  let centroidY = 0;
+
+  for (let index = 0; index < ring.length; index += 1) {
+    const [x1, y1] = ring[index];
+    const [x2, y2] = ring[(index + 1) % ring.length];
+    const cross = x1 * y2 - x2 * y1;
+
+    twiceArea += cross;
+    centroidX += (x1 + x2) * cross;
+    centroidY += (y1 + y2) * cross;
+  }
+
+  if (Math.abs(twiceArea) < 1e-9) {
+    const sum = ring.reduce<Coordinate5186>(([xSum, ySum], [x, y]) => [xSum + x, ySum + y], [0, 0]);
+
+    return [sum[0] / Math.max(1, ring.length), sum[1] / Math.max(1, ring.length)];
+  }
+
+  return [centroidX / (3 * twiceArea), centroidY / (3 * twiceArea)];
+}
+
+function pointToSegmentDistanceM(point: Coordinate5186, segmentStart: Coordinate5186, segmentEnd: Coordinate5186) {
+  const [px, py] = point;
+  const [x1, y1] = segmentStart;
+  const [x2, y2] = segmentEnd;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const lengthSquared = dx * dx + dy * dy;
+
+  if (lengthSquared === 0) {
+    return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
+  }
+
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lengthSquared));
+  const closestX = x1 + t * dx;
+  const closestY = y1 + t * dy;
+
+  return Math.sqrt((px - closestX) ** 2 + (py - closestY) ** 2);
+}
+
+function pointDistanceToPolygonM(point: Coordinate5186, ring: Ring5186) {
+  if (ring.length < 2) {
+    return null;
+  }
+
+  let minimumDistance = Number.POSITIVE_INFINITY;
+
+  for (let index = 0; index < ring.length; index += 1) {
+    minimumDistance = Math.min(
+      minimumDistance,
+      pointToSegmentDistanceM(point, ring[index], ring[(index + 1) % ring.length]),
+    );
+  }
+
+  return Number.isFinite(minimumDistance) ? minimumDistance : null;
+}
+
+function getSelectBuldMatchStatus(selectBuldRing: Ring5186, selectedBuildingRing: Ring5186) {
+  const centroid = polygonCentroid(selectBuldRing);
+  const centroidInsideSelectedBuilding = isPointInPolygon(centroid, selectedBuildingRing);
+  const centroidDistanceToSelectedBuildingM = centroidInsideSelectedBuilding
+    ? 0
+    : pointDistanceToPolygonM(centroid, selectedBuildingRing);
+  const [longitude, latitude] = to4326(centroid[0], centroid[1]);
+
+  return {
+    matchesSelectedBuilding:
+      centroidInsideSelectedBuilding ||
+      (typeof centroidDistanceToSelectedBuildingM === 'number' &&
+        centroidDistanceToSelectedBuildingM <= SELECT_BULD_MATCH_DISTANCE_THRESHOLD_M),
+    centroidInsideSelectedBuilding,
+    centroidDistanceToSelectedBuildingM,
+    centroidWgs84: { longitude, latitude },
+  };
+}
+
 function isPointInPolygon(point: Coordinate5186, ring: Ring5186) {
   const [x, y] = point;
   let isInside = false;
@@ -1032,11 +1164,33 @@ export default async function handler(request: Request) {
   let selectBuldStatus: SelectBuldStatus = 'skipped';
   let roofSource: ClimateLiveRoofSource = 'vworld-building-footprint-fallback';
   let maxCellsApplied = false;
+  let requestIdentity: {
+    selectedBuildingId?: string | null;
+    selectedAnalysisSessionId?: string | null;
+    selectedFeatureBuildingId?: string | null;
+  } = {};
+  let selectBuldRoofMatchesSelectedBuilding: boolean | null = null;
+  let selectBuldCentroidInsideSelectedBuilding = false;
+  let selectBuldCentroidDistanceToSelectedBuildingM: number | null = null;
+  let selectBuldCentroidWgs84: { longitude: number; latitude: number } | null = null;
 
   try {
-    const input = validateLiveHybridRequestBody(await request.json().catch(() => null));
+    const requestBody = await request.json().catch(() => null);
+    if (isRecord(requestBody)) {
+      requestIdentity = {
+        selectedBuildingId: readString(requestBody.selectedBuildingId),
+        selectedAnalysisSessionId: readString(requestBody.selectedAnalysisSessionId),
+        selectedFeatureBuildingId: readFeatureBuildingId(requestBody.selectedBuildingFeature),
+      };
+    }
+    const input = validateLiveHybridRequestBody(requestBody);
     const [x5186, y5186] = to5186(input.longitude, input.latitude);
 
+    requestIdentity = {
+      selectedBuildingId: input.selectedBuildingId,
+      selectedAnalysisSessionId: input.selectedAnalysisSessionId,
+      selectedFeatureBuildingId: input.selectedFeatureBuildingId,
+    };
     inputWgs84 = { longitude: input.longitude, latitude: input.latitude };
     input5186 = { x: x5186, y: y5186 };
 
@@ -1063,12 +1217,29 @@ export default async function handler(request: Request) {
 
     if (selectBuldResult?.ring) {
       selectBuldDiagnostics = selectBuldResult.diagnostics;
-      selectBuldStatus = 'success';
-      roofSource = 'climate.gg-selectBuld';
-      roofRing = selectBuldResult.ring;
+      const matchStatus = getSelectBuldMatchStatus(selectBuldResult.ring, input.selectedBuildingRing5186);
+
+      selectBuldRoofMatchesSelectedBuilding = matchStatus.matchesSelectedBuilding;
+      selectBuldCentroidInsideSelectedBuilding = matchStatus.centroidInsideSelectedBuilding;
+      selectBuldCentroidDistanceToSelectedBuildingM = matchStatus.centroidDistanceToSelectedBuildingM;
+      selectBuldCentroidWgs84 = matchStatus.centroidWgs84;
+
+      if (matchStatus.matchesSelectedBuilding) {
+        selectBuldStatus = 'success';
+        roofSource = 'climate.gg-selectBuld';
+        roofRing = selectBuldResult.ring;
+      } else {
+        selectBuldStatus = 'mismatch_selected_building';
+        roofSource = 'vworld-building-footprint-fallback';
+        roofRing = input.selectedBuildingRing5186;
+        warnings.push(
+          'climate.gg 옥상 polygon이 선택 건물과 달라 선택 건물 footprint 기반으로 음영 분석을 진행했습니다.',
+        );
+      }
     } else if (selectBuldResult) {
       selectBuldDiagnostics = selectBuldResult.diagnostics;
       selectBuldStatus = selectBuldResult.status;
+      selectBuldRoofMatchesSelectedBuilding = null;
       warnings.push('climate.gg 옥상 polygon을 찾지 못해 선택 건물 footprint 기반 옥상 추정으로 진행했습니다.');
     }
 
@@ -1100,12 +1271,19 @@ export default async function handler(request: Request) {
         panelCount: 0,
         roofSource,
         selectBuldStatus,
+        requestSelectedBuildingId: requestIdentity.selectedBuildingId ?? null,
+        requestSessionId: requestIdentity.selectedAnalysisSessionId ?? null,
+        selectedFeatureBuildingId: requestIdentity.selectedFeatureBuildingId ?? null,
+        selectBuldRoofMatchesSelectedBuilding,
+        selectBuldCentroidInsideSelectedBuilding,
+        selectBuldCentroidDistanceToSelectedBuildingM,
+        selectBuldCentroidWgs84,
         liveHybridMode: true,
         maxCellsApplied,
         apiTimingsMs,
         ...(selectBuldDiagnostics ?? {}),
         warnings,
-      });
+      }, 200, requestIdentity);
     }
 
     let shadingByCellId: Record<number, number>;
@@ -1123,13 +1301,20 @@ export default async function handler(request: Request) {
         panelCount: 0,
         roofSource,
         selectBuldStatus,
+        requestSelectedBuildingId: requestIdentity.selectedBuildingId ?? null,
+        requestSessionId: requestIdentity.selectedAnalysisSessionId ?? null,
+        selectedFeatureBuildingId: requestIdentity.selectedFeatureBuildingId ?? null,
+        selectBuldRoofMatchesSelectedBuilding,
+        selectBuldCentroidInsideSelectedBuilding,
+        selectBuldCentroidDistanceToSelectedBuildingM,
+        selectBuldCentroidWgs84,
         liveHybridMode: true,
         maxCellsApplied,
         apiTimingsMs,
         ...(selectBuldDiagnostics ?? {}),
         selectSunListLastError: error instanceof Error ? error.message : 'unknown',
         warnings,
-      });
+      }, 200, requestIdentity);
     }
     const shadingValues = Object.values(shadingByCellId).filter((value) => Number.isFinite(value));
     const shadingAverage =
@@ -1147,12 +1332,19 @@ export default async function handler(request: Request) {
         panelCount: 0,
         roofSource,
         selectBuldStatus,
+        requestSelectedBuildingId: requestIdentity.selectedBuildingId ?? null,
+        requestSessionId: requestIdentity.selectedAnalysisSessionId ?? null,
+        selectedFeatureBuildingId: requestIdentity.selectedFeatureBuildingId ?? null,
+        selectBuldRoofMatchesSelectedBuilding,
+        selectBuldCentroidInsideSelectedBuilding,
+        selectBuldCentroidDistanceToSelectedBuildingM,
+        selectBuldCentroidWgs84,
         liveHybridMode: true,
         maxCellsApplied,
         apiTimingsMs,
         ...(selectBuldDiagnostics ?? {}),
         warnings,
-      });
+      }, 200, requestIdentity);
     }
 
     const unqId = readString(metadata.unq_id);
@@ -1193,6 +1385,9 @@ export default async function handler(request: Request) {
     const diagnostics: LiveDiagnostics = {
       inputWgs84,
       input5186,
+      requestSelectedBuildingId: input.selectedBuildingId,
+      requestSessionId: input.selectedAnalysisSessionId,
+      selectedFeatureBuildingId: input.selectedFeatureBuildingId,
       roofAreaM2,
       cellCount: cells.length,
       shadingCellCount: shadingValues.length,
@@ -1200,17 +1395,25 @@ export default async function handler(request: Request) {
       panelCount,
       roofSource,
       selectBuldStatus,
+      selectBuldRoofMatchesSelectedBuilding,
+      selectBuldCentroidInsideSelectedBuilding,
+      selectBuldCentroidDistanceToSelectedBuildingM,
+      selectBuldCentroidWgs84,
       liveHybridMode: true,
       maxCellsApplied,
       apiTimingsMs,
       ...(selectBuldDiagnostics ?? {}),
       warnings,
       unqId,
+      ignoredStaleLiveResponse: false,
     };
 
     return jsonResponse({
       ok: true,
       source: 'climate.gg-live-hybrid',
+      selectedBuildingId: input.selectedBuildingId,
+      selectedAnalysisSessionId: input.selectedAnalysisSessionId,
+      selectedFeatureBuildingId: input.selectedFeatureBuildingId,
       roofSource,
       bundle,
       panelsGeojson,
@@ -1237,6 +1440,13 @@ export default async function handler(request: Request) {
         panelCount: 0,
         roofSource,
         selectBuldStatus,
+        requestSelectedBuildingId: requestIdentity.selectedBuildingId ?? null,
+        requestSessionId: requestIdentity.selectedAnalysisSessionId ?? null,
+        selectedFeatureBuildingId: requestIdentity.selectedFeatureBuildingId ?? null,
+        selectBuldRoofMatchesSelectedBuilding,
+        selectBuldCentroidInsideSelectedBuilding,
+        selectBuldCentroidDistanceToSelectedBuildingM,
+        selectBuldCentroidWgs84,
         liveHybridMode: true,
         maxCellsApplied,
         apiTimingsMs,
@@ -1244,6 +1454,7 @@ export default async function handler(request: Request) {
         warnings,
       },
       error instanceof ValidationError ? 400 : 200,
+      requestIdentity,
     );
   }
 }

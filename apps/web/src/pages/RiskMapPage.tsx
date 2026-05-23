@@ -115,6 +115,7 @@ const CLIMATE_POC_FOCUS_SPAN_MULTIPLIER = 4;
 const CLIMATE_POC_FOCUS_HEIGHT_PADDING_M = 320;
 const SIMPLE_PAYBACK_MAX_REASONABLE_YEARS = 100;
 const FOOTPRINT_FALLBACK_SIMPLE_PAYBACK_YEARS = 6.8;
+const DEFAULT_PANEL_PLACEMENT_SOURCE = '건물 footprint 기반 자체 배치';
 
 type MapLoadStatus = 'loading' | 'ready' | 'error';
 type RiskPanelTab = 'risk' | 'solar' | 'policy';
@@ -160,6 +161,7 @@ type FeatureQueryDiagnostics = {
 
 type SelectedBuildingFootprint = {
   buildingId: string;
+  analysisSessionId: string;
   address: string;
   name: string;
   geometryType: 'Polygon' | 'MultiPolygon';
@@ -602,6 +604,10 @@ function getNearbyBuildingPolygons(polygons: PolygonCoordinates[], coordinate: C
     .map((item) => item.polygon);
 }
 
+function createSelectedAnalysisSessionId(selectedBuildingId: string) {
+  return `${selectedBuildingId}-${Date.now()}`;
+}
+
 function getGeometryStatusText(status: GeometryQueryStatus) {
   if (status === 'idle') {
     return '건물 클릭 후 조회';
@@ -777,6 +783,9 @@ function RiskMapPage() {
   const [vworldMap, setVworldMap] = useState<VWorldMapInstance | null>(null);
   const vworldMapRef = useRef<VWorldMapInstance | null>(null);
   const lastMapSelectionRef = useRef<{ longitude: number; latitude: number; selectedAt: number } | null>(null);
+  const mapSelectionRequestIdRef = useRef(0);
+  const selectedBuildingIdRef = useRef<string | null>(null);
+  const selectedAnalysisSessionIdRef = useRef<string | null>(null);
   const mapTouchGestureRef = useRef({
     suppressClickUntil: 0,
     wasMultiTouchGesture: false,
@@ -880,6 +889,14 @@ function RiskMapPage() {
     [selectedCoordinate, selectedRoofPolygon],
   );
   const selectedBuildingId = selectedBuildingFootprint?.buildingId ?? null;
+  const selectedAnalysisSessionId = selectedBuildingFootprint?.analysisSessionId ?? null;
+  const livePanelsBuildingId = liveClimateBundle ? liveClimateDiagnostics?.requestSelectedBuildingId ?? selectedBuildingId : null;
+  const livePanelsSessionId = liveClimateBundle ? liveClimateDiagnostics?.requestSessionId ?? selectedAnalysisSessionId : null;
+  const sameBuildingForLivePanels =
+    livePanelsBuildingId && livePanelsSessionId
+      ? livePanelsBuildingId === selectedBuildingId && livePanelsSessionId === selectedAnalysisSessionId
+      : null;
+  const staleResponseIgnored = Boolean(liveClimateDiagnostics?.ignoredStaleLiveResponse);
   const sameViewerAsBuildingLayer =
     selectedBuildingLayerStatus.viewerDebugId && panelLayerStatus.viewerDebugId
       ? selectedBuildingLayerStatus.viewerDebugId === panelLayerStatus.viewerDebugId
@@ -993,7 +1010,9 @@ function RiskMapPage() {
   const overviewInvestmentKrw = climateExpectedRevenue?.expected_investment ?? pvAnalysisResult?.estimatedInvestmentKrw ?? null;
   const roofSourceFallbackNote =
     hasLiveClimatePanelLayout && liveRoofSource === 'vworld-building-footprint-fallback'
-      ? 'climate.gg 옥상 polygon 조회가 지연되어 선택 건물 footprint 기반으로 음영 분석을 진행했습니다.'
+      ? liveSelectBuldStatus === 'mismatch_selected_building'
+        ? 'climate.gg 옥상 polygon이 선택 건물과 달라 선택 건물 footprint 기반으로 음영 분석을 진행했습니다.'
+        : 'climate.gg 옥상 polygon 조회가 지연되어 선택 건물 footprint 기반으로 음영 분석을 진행했습니다.'
       : null;
   const analysisOverviewCards = [
     ['분석 소스', demoPanelSourceLabel],
@@ -1086,6 +1105,23 @@ function RiskMapPage() {
   useEffect(() => {
     activeTabRef.current = activeTab;
   }, [activeTab]);
+
+  useEffect(() => {
+    selectedBuildingIdRef.current = selectedBuildingId;
+    selectedAnalysisSessionIdRef.current = selectedAnalysisSessionId;
+  }, [selectedAnalysisSessionId, selectedBuildingId]);
+
+  useEffect(() => {
+    setLiveClimateStatus('idle');
+    setLiveClimateStep('새 선택 건물 기준 라이브 분석 대기');
+    setLiveClimateError('');
+    setLiveClimateDiagnostics(null);
+    setLiveClimateBundle(null);
+    setLiveClimatePanelGeojson(null);
+    setPvAnalysisStatus('idle');
+    setPvAnalysisMessage('');
+    setPvAnalysisResponse(null);
+  }, [selectedAnalysisSessionId, selectedBuildingId]);
 
   useEffect(() => {
     buildingFootprintUrlRef.current = buildingFootprintLoadState.url;
@@ -1267,6 +1303,7 @@ function RiskMapPage() {
       const layoutResult = generateSolarPanelLayout(roofPolygon);
       const panelPolygons = layoutResult.panelPolygons;
       const solarEstimate = createSolarEstimateFromPanelLayout(layoutResult);
+      const selectedAnalysisSessionId = createSelectedAnalysisSessionId(match.metadata.buildingId);
       const layoutWarningMessage = layoutResult.warnings.length > 0 ? ` ${layoutResult.warnings.join(' ')}` : '';
       const refinedFocusResult = focusVWorldMapOnCoordinate(vworldMapRef.current, {
         longitude: roofCentroid[0],
@@ -1276,7 +1313,10 @@ function RiskMapPage() {
       });
 
       setSelectedCoordinate(coordinate);
-      setSelectedBuildingFootprint(match.metadata);
+      setSelectedBuildingFootprint({
+        ...match.metadata,
+        analysisSessionId: selectedAnalysisSessionId,
+      });
       setSelectedBuildingFeature(match.feature);
       setSelectedBuildingGeometry(polygon);
       setSelectedRoofPolygon(roofPolygon);
@@ -1373,6 +1413,7 @@ function RiskMapPage() {
     setPvAnalysisResponse(null);
 
     if (!coordinate) {
+      mapSelectionRequestIdRef.current += 1;
       setSelectionMode('screen-fallback');
       setGeometryQueryStatus('idle');
       setGeometryQueryMessage('지도 좌표가 없어 화면 기준 예시 배치를 표시합니다.');
@@ -1401,6 +1442,9 @@ function RiskMapPage() {
     if (shouldSkipDuplicateSelection(coordinate)) {
       return;
     }
+
+    const selectionRequestId = mapSelectionRequestIdRef.current + 1;
+    mapSelectionRequestIdRef.current = selectionRequestId;
 
     const dataId = getConfiguredVWorldBuildingDataId();
     const buffer = 10;
@@ -1471,6 +1515,10 @@ function RiskMapPage() {
       longitude: coordinate[0],
       latitude: coordinate[1],
     });
+
+    if (mapSelectionRequestIdRef.current !== selectionRequestId) {
+      return;
+    }
 
     if (buildingPolygonResult.status === 'found') {
       const diagnostics = buildingPolygonResult.diagnostics;
@@ -1694,12 +1742,16 @@ function RiskMapPage() {
   }, [climatePocExtent]);
 
   const handleLiveClimateAnalysisRequest = useCallback(async () => {
-    if (!selectedCoordinate || !hasSelectedBuilding || !selectedBuildingFeature) {
+    if (!selectedCoordinate || !hasSelectedBuilding || !selectedBuildingFeature || !selectedBuildingId || !selectedAnalysisSessionId) {
       setLiveClimateStatus('error');
       setLiveClimateStep('선택 건물 기준 좌표가 필요합니다.');
       setLiveClimateError('화성시 건물 polygon을 선택한 뒤 climate.gg 라이브 분석을 실행해주세요.');
       return;
     }
+
+    const requestSelectedBuildingId = selectedBuildingId;
+    const requestSessionId = selectedAnalysisSessionId;
+    const requestSelectionId = mapSelectionRequestIdRef.current;
 
     setLiveClimateStatus('loading');
     setLiveClimateStep('선택 건물 기준 climate.gg 라이브 분석 요청 중');
@@ -1713,13 +1765,32 @@ function RiskMapPage() {
     const response = await runClimateRooftopAnalysis({
       longitude: selectedCoordinate[0],
       latitude: selectedCoordinate[1],
-      selectedBuildingId: selectedBuildingId ?? undefined,
+      selectedBuildingId: requestSelectedBuildingId,
+      selectedAnalysisSessionId: requestSessionId,
       selectedBuildingFeature: selectedBuildingFeature as ClimateSelectedBuildingFeature,
       panelCapacityW: 640,
       panelAngle: 35,
       panelType: 1,
       cellsPerPanel: 2,
     });
+    const responseBuildingId = response.selectedBuildingId ?? response.diagnostics.requestSelectedBuildingId ?? requestSelectedBuildingId;
+    const responseSessionId = response.selectedAnalysisSessionId ?? response.diagnostics.requestSessionId ?? requestSessionId;
+    const currentBuildingId = selectedBuildingIdRef.current;
+    const currentSessionId = selectedAnalysisSessionIdRef.current;
+    const isStaleResponse =
+      mapSelectionRequestIdRef.current !== requestSelectionId ||
+      responseBuildingId !== currentBuildingId ||
+      responseSessionId !== currentSessionId;
+
+    if (isStaleResponse) {
+      setLiveClimateDiagnostics((current) => ({
+        ...(current ?? {}),
+        requestSelectedBuildingId: responseBuildingId,
+        requestSessionId: responseSessionId,
+        ignoredStaleLiveResponse: true,
+      }));
+      return;
+    }
 
     if (!response.ok) {
       setLiveClimateStatus('error');
@@ -1735,9 +1806,11 @@ function RiskMapPage() {
 
     const normalizedPvResult = normalizeClimateBundlePvOutput(response.bundle.pv_analysis_output);
     const liveCompletionMessage =
-      response.roofSource === 'vworld-building-footprint-fallback'
-        ? 'climate.gg 옥상 polygon 조회가 지연되어 선택 건물 footprint 기반으로 음영 분석을 진행했습니다.'
-        : '선택 건물 기준 climate.gg 옥상 polygon + 음영 분석 완료';
+      response.diagnostics.selectBuldStatus === 'mismatch_selected_building'
+        ? 'climate.gg 옥상 polygon이 선택 건물과 달라 선택 건물 footprint 기반으로 음영 분석을 진행했습니다.'
+        : response.roofSource === 'vworld-building-footprint-fallback'
+          ? 'climate.gg 옥상 polygon 조회가 지연되어 선택 건물 footprint 기반으로 음영 분석을 진행했습니다.'
+          : '선택 건물 기준 climate.gg 옥상 polygon + 음영 분석 완료';
 
     setLiveClimateStatus('success');
     setLiveClimateStep(liveCompletionMessage);
@@ -1751,6 +1824,15 @@ function RiskMapPage() {
     setPvAnalysisResponse({
       ok: true,
       source: 'gyeonggi-climate-platform',
+      selectedBuildingId: responseBuildingId,
+      selectedAnalysisSessionId: responseSessionId,
+      roofSource: response.roofSource,
+      selectedFeatureBuildingId: response.selectedFeatureBuildingId ?? null,
+      diagnostics: {
+        requestSelectedBuildingId: responseBuildingId,
+        requestSessionId: responseSessionId,
+        ignoredStaleLiveResponse: false,
+      },
       input: {
         latitude: response.bundle.pv_analysis_input.latitude,
         longitude: response.bundle.pv_analysis_input.longitude,
@@ -1763,7 +1845,13 @@ function RiskMapPage() {
       result: normalizedPvResult,
     });
     setAnalysisStatus(liveCompletionMessage);
-  }, [hasSelectedBuilding, selectedBuildingFeature, selectedBuildingId, selectedCoordinate]);
+  }, [
+    hasSelectedBuilding,
+    selectedAnalysisSessionId,
+    selectedBuildingFeature,
+    selectedBuildingId,
+    selectedCoordinate,
+  ]);
 
   const handleMapShellClickCapture = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -2174,6 +2262,8 @@ function RiskMapPage() {
               visible={shouldRenderGeneratedPanelLayer}
               selectedBuildingFeature={selectedBuildingFeature}
               selectedBuildingId={selectedBuildingId}
+              selectedAnalysisSessionId={selectedAnalysisSessionId}
+              panelSource="self"
               selectedBuildingCentroid={selectedBuildingCentroid}
               panelPolygons={solarPanelPolygons}
               roofHeightM={roofHeightEstimate.roofHeightM}
@@ -2185,6 +2275,9 @@ function RiskMapPage() {
               visible={shouldRenderClimatePanelLayer}
               panelsGeojson={activeClimatePanelGeojson}
               pocId={activeClimateBundle?.meta.unq_id ?? DEFAULT_CLIMATE_POC_ID}
+              panelSource={hasLiveClimatePanelLayout ? 'climate-live' : 'static-poc'}
+              selectedBuildingId={selectedBuildingId}
+              selectedAnalysisSessionId={selectedAnalysisSessionId}
               roofHeightM={activeClimateBundle?.meta.bldg_hgt ?? roofHeightEstimate.roofHeightM}
               onStatusChange={setClimatePanelLayerStatus}
             />
@@ -2500,6 +2593,30 @@ function RiskMapPage() {
                 <div>
                   <span>selectedBuildingId</span>
                   <strong>{selectedBuildingId ?? '-'}</strong>
+                </div>
+                <div>
+                  <span>livePanelsBuildingId</span>
+                  <strong>{livePanelsBuildingId ?? '-'}</strong>
+                </div>
+                <div>
+                  <span>livePanelsSessionId</span>
+                  <strong>{livePanelsSessionId ?? '-'}</strong>
+                </div>
+                <div>
+                  <span>currentSessionId</span>
+                  <strong>{selectedAnalysisSessionId ?? '-'}</strong>
+                </div>
+                <div>
+                  <span>sameBuildingForLivePanels</span>
+                  <strong>{formatDiagnosticBoolean(sameBuildingForLivePanels)}</strong>
+                </div>
+                <div>
+                  <span>selectBuldRoofMatchesSelectedBuilding</span>
+                  <strong>{formatDiagnosticBoolean(liveClimateDiagnostics?.selectBuldRoofMatchesSelectedBuilding ?? null)}</strong>
+                </div>
+                <div>
+                  <span>staleResponseIgnored</span>
+                  <strong>{formatDiagnosticBoolean(staleResponseIgnored)}</strong>
                 </div>
                 <div>
                   <span>건물명</span>

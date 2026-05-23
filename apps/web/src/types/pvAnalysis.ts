@@ -10,6 +10,27 @@ export type PvAnalysisInput = {
   };
 };
 
+export type PvAnalysisIdentityDiagnostics = {
+  requestSelectedBuildingId?: string | null;
+  requestSessionId?: string | null;
+  ignoredStaleLiveResponse?: boolean;
+};
+
+export type PvAnalysisResponseIdentity = {
+  selectedBuildingId?: string | null;
+  selectedAnalysisSessionId?: string | null;
+  roofSource?: string | null;
+  selectedFeatureBuildingId?: string | null;
+  diagnostics?: PvAnalysisIdentityDiagnostics;
+};
+
+export type ClimateRooftopAnalysisInput = PvAnalysisInput & {
+  selectedBuildingId: string;
+  selectedAnalysisSessionId: string;
+  selectedBuildingFeature?: unknown;
+  roofSource?: string;
+};
+
 export type PvAnalysisSafeInputSummary = {
   latitude: number;
   longitude: number;
@@ -54,7 +75,7 @@ export type PvAnalysisSuccessResponse = {
   source: 'gyeonggi-climate-platform';
   input: PvAnalysisSafeInputSummary;
   result: PvAnalysisResult;
-};
+} & PvAnalysisResponseIdentity;
 
 export type PvAnalysisFallbackResponse = {
   ok: false;
@@ -62,7 +83,6 @@ export type PvAnalysisFallbackResponse = {
   message: string;
   input?: PvAnalysisSafeInputSummary;
   result: PvAnalysisResult;
-};
+} & PvAnalysisResponseIdentity;
 
 export type PvAnalysisProxyResponse = PvAnalysisSuccessResponse | PvAnalysisFallbackResponse;
-
