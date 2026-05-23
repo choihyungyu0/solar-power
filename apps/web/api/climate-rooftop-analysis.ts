@@ -9,17 +9,21 @@ import type {
 
 const BASE = 'https://climate.gg.go.kr';
 const SELECT_BULD_URL = `${BASE}/gcs/book/cmm/selectBuld.do`;
-const OVERALL_TIMEOUT_MS = 25_000;
+const FAST_OVERALL_TIMEOUT_MS = 15_000;
+const FULL_OVERALL_TIMEOUT_MS = 25_000;
 const SELECT_BULD_TIMEOUT_MS = 5_000;
+const FAST_SELECT_BULD_TIMEOUT_MS = 3_000;
 const WFS_METADATA_TIMEOUT_MS = 5_000;
 const SELECT_SUN_LIST_TIMEOUT_MS = 12_000;
+const FAST_SELECT_SUN_LIST_TIMEOUT_MS = 9_000;
 const SELECT_BULD_INFO_TIMEOUT_MS = 4_000;
 const SELECT_RULE_LIST_TIMEOUT_MS = 4_000;
 const PV_ANALYSIS_TIMEOUT_MS = 8_000;
 const SELECT_BULD_MAX_ATTEMPTS = 1;
 const CELL_W_M = 1;
 const CELL_H_M = 3.5;
-const MAX_CELLS = 2500;
+const FULL_MAX_CELLS = 2500;
+const FAST_MAX_CELLS = 700;
 const MAX_CELL_SCAN_COUNT = 100_000;
 const DEFAULT_PANEL_CAPACITY_W = 640;
 const DEFAULT_PANEL_ANGLE = 35;
@@ -64,6 +68,7 @@ type Ring5186 = Coordinate5186[];
 type Ring4326 = Coordinate4326[];
 type SelectBuldStatus = 'success' | 'timeout' | 'not_found' | 'skipped' | 'mismatch_selected_building';
 type ExternalStepStatus = 'success' | 'timeout' | 'failed' | 'skipped' | 'fallback';
+type AnalysisMode = 'fast' | 'full';
 
 type Cell = {
   id: number;
@@ -102,6 +107,12 @@ type LiveDiagnostics = {
   roofSource: ClimateLiveRoofSource;
   overallTimeoutMs: number;
   elapsedMs: number;
+  analysisStage?: 'shading-complete' | 'pv-complete';
+  includePvAnalysis?: boolean;
+  mode?: AnalysisMode;
+  originalCellCount?: number;
+  usedCellCount?: number;
+  installCapacityKw?: number;
   timedOutStep?: string | null;
   selectBuldStatus: SelectBuldStatus;
   selectSunListStatus?: ExternalStepStatus;
@@ -316,6 +327,9 @@ function validateLiveHybridRequestBody(payload: unknown) {
   }
 
   const selectedBuildingRing4326 = readSelectedBuildingOuterRing4326(payload.selectedBuildingFeature);
+  const includePvAnalysis = payload.includePvAnalysis === true;
+  const requestedMode: AnalysisMode = payload.mode === 'full' ? 'full' : 'fast';
+  const mode: AnalysisMode = includePvAnalysis ? 'full' : requestedMode;
 
   if (!selectedBuildingRing4326 || selectedBuildingRing4326.length < 4) {
     throw new ValidationError('selectedBuildingFeature must be a GeoJSON Polygon or MultiPolygon Feature in EPSG:4326.');
@@ -329,6 +343,8 @@ function validateLiveHybridRequestBody(payload: unknown) {
     selectedBuildingFeature: payload.selectedBuildingFeature,
     selectedBuildingRing4326,
     selectedBuildingRing5186: convertRing4326To5186(selectedBuildingRing4326),
+    includePvAnalysis,
+    mode,
   };
 }
 
@@ -343,7 +359,7 @@ function createFailureResponse(
   } = {},
 ) {
   const responseDiagnostics = {
-    overallTimeoutMs: OVERALL_TIMEOUT_MS,
+    overallTimeoutMs: FAST_OVERALL_TIMEOUT_MS,
     timedOutStep: null,
     selectBuldStatus: 'skipped',
     selectSunListStatus: 'skipped',
@@ -378,7 +394,7 @@ async function fetchWithTimeout(
   url: string,
   init: RequestInit,
   timeoutMs: number,
-  options: { step: string; overallSignal?: AbortSignal } = { step: 'fetch' },
+  options: { step: string; overallSignal?: AbortSignal; overallTimeoutMs?: number } = { step: 'fetch' },
 ) {
   const controller = new AbortController();
   let didOverallAbort = false;
@@ -391,7 +407,7 @@ async function fetchWithTimeout(
   if (options.overallSignal?.aborted) {
     throw new ExternalStepError(options.step, '전체 분석 시간이 초과되었습니다.', {
       timedOutStep: options.step,
-      overallTimeoutMs: OVERALL_TIMEOUT_MS,
+      overallTimeoutMs: options.overallTimeoutMs ?? FAST_OVERALL_TIMEOUT_MS,
     });
   }
 
@@ -403,7 +419,7 @@ async function fetchWithTimeout(
     if (didOverallAbort) {
       throw new ExternalStepError(options.step, '전체 분석 시간이 초과되었습니다.', {
         timedOutStep: options.step,
-        overallTimeoutMs: OVERALL_TIMEOUT_MS,
+        overallTimeoutMs: options.overallTimeoutMs ?? FAST_OVERALL_TIMEOUT_MS,
       });
     }
 
@@ -557,13 +573,19 @@ function extractSelectBuldRing(payload: unknown, diagnostics: SelectBuldDiagnost
   }
 }
 
-async function runSelectBuldRequest(x: number, y: number, timings?: Record<string, number>, overallSignal?: AbortSignal) {
+async function runSelectBuldRequest(
+  x: number,
+  y: number,
+  timings?: Record<string, number>,
+  overallSignal?: AbortSignal,
+  timeoutMs = SELECT_BULD_TIMEOUT_MS,
+) {
   const requestBody = createSelectBuldBody(x, y);
   const diagnostics: SelectBuldDiagnostics = {
     selectBuldUrl: SELECT_BULD_URL,
     selectBuldRequestBody: requestBody,
     selectBuldAttemptCount: 0,
-    selectBuldTimeoutMs: SELECT_BULD_TIMEOUT_MS,
+    selectBuldTimeoutMs: timeoutMs,
     selectBuldAttemptTimingsMs: [],
   };
   const startedAt = Date.now();
@@ -580,7 +602,7 @@ async function runSelectBuldRequest(x: number, y: number, timings?: Record<strin
           headers: FORM_HEADERS,
           body: requestBody,
         },
-        SELECT_BULD_TIMEOUT_MS,
+        timeoutMs,
         { step: 'selectBuld', overallSignal },
       );
       const rawText = await response.text();
@@ -643,8 +665,14 @@ async function runSelectBuldRequest(x: number, y: number, timings?: Record<strin
   throw new ExternalStepError('selectBuld', 'selectBuld 호출에 실패했습니다.', diagnostics);
 }
 
-async function selectBuld(x: number, y: number, timings: Record<string, number>, overallSignal?: AbortSignal) {
-  const result = await runSelectBuldRequest(x, y, timings, overallSignal);
+async function selectBuld(
+  x: number,
+  y: number,
+  timings: Record<string, number>,
+  overallSignal?: AbortSignal,
+  timeoutMs = SELECT_BULD_TIMEOUT_MS,
+) {
+  const result = await runSelectBuldRequest(x, y, timings, overallSignal, timeoutMs);
 
   if (!result.ring) {
     throw new ExternalStepError(
@@ -662,13 +690,14 @@ async function runSelectBuldCandidateRequest(
   y: number,
   timings?: Record<string, number>,
   overallSignal?: AbortSignal,
+  timeoutMs = SELECT_BULD_TIMEOUT_MS,
 ) {
   const requestBody = createSelectBuldBody(x, y);
   const diagnostics: SelectBuldDiagnostics = {
     selectBuldUrl: SELECT_BULD_URL,
     selectBuldRequestBody: requestBody,
     selectBuldAttemptCount: 1,
-    selectBuldTimeoutMs: SELECT_BULD_TIMEOUT_MS,
+    selectBuldTimeoutMs: timeoutMs,
     selectBuldAttemptTimingsMs: [],
   };
   const startedAt = Date.now();
@@ -681,7 +710,7 @@ async function runSelectBuldCandidateRequest(
         headers: FORM_HEADERS,
         body: requestBody,
       },
-      SELECT_BULD_TIMEOUT_MS,
+      timeoutMs,
       { step: 'selectBuld', overallSignal },
     );
     const rawText = await response.text();
@@ -901,7 +930,7 @@ function generateCells(ring: Ring5186) {
       scannedCellCount += 1;
 
       if (scannedCellCount > MAX_CELL_SCAN_COUNT) {
-        return { cells, maxCellsApplied: cells.length > MAX_CELLS, scanLimitApplied: true };
+        return { cells, originalCellCount: cells.length, scanLimitApplied: true };
       }
 
       const centroid: Coordinate5186 = [x + CELL_W_M / 2, y + CELL_H_M / 2];
@@ -913,19 +942,36 @@ function generateCells(ring: Ring5186) {
           centroid5186: { x: centroid[0], y: centroid[1] },
         });
 
-        if (cells.length > MAX_CELLS) {
-          return { cells, maxCellsApplied: true, scanLimitApplied: false };
-        }
       }
 
       id += 1;
     }
   }
 
-  return { cells, maxCellsApplied: false, scanLimitApplied: false };
+  return { cells, originalCellCount: cells.length, scanLimitApplied: false };
 }
 
-async function selectSunList(cells: Cell[], timings: Record<string, number>, overallSignal?: AbortSignal) {
+function selectCellsForAnalysis(cells: Cell[], maxCells: number) {
+  if (cells.length <= maxCells) {
+    return { cells, maxCellsApplied: false };
+  }
+
+  if (maxCells <= 1) {
+    return { cells: cells.slice(0, 1), maxCellsApplied: true };
+  }
+
+  const step = (cells.length - 1) / (maxCells - 1);
+  const selectedCells = Array.from({ length: maxCells }, (_, index) => cells[Math.round(index * step)]);
+
+  return { cells: selectedCells, maxCellsApplied: true };
+}
+
+async function selectSunList(
+  cells: Cell[],
+  timings: Record<string, number>,
+  overallSignal?: AbortSignal,
+  timeoutMs = SELECT_SUN_LIST_TIMEOUT_MS,
+) {
   const body = new URLSearchParams();
 
   cells.forEach((cell) => {
@@ -943,7 +989,7 @@ async function selectSunList(cells: Cell[], timings: Record<string, number>, ove
       headers: FORM_HEADERS,
       body,
     },
-    SELECT_SUN_LIST_TIMEOUT_MS,
+    timeoutMs,
     overallSignal,
   );
 
@@ -1180,7 +1226,7 @@ function createBundle({
   usageMonthly: ClimateBundle['usage_monthly'];
   regulationHits: Array<[string, number]>;
   pvInput: ClimateBundle['pv_analysis_input'];
-  pvOutput: ClimateBundlePvOutputRaw;
+  pvOutput: ClimateBundlePvOutputRaw | null;
 }): ClimateBundle {
   const scoreMean =
     shadingValues.length > 0 ? shadingValues.reduce((sum, value) => sum + value, 0) / shadingValues.length : 0;
@@ -1271,10 +1317,19 @@ export default async function handler(request: Request) {
   const overallStartedAt = Date.now();
   const overallController = new AbortController();
   let timedOutStep: string | null = null;
-  const overallTimeoutId = setTimeout(() => {
+  let overallTimeoutMs = FAST_OVERALL_TIMEOUT_MS;
+  let overallTimeoutId = setTimeout(() => {
     timedOutStep = timedOutStep ?? 'overall';
     overallController.abort();
-  }, OVERALL_TIMEOUT_MS);
+  }, overallTimeoutMs);
+  const resetOverallTimeout = (timeoutMs: number) => {
+    clearTimeout(overallTimeoutId);
+    overallTimeoutMs = timeoutMs;
+    overallTimeoutId = setTimeout(() => {
+      timedOutStep = timedOutStep ?? 'overall';
+      overallController.abort();
+    }, overallTimeoutMs);
+  };
   const getElapsedMs = () => Date.now() - overallStartedAt;
 
   if (request.method !== 'POST') {
@@ -1302,13 +1357,23 @@ export default async function handler(request: Request) {
   let selectSunListStatus: ExternalStepStatus = 'skipped';
   let pvAnalysisStatus: ExternalStepStatus = 'skipped';
   let fallbackReason: string | undefined;
+  let analysisMode: AnalysisMode = 'fast';
+  let includePvAnalysis = false;
+  let originalCellCount = 0;
+  let usedCellCount = 0;
+  let installCapacityKw = 0;
   const getCommonDiagnostics = () => ({
-    overallTimeoutMs: OVERALL_TIMEOUT_MS,
+    overallTimeoutMs,
     elapsedMs: getElapsedMs(),
     timedOutStep,
     selectSunListStatus,
     pvAnalysisStatus,
     fallbackReason,
+    includePvAnalysis,
+    mode: analysisMode,
+    originalCellCount,
+    usedCellCount,
+    installCapacityKw,
   });
   const markTimedOutStep = (error: unknown, step: string) => {
     if (error instanceof ExternalStepError) {
@@ -1333,6 +1398,12 @@ export default async function handler(request: Request) {
       };
     }
     const input = validateLiveHybridRequestBody(requestBody);
+    analysisMode = input.mode;
+    includePvAnalysis = input.includePvAnalysis;
+    resetOverallTimeout(analysisMode === 'fast' ? FAST_OVERALL_TIMEOUT_MS : FULL_OVERALL_TIMEOUT_MS);
+    const selectBuldTimeoutMs = analysisMode === 'fast' ? FAST_SELECT_BULD_TIMEOUT_MS : SELECT_BULD_TIMEOUT_MS;
+    const selectSunListTimeoutMs = analysisMode === 'fast' ? FAST_SELECT_SUN_LIST_TIMEOUT_MS : SELECT_SUN_LIST_TIMEOUT_MS;
+    const maxCells = analysisMode === 'fast' ? FAST_MAX_CELLS : FULL_MAX_CELLS;
     const [x5186, y5186] = to5186(input.longitude, input.latitude);
 
     requestIdentity = {
@@ -1343,17 +1414,21 @@ export default async function handler(request: Request) {
     inputWgs84 = { longitude: input.longitude, latitude: input.latitude };
     input5186 = { x: x5186, y: y5186 };
 
-    const metadataPromise = loadWfsMetadata(x5186, y5186, apiTimingsMs, overallController.signal).catch((error) => {
-      warnings.push(error instanceof Error ? error.message : 'WFS 건물 메타데이터 조회에 실패했습니다.');
+    const metadataPromise =
+      !includePvAnalysis
+        ? Promise.resolve({})
+        : loadWfsMetadata(x5186, y5186, apiTimingsMs, overallController.signal).catch((error) => {
+            warnings.push(error instanceof Error ? error.message : 'WFS 건물 메타데이터 조회에 실패했습니다.');
 
-      return {};
-    });
+            return {};
+          });
     let roofRing = input.selectedBuildingRing5186;
     const selectBuldResult = await runSelectBuldCandidateRequest(
       x5186,
       y5186,
       apiTimingsMs,
       overallController.signal,
+      selectBuldTimeoutMs,
     ).catch((error) => {
       if (error instanceof ExternalStepError && error.step === 'selectBuld') {
         markTimedOutStep(error, 'selectBuld');
@@ -1408,11 +1483,18 @@ export default async function handler(request: Request) {
 
     const roofAreaM2 = polygonAreaM2(roofRing);
     const generatedCells = generateCells(roofRing);
-    maxCellsApplied = generatedCells.maxCellsApplied;
-    const cells = maxCellsApplied ? generatedCells.cells.slice(0, MAX_CELLS) : generatedCells.cells;
+    originalCellCount = generatedCells.originalCellCount;
+    const selectedCells = selectCellsForAnalysis(generatedCells.cells, maxCells);
+    maxCellsApplied = selectedCells.maxCellsApplied;
+    const cells = selectedCells.cells;
+    usedCellCount = cells.length;
 
-    if (generatedCells.maxCellsApplied) {
-      warnings.push(`셀 수가 ${generatedCells.cells.length.toLocaleString('ko-KR')}개를 넘어 ${MAX_CELLS}개만 분석했습니다.`);
+    if (maxCellsApplied) {
+      warnings.push(
+        `셀 수가 ${originalCellCount.toLocaleString('ko-KR')}개를 넘어 ${maxCells.toLocaleString(
+          'ko-KR',
+        )}개를 결정적 샘플링으로 분석했습니다.`,
+      );
     }
 
     if (generatedCells.scanLimitApplied) {
@@ -1449,7 +1531,7 @@ export default async function handler(request: Request) {
     let shadingByCellId: Record<number, number>;
 
     try {
-      shadingByCellId = await selectSunList(cells, apiTimingsMs, overallController.signal);
+      shadingByCellId = await selectSunList(cells, apiTimingsMs, overallController.signal, selectSunListTimeoutMs);
       selectSunListStatus = 'success';
     } catch (error) {
       markTimedOutStep(error, 'selectSunList');
@@ -1486,6 +1568,7 @@ export default async function handler(request: Request) {
     const shadingAverage =
       shadingValues.length > 0 ? shadingValues.reduce((sum, value) => sum + value, 0) / shadingValues.length : 0;
     const panelCount = Math.max(1, Math.floor(shadingValues.length / input.cellsPerPanel));
+    installCapacityKw = roundDecimal((input.panelCapacityW * panelCount) / 1000, 1);
 
     if (shadingValues.length === 0) {
       selectSunListStatus = 'failed';
@@ -1517,6 +1600,77 @@ export default async function handler(request: Request) {
       }, 200, requestIdentity);
     }
 
+    const fallbackPvInput = {
+      latitude: input.latitude,
+      longitude: input.longitude,
+      shading_index_average: shadingAverage,
+      solar_panel_angle: input.panelAngle,
+      solar_panel_info: {
+        panel_capacity: input.panelCapacityW,
+        panel_count: panelCount,
+        panel_type: input.panelType,
+      },
+    };
+    const panelsGeojson = createPanelsGeojson(cells, shadingByCellId);
+
+    if (!input.includePvAnalysis) {
+      pvAnalysisStatus = 'skipped';
+      const bundle = createBundle({
+        longitude: input.longitude,
+        latitude: input.latitude,
+        roofRing,
+        roofAreaM2,
+        metadata: {},
+        cells,
+        shadingValues,
+        usageMonthly: { labels: [], electricity_kwh: [], gas_m3: [] },
+        regulationHits: [],
+        pvInput: fallbackPvInput,
+        pvOutput: null,
+      });
+      const diagnostics: LiveDiagnostics = {
+        inputWgs84,
+        input5186,
+        requestSelectedBuildingId: input.selectedBuildingId,
+        requestSessionId: input.selectedAnalysisSessionId,
+        selectedFeatureBuildingId: input.selectedFeatureBuildingId,
+        roofAreaM2,
+        cellCount: cells.length,
+        shadingCellCount: shadingValues.length,
+        shadingAverage,
+        panelCount,
+        roofSource,
+        selectBuldStatus,
+        selectBuldRoofMatchesSelectedBuilding,
+        selectBuldCentroidInsideSelectedBuilding,
+        selectBuldCentroidDistanceToSelectedBuildingM,
+        selectBuldCentroidWgs84,
+        liveHybridMode: true,
+        maxCellsApplied,
+        apiTimingsMs,
+        ...getCommonDiagnostics(),
+        analysisStage: 'shading-complete',
+        ...(selectBuldDiagnostics ?? {}),
+        warnings,
+        unqId: null,
+        ignoredStaleLiveResponse: false,
+      };
+
+      return jsonResponse({
+        ok: true,
+        source: 'climate.gg-live-hybrid',
+        analysisStage: 'shading-complete',
+        pvAnalysisStatus,
+        selectedBuildingId: input.selectedBuildingId,
+        selectedAnalysisSessionId: input.selectedAnalysisSessionId,
+        selectedFeatureBuildingId: input.selectedFeatureBuildingId,
+        roofSource,
+        bundle,
+        panelsGeojson,
+        diagnostics,
+      });
+    }
+
     const metadata: Record<string, unknown> = await metadataPromise;
     const unqId = readString(metadata.unq_id);
     const usageMonthlyPromise = selectBuldInfo(unqId, apiTimingsMs, overallController.signal).catch((error) => {
@@ -1529,17 +1683,6 @@ export default async function handler(request: Request) {
 
       return [];
     });
-    const fallbackPvInput = {
-      latitude: input.latitude,
-      longitude: input.longitude,
-      shading_index_average: shadingAverage,
-      solar_panel_angle: input.panelAngle,
-      solar_panel_info: {
-        panel_capacity: input.panelCapacityW,
-        panel_count: panelCount,
-        panel_type: input.panelType,
-      },
-    };
     const pvAnalysisPromise = callPvAnalysis({
       longitude: input.longitude,
       latitude: input.latitude,
@@ -1576,7 +1719,6 @@ export default async function handler(request: Request) {
       regulationHitsPromise,
       pvAnalysisPromise,
     ]);
-    const panelsGeojson = createPanelsGeojson(cells, shadingByCellId);
     const bundle = createBundle({
       longitude: input.longitude,
       latitude: input.latitude,
@@ -1611,6 +1753,7 @@ export default async function handler(request: Request) {
       maxCellsApplied,
       apiTimingsMs,
       ...getCommonDiagnostics(),
+      analysisStage: 'pv-complete',
       ...(selectBuldDiagnostics ?? {}),
       warnings,
       unqId,
@@ -1620,6 +1763,8 @@ export default async function handler(request: Request) {
     return jsonResponse({
       ok: true,
       source: 'climate.gg-live-hybrid',
+      analysisStage: 'pv-complete',
+      pvAnalysisStatus,
       selectedBuildingId: input.selectedBuildingId,
       selectedAnalysisSessionId: input.selectedAnalysisSessionId,
       selectedFeatureBuildingId: input.selectedFeatureBuildingId,
@@ -1662,8 +1807,8 @@ export default async function handler(request: Request) {
         liveHybridMode: true,
         maxCellsApplied,
         apiTimingsMs,
-        ...getCommonDiagnostics(),
         ...errorDiagnostics,
+        ...getCommonDiagnostics(),
         warnings,
       },
       error instanceof ValidationError ? 400 : 200,

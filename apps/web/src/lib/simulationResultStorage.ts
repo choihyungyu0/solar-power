@@ -163,20 +163,36 @@ function buildSolarPayload(
   };
 }
 
-function buildClimateSolarPayload(bundle: ClimateBundle) {
-  const expectedRevenue = bundle.pv_analysis_output.expected_revenue;
-  const environmental = bundle.pv_analysis_output.environmental_contribution;
+function buildClimateSolarPayload(bundle: ClimateBundle, selectedEstimate?: SimulationResultSnapshotInput['selectedEstimate']) {
+  const pvOutput = bundle.pv_analysis_output;
+
+  if (!pvOutput) {
+    const panelCapacityW = bundle.pv_analysis_input.solar_panel_info.panel_capacity;
+    const panelCount = bundle.pv_analysis_input.solar_panel_info.panel_count;
+    const installCapacityKw = (panelCapacityW * panelCount) / 1000;
+
+    return buildSolarPayload(
+      {
+        panelCount,
+        installCapacityKw,
+      },
+      selectedEstimate,
+    );
+  }
+
+  const expectedRevenue = pvOutput.expected_revenue;
+  const environmental = pvOutput.environmental_contribution;
 
   return buildSolarPayload({
     panelCount: bundle.pv_analysis_input.solar_panel_info.panel_count,
     installCapacityKw: expectedRevenue.install_kw,
-    annualGenerationKwh: bundle.pv_analysis_output.annual_generation,
+    annualGenerationKwh: pvOutput.annual_generation,
     annualSavingKrw: expectedRevenue.first_year_save_cost,
     investmentKrw: expectedRevenue.expected_investment,
     carbonReductionKg: environmental.carbon_reduction,
     pineTreeEffect: environmental.pine_tree_effect,
-    monthlyGeneration: bundle.pv_analysis_output.monthly_generation.map((item) => item.generation),
-    yearlyRevenue: bundle.pv_analysis_output.annual_saveCost.map((item) => item.saveCost),
+    monthlyGeneration: pvOutput.monthly_generation.map((item) => item.generation),
+    yearlyRevenue: pvOutput.annual_saveCost.map((item) => item.saveCost),
   });
 }
 
@@ -211,7 +227,7 @@ export function buildStoredSimulationResult(input: SimulationResultSnapshotInput
   if (input.liveClimateBundle) {
     return {
       building,
-      solar: buildClimateSolarPayload(input.liveClimateBundle),
+      solar: buildClimateSolarPayload(input.liveClimateBundle, input.selectedEstimate),
       source: 'climate-live-hybrid',
       storedAt: new Date().toISOString(),
     };
