@@ -5,9 +5,6 @@ import type {
 } from '../types/climateBundle';
 import type { PvAnalysisResult } from '../types/pvAnalysis';
 
-const CLIMATE_LIVE_PROXY_PATH = '/api/climate-rooftop-analysis';
-const DEFAULT_CLIMATE_LIVE_TIMEOUT_MS = 6000;
-
 function readNumber(value: unknown, fallback = 0) {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
@@ -54,66 +51,20 @@ export function normalizeClimateBundlePvOutput(output: ClimateBundlePvOutputRaw)
 
 export async function runClimateRooftopAnalysis(
   input: ClimateLiveAnalysisRequest,
-  options: { timeoutMs?: number } = {},
 ): Promise<ClimateLiveAnalysisResponse> {
-  const timeoutMs = options.timeoutMs ?? DEFAULT_CLIMATE_LIVE_TIMEOUT_MS;
-  const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(CLIMATE_LIVE_PROXY_PATH, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json; charset=UTF-8',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify(input),
-      signal: controller.signal,
-    });
-    const payload = (await response.json().catch(() => null)) as ClimateLiveAnalysisResponse | null;
-
-    if (payload && typeof payload === 'object' && 'ok' in payload) {
-      return payload;
-    }
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      return {
-        ok: false,
-        source: 'climate.gg-live-hybrid',
-        selectedBuildingId: input.selectedBuildingId ?? null,
-        selectedAnalysisSessionId: input.selectedAnalysisSessionId ?? null,
-        analysisStage: 'shading-timeout',
-        message: '음영 API 응답 지연으로 기본 배치를 표시합니다.',
-        fallbackRecommended: true,
-        diagnostics: {
-          requestSelectedBuildingId: input.selectedBuildingId ?? null,
-          requestSessionId: input.selectedAnalysisSessionId ?? null,
-          ignoredStaleLiveResponse: false,
-          timedOutStep: 'frontendAbort',
-          frontendAbortMs: timeoutMs,
-          fallbackReason: 'frontend-abort',
-        },
-      };
-    }
-    // The proxy owns external climate.gg details; callers only need a safe failure shape.
-  } finally {
-    window.clearTimeout(timeoutId);
-  }
-
   return {
     ok: false,
     source: 'climate.gg-live-hybrid',
     selectedBuildingId: input.selectedBuildingId ?? null,
     selectedAnalysisSessionId: input.selectedAnalysisSessionId ?? null,
-    analysisStage: 'shading-timeout',
-    message: 'climate.gg 라이브 분석 프록시 응답을 받지 못했습니다.',
+    disabled: true,
+    message: 'climate.gg 라이브 분석은 별도 백엔드 서버 연동 예정입니다.',
     fallbackRecommended: true,
     diagnostics: {
       requestSelectedBuildingId: input.selectedBuildingId ?? null,
       requestSessionId: input.selectedAnalysisSessionId ?? null,
       ignoredStaleLiveResponse: false,
-      frontendAbortMs: timeoutMs,
-      fallbackReason: 'proxy-response-missing',
+      fallbackReason: 'vercel-live-client-disabled',
     },
   };
 }

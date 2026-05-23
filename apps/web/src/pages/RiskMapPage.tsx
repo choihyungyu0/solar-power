@@ -57,7 +57,7 @@ import {
   type ClimatePocBbox,
   type ClimatePocPanelExtent,
 } from '../lib/climateBundleClient';
-import { runClimateRooftopAnalysis } from '../lib/climateLiveClient';
+import { runExternalClimateBackendAnalysis } from '../lib/climateBackendClient';
 import {
   createBuildingFootprintDiagnostics,
   getBuildingAdmdongIndexUrl,
@@ -1076,6 +1076,7 @@ function RiskMapPage() {
   const buildingDataHealthStatusText = `index ${formatHealthStatus(
     buildingDataHealth.buildingIndexStatus,
   )} / meta ${formatHealthStatus(buildingDataHealth.buildingMetaStatus)}`;
+  const isClimateLiveBackendEnabled = import.meta.env.VITE_ENABLE_CLIMATE_LIVE_BACKEND === 'true';
   const pvAnalysisResult = pvAnalysisResponse?.result ?? null;
   const monthlyGenerationMaxKwh = Math.max(
     1,
@@ -1139,12 +1140,11 @@ function RiskMapPage() {
     staticClimatePanelFeatureCount > 0 &&
     Boolean(climatePocCentroid);
   const hasLiveClimatePanelLayout =
-    liveClimateStatus === 'success' && liveClimatePanelFeatureCount > 0 && Boolean(liveClimateBundle);
-  const activeClimateBundle = hasLiveClimatePanelLayout
-    ? liveClimateBundle
-    : hasStaticClimatePanelLayout
-      ? climateBundle
-      : null;
+    isClimateLiveBackendEnabled &&
+    liveClimateStatus === 'success' &&
+    liveClimatePanelFeatureCount > 0 &&
+    Boolean(liveClimateBundle);
+  const activeClimateBundle = hasLiveClimatePanelLayout ? liveClimateBundle : null;
   const activeClimatePanelGeojson = hasLiveClimatePanelLayout
     ? liveClimatePanelGeojson
     : hasStaticClimatePanelLayout
@@ -1159,8 +1159,7 @@ function RiskMapPage() {
   const shouldRenderGeneratedPanelLayer =
     isSolarPanelLayerVisible &&
     hasMapAnchoredGeometry &&
-    !hasLiveClimatePanelLayout &&
-    (!isClimatePanelModeEnabled || climatePanelLoadStatus === 'error');
+    !hasLiveClimatePanelLayout;
   const liveRoofSource = (liveClimateDiagnostics?.roofSource as ClimateLiveRoofSource | undefined) ?? null;
   const liveSelectBuldStatus = liveClimateDiagnostics?.selectBuldStatus ?? null;
   const liveHybridMode = Boolean(liveClimateDiagnostics?.liveHybridMode);
@@ -1175,7 +1174,7 @@ function RiskMapPage() {
     : panelPlacementSourceLabel;
   const demoPanelSourceLabel = hasLiveClimatePanelLayout
     ? '선택 건물 footprint + climate.gg 음영 분석'
-    : resolvedPanelPlacementSourceLabel;
+    : DEFAULT_PANEL_PLACEMENT_SOURCE;
   const hasAnyPanelLayout = hasGeneratedPanelLayout || hasStaticClimatePanelLayout || hasLiveClimatePanelLayout;
   const hasPvAnalysisCompleted = pvAnalysisStatus === 'success' || pvAnalysisStatus === 'fallback';
   const hasResultDetailReady = hasPvAnalysisCompleted || hasLiveClimatePanelLayout;
@@ -1198,14 +1197,12 @@ function RiskMapPage() {
   const isSeparatePvCalculating = hasLiveClimatePanelLayout && pvAnalysisStatus === 'calculating';
   const simplePaybackSource: SimplePaybackSource = hasLiveClimatePanelLayout
     ? 'climate-live'
-    : hasStaticClimatePanelLayout
-      ? 'static-poc'
-      : 'footprint-fallback';
+    : 'footprint-fallback';
   const climateBundlePaybackYears = calculateClimateBundlePaybackYears(activeClimateBundle);
   const pvResultPaybackYears = calculatePvResultPaybackYears(pvAnalysisResult);
   const footprintPaybackYears = normalizeSimplePaybackYears(selectedBuilding.estimatedPaybackYears);
   const simplePaybackYears =
-    simplePaybackSource === 'climate-live' || simplePaybackSource === 'static-poc'
+    simplePaybackSource === 'climate-live'
       ? climateBundlePaybackYears
       : pvResultPaybackYears ?? footprintPaybackYears;
   const simplePaybackText = formatSimplePaybackYears(simplePaybackYears);
@@ -2051,6 +2048,15 @@ function RiskMapPage() {
   }, [climatePocExtent]);
 
   const handleLiveClimateAnalysisRequest = useCallback(async () => {
+    if (!isClimateLiveBackendEnabled) {
+      setLiveShadingStatus('fallback');
+      setLiveClimateStatus('idle');
+      setLiveClimateStep('별도 백엔드 서버 연동 대기');
+      setLiveClimateError('climate.gg 라이브 분석은 별도 백엔드 서버 연동 예정입니다.');
+      setIsSolarPanelLayerVisible(true);
+      return;
+    }
+
     if (!selectedCoordinate || !hasSelectedBuilding || !selectedBuildingFeature || !selectedBuildingId || !selectedAnalysisSessionId) {
       setLiveShadingStatus('fallback');
       setLiveClimateStatus('error');
@@ -2080,22 +2086,19 @@ function RiskMapPage() {
 
     setIsSolarPanelLayerVisible(true);
 
-    const response = await runClimateRooftopAnalysis(
-      {
-        longitude: selectedCoordinate[0],
-        latitude: selectedCoordinate[1],
-        selectedBuildingId: requestSelectedBuildingId,
-        selectedAnalysisSessionId: requestSessionId,
-        selectedBuildingFeature: selectedBuildingFeature as ClimateSelectedBuildingFeature,
-        panelCapacityW: livePanelCapacityW,
-        panelAngle: livePanelAngle,
-        panelType: livePanelType,
-        cellsPerPanel: liveCellsPerPanel,
-        includePvAnalysis: false,
-        mode: 'fast',
-      },
-      { timeoutMs: 6000 },
-    );
+    const response = await runExternalClimateBackendAnalysis({
+      longitude: selectedCoordinate[0],
+      latitude: selectedCoordinate[1],
+      selectedBuildingId: requestSelectedBuildingId,
+      selectedAnalysisSessionId: requestSessionId,
+      selectedBuildingFeature: selectedBuildingFeature as ClimateSelectedBuildingFeature,
+      panelCapacityW: livePanelCapacityW,
+      panelAngle: livePanelAngle,
+      panelType: livePanelType,
+      cellsPerPanel: liveCellsPerPanel,
+      includePvAnalysis: false,
+      mode: 'fast',
+    });
     const responseBuildingId = response.selectedBuildingId ?? response.diagnostics.requestSelectedBuildingId ?? requestSelectedBuildingId;
     const responseSessionId = response.selectedAnalysisSessionId ?? response.diagnostics.requestSessionId ?? requestSessionId;
     const currentBuildingId = selectedBuildingIdRef.current;
@@ -2252,6 +2255,7 @@ function RiskMapPage() {
     );
   }, [
     hasSelectedBuilding,
+    isClimateLiveBackendEnabled,
     selectedAnalysisSessionId,
     selectedBuilding.address,
     selectedBuilding.apartmentName,
@@ -2961,27 +2965,29 @@ function RiskMapPage() {
                   표시되는 패널과 발전량은 예상·추정 예시이며, 실제 설치 가능 여부는 현장조사와 구조안전성,
                   관리주체 협의, 실제 공고 확인이 필요합니다.
                 </p>
-                <button
-                  className="riskAnalysisButton climateLiveButton"
-                  type="button"
-                  onClick={handleLiveClimateAnalysisRequest}
-                  disabled={
-                    !hasSelectedBuilding ||
-                    !selectedCoordinate ||
-                    !selectedBuildingFeature ||
-                    liveShadingStatus === 'trying'
-                  }
-                >
-                  {liveShadingStatus === 'trying'
-                    ? '기본 분석 완료 · 음영 분석 시도 중'
-                    : liveShadingStatus === 'success'
-                      ? 'AI 음영 분석 완료'
-                      : liveShadingStatus === 'timeout' || liveShadingStatus === 'fallback'
-                        ? '기본 배치 표시 중'
-                      : '선택 건물 climate.gg 라이브 분석 실행'}
-                </button>
+                {isClimateLiveBackendEnabled && (
+                  <button
+                    className="riskAnalysisButton climateLiveButton"
+                    type="button"
+                    onClick={handleLiveClimateAnalysisRequest}
+                    disabled={
+                      !hasSelectedBuilding ||
+                      !selectedCoordinate ||
+                      !selectedBuildingFeature ||
+                      liveShadingStatus === 'trying'
+                    }
+                  >
+                    {liveShadingStatus === 'trying'
+                      ? '기본 분석 완료 · 음영 분석 시도 중'
+                      : liveShadingStatus === 'success'
+                        ? 'AI 음영 분석 완료'
+                        : liveShadingStatus === 'timeout' || liveShadingStatus === 'fallback'
+                          ? '기본 배치 표시 중'
+                        : '선택 건물 climate.gg 라이브 분석 실행'}
+                  </button>
+                )}
                 <p>
-                  climate.gg 샘플 POC는 1개 샘플 건물 사전계산본이므로 현재 선택 건물과 위치가 다를 수 있습니다.
+                  climate.gg 샘플 음영 분석은 현재 선택 건물과 별개의 1개 사전계산 샘플입니다.
                 </p>
                 <label className="panelToggleRow panelToggleRowInline">
                   <span>climate.gg 샘플 음영 분석 보기</span>

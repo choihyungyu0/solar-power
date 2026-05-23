@@ -201,6 +201,7 @@ export type ClimateLiveAnalysisFailureResponse = {
   selectedAnalysisSessionId?: string | null;
   selectedFeatureBuildingId?: string | null;
   roofSource?: ClimateLiveRoofSource;
+  disabled?: boolean;
   message: string;
   fallbackRecommended: true;
   analysisStage?: 'shading-complete' | 'shading-timeout' | 'pv-complete' | string;

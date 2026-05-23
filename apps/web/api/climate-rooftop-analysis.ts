@@ -1,3 +1,4 @@
+// Experimental only. Disabled from production UI. Future work should move this to a separate backend server.
 import proj4 from 'proj4';
 import type {
   ClimateBundle,
@@ -9,6 +10,7 @@ import type {
 
 const BASE = 'https://climate.gg.go.kr';
 const SELECT_BULD_URL = `${BASE}/gcs/book/cmm/selectBuld.do`;
+const ENABLE_EXPERIMENTAL_CLIMATE_LIVE_API = process.env.ENABLE_EXPERIMENTAL_CLIMATE_LIVE_API === 'true';
 const FAST_OVERALL_TIMEOUT_MS = 7_000;
 const FULL_OVERALL_TIMEOUT_MS = 25_000;
 const SELECT_BULD_TIMEOUT_MS = 5_000;
@@ -1337,6 +1339,25 @@ export default async function handler(request: Request) {
   if (request.method !== 'POST') {
     clearTimeout(overallTimeoutId);
     return jsonResponse({ error: 'Method not allowed.' }, 405);
+  }
+
+  if (!ENABLE_EXPERIMENTAL_CLIMATE_LIVE_API) {
+    clearTimeout(overallTimeoutId);
+    return jsonResponse({
+      ok: false,
+      source: 'climate.gg-live-hybrid',
+      disabled: true,
+      message: 'climate.gg 라이브 분석은 별도 백엔드 서버 연동 예정입니다.',
+      fallbackRecommended: true,
+      diagnostics: {
+        elapsedMs: getElapsedMs(),
+        overallTimeoutMs: FAST_OVERALL_TIMEOUT_MS,
+        selectBuldStatus: 'skipped',
+        selectSunListStatus: 'skipped',
+        pvAnalysisStatus: 'skipped',
+        fallbackReason: 'experimental-vercel-route-disabled',
+      },
+    });
   }
 
   const apiTimingsMs: Record<string, number> = {};

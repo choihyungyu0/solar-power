@@ -2,7 +2,6 @@ import { createDefaultPvAnalysisInput, createFallbackPvAnalysisResult, createSaf
 import type { ClimateRooftopAnalysisInput, PvAnalysisInput, PvAnalysisProxyResponse } from '../types/pvAnalysis';
 
 const PV_ANALYSIS_PROXY_PATH = '/api/pv-analysis';
-const CLIMATE_ROOFTOP_ANALYSIS_PROXY_PATH = '/api/climate-rooftop-analysis';
 
 function createClientFallbackResponse(
   input: PvAnalysisInput,
@@ -56,27 +55,9 @@ export async function requestPvAnalysis(input: PvAnalysisInput): Promise<PvAnaly
 export async function requestClimateRooftopAnalysis(
   input: ClimateRooftopAnalysisInput,
 ): Promise<PvAnalysisProxyResponse> {
-  try {
-    const response = await fetch(CLIMATE_ROOFTOP_ANALYSIS_PROXY_PATH, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json; charset=UTF-8',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify(input),
-    });
-    const payload = (await response.json().catch(() => null)) as PvAnalysisProxyResponse | null;
-
-    if (payload && typeof payload === 'object' && 'ok' in payload) {
-      return payload;
-    }
-  } catch {
-    // Stale-response checks happen in the page; preserve the identity in the fallback payload.
-  }
-
   return createClientFallbackResponse(
     input,
-    'climate.gg 옥상 분석 프록시 응답을 받지 못해 데모 산식으로 표시합니다.',
+    'climate.gg 라이브 분석은 별도 백엔드 서버 연동 예정이라 기본 시나리오 산식으로 표시합니다.',
     input,
   );
 }
