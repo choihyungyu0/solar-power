@@ -9,13 +9,13 @@ import type {
 
 const BASE = 'https://climate.gg.go.kr';
 const SELECT_BULD_URL = `${BASE}/gcs/book/cmm/selectBuld.do`;
-const FAST_OVERALL_TIMEOUT_MS = 15_000;
+const FAST_OVERALL_TIMEOUT_MS = 7_000;
 const FULL_OVERALL_TIMEOUT_MS = 25_000;
 const SELECT_BULD_TIMEOUT_MS = 5_000;
-const FAST_SELECT_BULD_TIMEOUT_MS = 3_000;
+const FAST_SELECT_BULD_TIMEOUT_MS = 1_500;
 const WFS_METADATA_TIMEOUT_MS = 5_000;
 const SELECT_SUN_LIST_TIMEOUT_MS = 12_000;
-const FAST_SELECT_SUN_LIST_TIMEOUT_MS = 9_000;
+const FAST_SELECT_SUN_LIST_TIMEOUT_MS = 5_000;
 const SELECT_BULD_INFO_TIMEOUT_MS = 4_000;
 const SELECT_RULE_LIST_TIMEOUT_MS = 4_000;
 const PV_ANALYSIS_TIMEOUT_MS = 8_000;
@@ -23,7 +23,7 @@ const SELECT_BULD_MAX_ATTEMPTS = 1;
 const CELL_W_M = 1;
 const CELL_H_M = 3.5;
 const FULL_MAX_CELLS = 2500;
-const FAST_MAX_CELLS = 700;
+const FAST_MAX_CELLS = 180;
 const MAX_CELL_SCAN_COUNT = 100_000;
 const DEFAULT_PANEL_CAPACITY_W = 640;
 const DEFAULT_PANEL_ANGLE = 35;
@@ -37,7 +37,7 @@ const CARBON_REDUCTION_KG_PER_KWH = 0.4594;
 const PINE_TREE_KG_CO2_PER_YEAR = 6.6;
 const MONTHLY_GENERATION_WEIGHTS = [0.072, 0.079, 0.092, 0.101, 0.107, 0.104, 0.097, 0.096, 0.087, 0.073, 0.049, 0.043];
 
-export const maxDuration = 60;
+export const maxDuration = 10;
 
 const COMMON_HEADERS = {
   Accept: 'application/json, text/javascript, */*; q=0.01',
@@ -107,12 +107,13 @@ type LiveDiagnostics = {
   roofSource: ClimateLiveRoofSource;
   overallTimeoutMs: number;
   elapsedMs: number;
-  analysisStage?: 'shading-complete' | 'pv-complete';
+  analysisStage?: 'shading-complete' | 'shading-timeout' | 'pv-complete';
   includePvAnalysis?: boolean;
   mode?: AnalysisMode;
   originalCellCount?: number;
   usedCellCount?: number;
   installCapacityKw?: number;
+  selectSunListTimeoutMs?: number;
   timedOutStep?: string | null;
   selectBuldStatus: SelectBuldStatus;
   selectSunListStatus?: ExternalStepStatus;
@@ -382,6 +383,7 @@ function createFailureResponse(
       selectedBuildingId: responseDiagnostics.requestSelectedBuildingId,
       selectedAnalysisSessionId: responseDiagnostics.requestSessionId,
       selectedFeatureBuildingId: responseDiagnostics.selectedFeatureBuildingId,
+      ...(typeof diagnostics.analysisStage === 'string' ? { analysisStage: diagnostics.analysisStage } : {}),
       message,
       fallbackRecommended: true,
       diagnostics: responseDiagnostics,
@@ -1362,6 +1364,7 @@ export default async function handler(request: Request) {
   let originalCellCount = 0;
   let usedCellCount = 0;
   let installCapacityKw = 0;
+  let selectSunListTimeoutMs = FAST_SELECT_SUN_LIST_TIMEOUT_MS;
   const getCommonDiagnostics = () => ({
     overallTimeoutMs,
     elapsedMs: getElapsedMs(),
@@ -1374,6 +1377,7 @@ export default async function handler(request: Request) {
     originalCellCount,
     usedCellCount,
     installCapacityKw,
+    selectSunListTimeoutMs,
   });
   const markTimedOutStep = (error: unknown, step: string) => {
     if (error instanceof ExternalStepError) {
@@ -1402,7 +1406,7 @@ export default async function handler(request: Request) {
     includePvAnalysis = input.includePvAnalysis;
     resetOverallTimeout(analysisMode === 'fast' ? FAST_OVERALL_TIMEOUT_MS : FULL_OVERALL_TIMEOUT_MS);
     const selectBuldTimeoutMs = analysisMode === 'fast' ? FAST_SELECT_BULD_TIMEOUT_MS : SELECT_BULD_TIMEOUT_MS;
-    const selectSunListTimeoutMs = analysisMode === 'fast' ? FAST_SELECT_SUN_LIST_TIMEOUT_MS : SELECT_SUN_LIST_TIMEOUT_MS;
+    selectSunListTimeoutMs = analysisMode === 'fast' ? FAST_SELECT_SUN_LIST_TIMEOUT_MS : SELECT_SUN_LIST_TIMEOUT_MS;
     const maxCells = analysisMode === 'fast' ? FAST_MAX_CELLS : FULL_MAX_CELLS;
     const [x5186, y5186] = to5186(input.longitude, input.latitude);
 
@@ -1414,8 +1418,9 @@ export default async function handler(request: Request) {
     inputWgs84 = { longitude: input.longitude, latitude: input.latitude };
     input5186 = { x: x5186, y: y5186 };
 
+    const isFastMode = analysisMode === 'fast';
     const metadataPromise =
-      !includePvAnalysis
+      isFastMode || !includePvAnalysis
         ? Promise.resolve({})
         : loadWfsMetadata(x5186, y5186, apiTimingsMs, overallController.signal).catch((error) => {
             warnings.push(error instanceof Error ? error.message : 'WFS 건물 메타데이터 조회에 실패했습니다.');
@@ -1423,35 +1428,37 @@ export default async function handler(request: Request) {
             return {};
           });
     let roofRing = input.selectedBuildingRing5186;
-    const selectBuldResult = await runSelectBuldCandidateRequest(
-      x5186,
-      y5186,
-      apiTimingsMs,
-      overallController.signal,
-      selectBuldTimeoutMs,
-    ).catch((error) => {
-      if (error instanceof ExternalStepError && error.step === 'selectBuld') {
-        markTimedOutStep(error, 'selectBuld');
+    const selectBuldResult = isFastMode
+      ? null
+      : await runSelectBuldCandidateRequest(
+          x5186,
+          y5186,
+          apiTimingsMs,
+          overallController.signal,
+          selectBuldTimeoutMs,
+        ).catch((error) => {
+          if (error instanceof ExternalStepError && error.step === 'selectBuld') {
+            markTimedOutStep(error, 'selectBuld');
 
-        if (error.diagnostics) {
-          selectBuldDiagnostics = error.diagnostics as SelectBuldDiagnostics;
-        }
+            if (error.diagnostics) {
+              selectBuldDiagnostics = error.diagnostics as SelectBuldDiagnostics;
+            }
 
-        selectBuldStatus =
-          selectBuldDiagnostics?.selectBuldFeatureParseStatus === 'request-timeout' || error.message.includes('초과')
-            ? 'timeout'
-            : 'not_found';
-        warnings.push(
-          selectBuldStatus === 'timeout'
-            ? 'climate.gg 옥상 polygon 조회가 시간 초과되어 선택 건물 footprint 기반 옥상 추정으로 진행했습니다.'
-            : 'climate.gg 옥상 polygon 조회에 실패하여 선택 건물 footprint 기반 옥상 추정으로 진행했습니다.',
-        );
+            selectBuldStatus =
+              selectBuldDiagnostics?.selectBuldFeatureParseStatus === 'request-timeout' || error.message.includes('초과')
+                ? 'timeout'
+                : 'not_found';
+            warnings.push(
+              selectBuldStatus === 'timeout'
+                ? 'climate.gg 옥상 polygon 조회가 시간 초과되어 선택 건물 footprint 기반 옥상 추정으로 진행했습니다.'
+                : 'climate.gg 옥상 polygon 조회에 실패하여 선택 건물 footprint 기반 옥상 추정으로 진행했습니다.',
+            );
 
-        return null;
-      }
+            return null;
+          }
 
-      throw error;
-    });
+          throw error;
+        });
 
     if (selectBuldResult?.ring) {
       selectBuldDiagnostics = selectBuldResult.diagnostics;
@@ -1538,7 +1545,7 @@ export default async function handler(request: Request) {
       selectSunListStatus = timedOutStep === 'selectSunList' ? 'timeout' : 'failed';
       fallbackReason = selectSunListStatus === 'timeout' ? 'selectSunList-timeout' : 'selectSunList-failed';
 
-      return createFailureResponse('climate.gg 음영 분석 응답 지연으로 건물 footprint 기반 자체 배치를 유지합니다.', {
+      return createFailureResponse('climate.gg 음영 분석 응답 지연으로 기본 패널 배치를 유지합니다.', {
         inputWgs84,
         input5186,
         roofAreaM2,
@@ -1559,6 +1566,7 @@ export default async function handler(request: Request) {
         maxCellsApplied,
         apiTimingsMs,
         ...getCommonDiagnostics(),
+        analysisStage: 'shading-timeout',
         ...(selectBuldDiagnostics ?? {}),
         selectSunListLastError: error instanceof Error ? error.message : 'unknown',
         warnings,

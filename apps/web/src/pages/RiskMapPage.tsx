@@ -141,10 +141,10 @@ type RiskPanelTab = 'risk' | 'solar' | 'policy';
 type SelectionMode = 'screen-fallback' | 'coordinate-fallback' | 'parcel-fallback' | 'geometry' | 'building_footprint';
 type SelectionFeedbackStatus = 'idle' | 'loading' | 'success' | 'not_found' | 'error';
 type BuildingDataHealthStatus = 'idle' | 'loading' | 'ok' | 'error';
-type PvAnalysisStatus = 'idle' | 'loading' | 'success' | 'fallback' | 'error';
+type PvAnalysisStatus = 'idle' | 'calculating' | 'success' | 'fallback' | 'error';
 type ClimatePanelLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
 type LiveClimateStatus = 'idle' | 'loading' | 'success' | 'error';
-type LiveShadingStatus = 'idle' | 'loading' | 'success' | 'error';
+type LiveShadingStatus = 'idle' | 'trying' | 'success' | 'timeout' | 'fallback';
 type SimplePaybackSource = 'climate-live' | 'static-poc' | 'footprint-fallback';
 type RiskProcessStepState = 'disabled' | 'complete' | 'active' | 'pending';
 type GeometryQueryStatus =
@@ -1187,12 +1187,15 @@ function RiskMapPage() {
   const liveUsedCellCount = liveClimateDiagnostics?.usedCellCount ?? null;
   const liveElapsedMs = liveClimateDiagnostics?.elapsedMs ?? null;
   const liveSelectSunListStatus = liveClimateDiagnostics?.selectSunListStatus ?? null;
+  const liveSelectSunListTimeoutMs = liveClimateDiagnostics?.selectSunListTimeoutMs ?? null;
+  const liveFrontendAbortMs = liveClimateDiagnostics?.frontendAbortMs ?? null;
+  const liveFallbackReason = typeof liveClimateDiagnostics?.fallbackReason === 'string' ? liveClimateDiagnostics.fallbackReason : '-';
   const liveIncludePvAnalysis = liveClimateDiagnostics?.includePvAnalysis ?? false;
   const liveInstallCapacityKw = liveClimateDiagnostics?.installCapacityKw ?? null;
   const liveApiSource = liveClimateStatus === 'success' ? 'climate.gg-live-hybrid' : '-';
   const activeClimatePvOutput = activeClimateBundle?.pv_analysis_output ?? null;
   const climateExpectedRevenue = activeClimatePvOutput?.expected_revenue;
-  const isSeparatePvCalculating = hasLiveClimatePanelLayout && pvAnalysisStatus === 'loading';
+  const isSeparatePvCalculating = hasLiveClimatePanelLayout && pvAnalysisStatus === 'calculating';
   const simplePaybackSource: SimplePaybackSource = hasLiveClimatePanelLayout
     ? 'climate-live'
     : hasStaticClimatePanelLayout
@@ -1934,7 +1937,7 @@ function RiskMapPage() {
       },
     };
 
-    setPvAnalysisStatus('loading');
+    setPvAnalysisStatus('calculating');
     setPvAnalysisMessage('경기 기후 플랫폼 기준 발전량 분석을 요청하고 있습니다.');
 
     const response = await requestPvAnalysis(input);
@@ -2049,7 +2052,7 @@ function RiskMapPage() {
 
   const handleLiveClimateAnalysisRequest = useCallback(async () => {
     if (!selectedCoordinate || !hasSelectedBuilding || !selectedBuildingFeature || !selectedBuildingId || !selectedAnalysisSessionId) {
-      setLiveShadingStatus('error');
+      setLiveShadingStatus('fallback');
       setLiveClimateStatus('error');
       setLiveClimateStep('선택 건물 기준 좌표가 필요합니다.');
       setLiveClimateError('화성시 건물 polygon을 선택한 뒤 climate.gg 라이브 분석을 실행해주세요.');
@@ -2064,30 +2067,35 @@ function RiskMapPage() {
     const livePanelType = 1;
     const liveCellsPerPanel = 2;
 
-    setLiveShadingStatus('loading');
+    setLiveShadingStatus('trying');
     setLiveClimateStatus('loading');
-    setLiveClimateStep('AI/공공데이터 기반 음영 분석 실행 중');
+    setLiveClimateStep('기본 분석 완료 · 음영 분석 시도 중');
     setLiveClimateError('');
     setLiveClimateDiagnostics(null);
     setLiveClimateBundle(null);
     setLiveClimatePanelGeojson(null);
     setPvAnalysisStatus('idle');
-    setPvAnalysisMessage('발전량은 별도 계산 중');
+    setPvAnalysisMessage('');
     setPvAnalysisResponse(null);
 
-    const response = await runClimateRooftopAnalysis({
-      longitude: selectedCoordinate[0],
-      latitude: selectedCoordinate[1],
-      selectedBuildingId: requestSelectedBuildingId,
-      selectedAnalysisSessionId: requestSessionId,
-      selectedBuildingFeature: selectedBuildingFeature as ClimateSelectedBuildingFeature,
-      panelCapacityW: livePanelCapacityW,
-      panelAngle: livePanelAngle,
-      panelType: livePanelType,
-      cellsPerPanel: liveCellsPerPanel,
-      includePvAnalysis: false,
-      mode: 'fast',
-    });
+    setIsSolarPanelLayerVisible(true);
+
+    const response = await runClimateRooftopAnalysis(
+      {
+        longitude: selectedCoordinate[0],
+        latitude: selectedCoordinate[1],
+        selectedBuildingId: requestSelectedBuildingId,
+        selectedAnalysisSessionId: requestSessionId,
+        selectedBuildingFeature: selectedBuildingFeature as ClimateSelectedBuildingFeature,
+        panelCapacityW: livePanelCapacityW,
+        panelAngle: livePanelAngle,
+        panelType: livePanelType,
+        cellsPerPanel: liveCellsPerPanel,
+        includePvAnalysis: false,
+        mode: 'fast',
+      },
+      { timeoutMs: 6000 },
+    );
     const responseBuildingId = response.selectedBuildingId ?? response.diagnostics.requestSelectedBuildingId ?? requestSelectedBuildingId;
     const responseSessionId = response.selectedAnalysisSessionId ?? response.diagnostics.requestSessionId ?? requestSessionId;
     const currentBuildingId = selectedBuildingIdRef.current;
@@ -2109,27 +2117,24 @@ function RiskMapPage() {
 
     if (!response.ok) {
       const fallbackMessage = response.fallbackRecommended
-        ? 'climate.gg 음영 분석 응답 지연으로 건물 footprint 기반 자체 배치를 유지합니다.'
+        ? 'climate.gg 응답이 지연되어 기본 패널 배치를 표시합니다.'
         : response.message;
 
-      setLiveShadingStatus('error');
-      setLiveClimateStatus('error');
-      setLiveClimateStep('건물 footprint 기반 자체 배치 유지');
+      setLiveShadingStatus(
+        response.analysisStage === 'shading-timeout' || response.diagnostics.timedOutStep ? 'timeout' : 'fallback',
+      );
+      setLiveClimateStatus('idle');
+      setLiveClimateStep('기본 배치 표시 중');
       setLiveClimateError(fallbackMessage);
       setLiveClimateDiagnostics(response.diagnostics);
       setPvAnalysisStatus('idle');
-      setPvAnalysisMessage(fallbackMessage);
-      setAnalysisStatus(fallbackMessage);
+      setPvAnalysisMessage('음영 API 지연 · 기본 배치 표시 중');
+      setAnalysisStatus('음영 API 지연 · 기본 배치 표시 중');
       setIsSolarPanelLayerVisible(true);
       return;
     }
 
-    const liveCompletionMessage =
-      response.diagnostics.selectBuldStatus === 'mismatch_selected_building'
-        ? 'climate.gg 옥상 polygon이 선택 건물과 달라 선택 건물 footprint 기반으로 음영 분석을 진행했습니다.'
-        : response.roofSource === 'vworld-building-footprint-fallback'
-          ? 'climate.gg 옥상 polygon 조회가 지연되어 선택 건물 footprint 기반으로 음영 분석을 진행했습니다.'
-          : '음영 분석 완료';
+    const liveCompletionMessage = 'AI 음영 분석 완료';
     const pvInput: PvAnalysisInput = {
       latitude: response.bundle.pv_analysis_input.latitude,
       longitude: response.bundle.pv_analysis_input.longitude,
@@ -2160,13 +2165,13 @@ function RiskMapPage() {
 
     setLiveShadingStatus('success');
     setLiveClimateStatus('success');
-    setLiveClimateStep('음영 분석 완료');
+    setLiveClimateStep(liveCompletionMessage);
     setLiveClimateError('');
     setLiveClimateDiagnostics(response.diagnostics);
     setLiveClimateBundle(response.bundle);
     setLiveClimatePanelGeojson(response.panelsGeojson);
     setIsSolarPanelLayerVisible(true);
-    setPvAnalysisStatus('loading');
+    setPvAnalysisStatus('calculating');
     setPvAnalysisMessage('발전량 계산 중...');
     setPvAnalysisResponse(interimScenarioResponse);
     setAnalysisStatus(`${liveCompletionMessage} · 발전량은 별도 계산 중`);
@@ -2934,9 +2939,9 @@ function RiskMapPage() {
                 className="riskAnalysisButton"
                 type="button"
                 onClick={handleRiskAnalysisRequest}
-                disabled={pvAnalysisStatus === 'loading'}
+                disabled={pvAnalysisStatus === 'calculating'}
               >
-                {pvAnalysisStatus === 'loading' ? '발전량 분석 중...' : '이 건물로 위험 분석 시작'}
+                {pvAnalysisStatus === 'calculating' ? '발전량 분석 중...' : '이 건물로 위험 분석 시작'}
               </button>
             </>
           )}
@@ -2964,12 +2969,16 @@ function RiskMapPage() {
                     !hasSelectedBuilding ||
                     !selectedCoordinate ||
                     !selectedBuildingFeature ||
-                    liveShadingStatus === 'loading'
+                    liveShadingStatus === 'trying'
                   }
                 >
-                  {liveShadingStatus === 'loading'
-                    ? 'AI/공공데이터 기반 음영 분석 중...'
-                    : '선택 건물 climate.gg 라이브 분석 실행'}
+                  {liveShadingStatus === 'trying'
+                    ? '기본 분석 완료 · 음영 분석 시도 중'
+                    : liveShadingStatus === 'success'
+                      ? 'AI 음영 분석 완료'
+                      : liveShadingStatus === 'timeout' || liveShadingStatus === 'fallback'
+                        ? '기본 배치 표시 중'
+                      : '선택 건물 climate.gg 라이브 분석 실행'}
                 </button>
                 <p>
                   climate.gg 샘플 POC는 1개 샘플 건물 사전계산본이므로 현재 선택 건물과 위치가 다를 수 있습니다.
@@ -3112,8 +3121,24 @@ function RiskMapPage() {
                   <strong>{liveSelectSunListStatus ?? '-'}</strong>
                 </div>
                 <div>
+                  <span>selectSunListTimeoutMs</span>
+                  <strong>
+                    {liveSelectSunListTimeoutMs === null
+                      ? '-'
+                      : `${liveSelectSunListTimeoutMs.toLocaleString('ko-KR')}ms`}
+                  </strong>
+                </div>
+                <div>
+                  <span>frontendAbortMs</span>
+                  <strong>{liveFrontendAbortMs === null ? '-' : `${liveFrontendAbortMs.toLocaleString('ko-KR')}ms`}</strong>
+                </div>
+                <div>
                   <span>elapsedMs</span>
                   <strong>{liveElapsedMs === null ? '-' : `${liveElapsedMs.toLocaleString('ko-KR')}ms`}</strong>
+                </div>
+                <div>
+                  <span>fallbackReason</span>
+                  <strong>{liveFallbackReason}</strong>
                 </div>
                 <div>
                   <span>pvAnalysisSource</span>
@@ -3122,7 +3147,7 @@ function RiskMapPage() {
                       ? pvAnalysisResponse.source
                       : pvAnalysisStatus === 'fallback'
                         ? 'local-scenario-fallback'
-                        : pvAnalysisStatus === 'loading'
+                        : pvAnalysisStatus === 'calculating'
                           ? 'separate-request-pending'
                           : '-'}
                   </strong>
@@ -3625,9 +3650,9 @@ function RiskMapPage() {
                 className="riskAnalysisButton pvAnalysisButton"
                 type="button"
                 onClick={handlePvAnalysisRequest}
-                disabled={pvAnalysisStatus === 'loading'}
+                disabled={pvAnalysisStatus === 'calculating'}
               >
-                {pvAnalysisStatus === 'loading' ? '발전량 분석 중...' : '발전량 분석 실행'}
+                {pvAnalysisStatus === 'calculating' ? '발전량 분석 중...' : '발전량 분석 실행'}
               </button>
 
               {pvAnalysisMessage && (

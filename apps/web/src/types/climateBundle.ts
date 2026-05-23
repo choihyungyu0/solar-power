@@ -142,12 +142,14 @@ export type ClimateLiveAnalysisDiagnostics = {
   roofSource?: ClimateLiveRoofSource;
   overallTimeoutMs?: number;
   elapsedMs?: number;
-  analysisStage?: 'shading-complete' | 'pv-complete' | string;
+  analysisStage?: 'shading-complete' | 'shading-timeout' | 'pv-complete' | string;
   includePvAnalysis?: boolean;
   mode?: 'fast' | 'full' | string;
   originalCellCount?: number;
   usedCellCount?: number;
   installCapacityKw?: number;
+  selectSunListTimeoutMs?: number;
+  frontendAbortMs?: number;
   timedOutStep?: string | null;
   selectBuldStatus?: ClimateLiveSelectBuldStatus;
   selectSunListStatus?: 'success' | 'timeout' | 'failed' | 'skipped' | 'fallback';
@@ -185,7 +187,7 @@ export type ClimateLiveAnalysisSuccessResponse = {
   selectedAnalysisSessionId?: string | null;
   selectedFeatureBuildingId?: string | null;
   roofSource: ClimateLiveRoofSource;
-  analysisStage?: 'shading-complete' | 'pv-complete' | string;
+  analysisStage?: 'shading-complete' | 'shading-timeout' | 'pv-complete' | string;
   pvAnalysisStatus?: 'success' | 'timeout' | 'failed' | 'skipped' | 'fallback';
   bundle: ClimateBundle;
   panelsGeojson: ClimatePanelsGeoJson;
@@ -201,6 +203,7 @@ export type ClimateLiveAnalysisFailureResponse = {
   roofSource?: ClimateLiveRoofSource;
   message: string;
   fallbackRecommended: true;
+  analysisStage?: 'shading-complete' | 'shading-timeout' | 'pv-complete' | string;
   diagnostics: ClimateLiveAnalysisDiagnostics;
 };
 
