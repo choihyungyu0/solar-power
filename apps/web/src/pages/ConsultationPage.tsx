@@ -93,7 +93,6 @@ function ConsultationPage() {
     thirdParty: false,
   });
   const [errorMessage, setErrorMessage] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
 
   const updateFormValue = (key: keyof ConsultationFormValues, value: string) => {
     setFormValues((prev) => ({
@@ -125,8 +124,8 @@ function ConsultationPage() {
     const hasMissingAgreement = !agreements.privacy || !agreements.thirdParty;
 
     if (hasMissingFormValue || hasMissingAgreement) {
-      setSuccessMessage('');
       setErrorMessage('필수 항목을 입력하고 개인정보 동의에 체크해주세요.');
+      window.alert('필수 항목을 입력하고 개인정보 동의에 체크해주세요.');
       return;
     }
 
@@ -142,7 +141,7 @@ function ConsultationPage() {
 
     window.sessionStorage.setItem(CONSULTATION_INQUIRY_STORAGE_KEY, JSON.stringify(inquiry));
     setErrorMessage('');
-    setSuccessMessage('문의가 접수되었습니다. 담당자가 확인 후 연락드리겠습니다.');
+    window.location.assign('/consultation/complete');
   };
 
   return (
@@ -227,12 +226,6 @@ function ConsultationPage() {
             {errorMessage && (
               <p className="consultation-message is-error" role="alert">
                 {errorMessage}
-              </p>
-            )}
-
-            {successMessage && (
-              <p className="consultation-message is-success" role="status">
-                {successMessage}
               </p>
             )}
 
