@@ -85,6 +85,10 @@ import {
   type VWorldFeature,
   type VWorldFeatureQueryStatus,
 } from '../lib/vworldFeatureQuery';
+import {
+  buildStoredSimulationResult,
+  saveSimulationResultToSession,
+} from '../lib/simulationResultStorage';
 import type {
   ClimateBundle,
   ClimateLiveAnalysisDiagnostics,
@@ -1686,6 +1690,49 @@ function RiskMapPage() {
     );
   }, [selectedBuilding.estimatedPanelCount, selectedCoordinate, selectionMode]);
 
+  const handleResultDetailRequest = useCallback(() => {
+    const selectedAddress = selectedBuildingFootprint?.address ?? selectedBuilding.address;
+    const result = buildStoredSimulationResult({
+      building: {
+        name: selectedBuildingFootprint?.name ?? selectedBuilding.apartmentName,
+        roadAddress: selectedAddress,
+        jibunAddress: selectedBuildingFootprint ? '지번 정보 확인 필요' : selectedBuilding.address,
+        buildingId: selectedBuildingFootprint?.buildingId ?? 'demo-building',
+      },
+      liveClimateBundle: liveClimateStatus === 'success' ? liveClimateBundle : null,
+      pvAnalysisResult,
+      selectedEstimate: {
+        panelCount: selectedBuilding.estimatedPanelCount,
+        installCapacityKw: selectedBuilding.estimatedCapacityKw,
+        annualGenerationKwh: selectedBuilding.estimatedAnnualGenerationKwh,
+        annualSavingKrw: selectedBuilding.estimatedAnnualSavingsKrw,
+        paybackYears: selectedBuilding.estimatedPaybackYears,
+        investmentKrw: overviewInvestmentKrw ?? undefined,
+      },
+    });
+    const didSave = saveSimulationResultToSession(result);
+
+    setAnalysisStatus(
+      didSave
+        ? '현재 선택 건물과 최신 예상 분석 결과를 저장하고 상세 리포트로 이동합니다.'
+        : '브라우저 저장소를 사용할 수 없어 상세 리포트에서 시나리오 기준 예시값을 표시합니다.',
+    );
+    window.location.assign('/simulation/result');
+  }, [
+    liveClimateBundle,
+    liveClimateStatus,
+    overviewInvestmentKrw,
+    pvAnalysisResult,
+    selectedBuilding.address,
+    selectedBuilding.apartmentName,
+    selectedBuilding.estimatedAnnualGenerationKwh,
+    selectedBuilding.estimatedAnnualSavingsKrw,
+    selectedBuilding.estimatedCapacityKw,
+    selectedBuilding.estimatedPanelCount,
+    selectedBuilding.estimatedPaybackYears,
+    selectedBuildingFootprint,
+  ]);
+
   const handleRiskAnalysisRequest = useCallback(async () => {
     setAnalysisStatus('선택 건물 기준 위험 분석과 발전량 분석을 함께 실행합니다.');
     setActiveTab('solar');
@@ -3062,11 +3109,11 @@ function RiskMapPage() {
               </label>
 
               <button
-                className="riskAnalysisButton"
+                className="riskAnalysisButton resultDetailButton"
                 type="button"
-                onClick={() => setAnalysisStatus('태양광 도입 기준 절감 시나리오 초안이 준비되었습니다.')}
+                onClick={handleResultDetailRequest}
               >
-                절감 시나리오 보기
+                결과 상세보기
               </button>
 
               <p className="assumptionNote">

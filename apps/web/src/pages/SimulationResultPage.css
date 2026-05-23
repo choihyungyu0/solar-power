@@ -1,0 +1,786 @@
+.simulationResultPage {
+  min-height: 100vh;
+  background: #ffffff;
+  color: #111827;
+}
+
+.resultSiteHeader {
+  min-height: 78px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  border-bottom: 1px solid #e3e8ef;
+  padding: 0 64px;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.resultLogo {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+.resultSunMark {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background:
+    linear-gradient(#ffc400, #ffc400) center / 5px 100% no-repeat,
+    linear-gradient(90deg, #ffc400, #ffc400) center / 100% 5px no-repeat;
+}
+
+.resultSunMark::before {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  border-radius: 999px;
+  background: #ffc400;
+  transform: rotate(45deg);
+}
+
+.resultSunMark::after {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 4px #ffc400;
+}
+
+.resultLogo strong {
+  color: #0b3d91;
+  font-size: 28px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.resultLogo span {
+  color: #1687ff;
+}
+
+.resultNav {
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  gap: clamp(18px, 3vw, 58px);
+  color: #111827;
+  font-size: 16px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.resultNav a {
+  transition: color 0.18s ease;
+}
+
+.resultNav a:hover {
+  color: #0b6ee6;
+}
+
+.resultHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 0 0 auto;
+}
+
+.resultLoginButton,
+.resultHeaderCta,
+.mapBackButton,
+.consultApplyButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  border-radius: 8px;
+  padding: 0 20px;
+  font-size: 15px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.resultLoginButton {
+  border: 1px solid #d7dee8;
+  background: #ffffff;
+}
+
+.resultHeaderCta,
+.consultApplyButton {
+  background: linear-gradient(180deg, #ffc900 0%, #ffb800 100%);
+  box-shadow: 0 10px 20px rgba(234, 179, 8, 0.22);
+}
+
+.simulationResultMain {
+  width: min(1700px, calc(100% - 80px));
+  margin: 0 auto;
+  padding: 24px 0 28px;
+}
+
+.resultTitleArea {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+
+.resultSourcePill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  padding: 0 12px;
+  background: #eff6ff;
+  color: #0758c7;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.resultSourcePill.isDemo {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #b45309;
+}
+
+.resultTitleArea h1 {
+  margin: 10px 0 8px;
+  color: #05070b;
+  font-size: clamp(32px, 2.3vw, 42px);
+  font-weight: 950;
+  line-height: 1.14;
+  letter-spacing: 0;
+}
+
+.resultTitleArea p {
+  margin: 0;
+  color: #334155;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.mapBackButton {
+  border: 1px solid #d8e0ea;
+  background: #ffffff;
+  color: #1f3b66;
+}
+
+.simulationResultLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 410px;
+  gap: 36px;
+  align-items: start;
+}
+
+.simulationResultContent {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.resultAddressSummary,
+.resultMetricSection,
+.ecoResultCard,
+.resultChartCard,
+.resultCostPanel {
+  border: 1px solid #d9e1ec;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.resultAddressSummary {
+  min-height: 78px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 14px 24px;
+}
+
+.addressRows {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.addressRows div {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.addressRows span {
+  color: #28334d;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.addressRows strong {
+  min-width: 0;
+  color: #1e293b;
+  font-size: 16px;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.resultBadgeGroup {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.resultBadge {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.resultBadge.badge1 {
+  border: 1px solid #9ecbff;
+  background: #e9f3ff;
+  color: #0969c3;
+}
+
+.resultBadge.badge2 {
+  border: 1px solid #abe6b3;
+  background: #ecfdf3;
+  color: #138a34;
+}
+
+.resultBadge.badge3 {
+  border: 1px solid #cbb8ff;
+  background: #f2edff;
+  color: #5b21b6;
+}
+
+.resultMetricSection {
+  overflow: hidden;
+}
+
+.metricSectionHeader {
+  min-height: 30px;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: 950;
+}
+
+.metricSectionHeader.is-orange {
+  background: linear-gradient(90deg, #ff8a00 0%, #ef3f00 100%);
+}
+
+.metricSectionHeader.is-green {
+  background: linear-gradient(90deg, #31b52c 0%, #098926 100%);
+}
+
+.metricSectionHeader.is-blue {
+  background: linear-gradient(90deg, #1d7cff 0%, #0758d3 100%);
+}
+
+.metricSectionBody {
+  min-height: 92px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 152px;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 18px 12px;
+}
+
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.metricItem {
+  min-width: 0;
+  border-right: 1px solid #d8e0ea;
+  padding: 4px 24px;
+}
+
+.metricItem:first-child {
+  padding-left: 6px;
+}
+
+.metricItem:last-child {
+  border-right: 0;
+}
+
+.metricItem span {
+  display: block;
+  margin-bottom: 8px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.metricItem strong {
+  display: block;
+  color: #0f172a;
+  font-size: clamp(21px, 1.45vw, 27px);
+  font-weight: 950;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+
+.metricItem .tone-orange {
+  color: #ff4b00;
+}
+
+.metricItem .tone-green {
+  color: #0a9d2a;
+}
+
+.metricItem .tone-blue {
+  color: #075ee8;
+}
+
+.metricItem .tone-navy {
+  color: #07358f;
+}
+
+.sectionResultImage {
+  width: 136px;
+  height: 82px;
+  justify-self: end;
+  object-fit: contain;
+}
+
+.ecoCardGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.ecoResultCard {
+  min-height: 76px;
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  padding: 10px 22px;
+}
+
+.ecoResultCard img {
+  width: 72px;
+  height: 56px;
+  object-fit: contain;
+}
+
+.ecoResultCard span {
+  display: block;
+  margin-bottom: 4px;
+  color: #334155;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.ecoResultCard strong {
+  color: #09a329;
+  font-size: clamp(23px, 1.6vw, 29px);
+  font-weight: 950;
+  line-height: 1.1;
+}
+
+.resultChartCard {
+  min-width: 0;
+  padding: 14px 18px 12px;
+}
+
+.resultChartCard h2 {
+  margin: 0 0 10px;
+  color: #1f2937;
+  font-size: 17px;
+  font-weight: 950;
+}
+
+.chartScrollArea {
+  display: grid;
+  grid-template-columns: 80px minmax(760px, 1fr);
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 3px;
+}
+
+.chartAxis {
+  height: 154px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: #46546a;
+  font-size: 11px;
+  font-weight: 850;
+  text-align: right;
+}
+
+.chartPlot {
+  position: relative;
+  min-width: 760px;
+  height: 154px;
+  border-bottom: 1px solid #b8c3d1;
+}
+
+.chartGridLines {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.chartGridLines span {
+  height: 1px;
+  background: #e5ebf3;
+}
+
+.chartBars {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.chartBarItem {
+  height: 100%;
+  min-width: 28px;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.chartBarTrack {
+  width: 100%;
+  flex: 1;
+  display: flex;
+  align-items: end;
+  justify-content: center;
+}
+
+.chartBar {
+  position: relative;
+  width: min(36px, 100%);
+  height: var(--bar-height);
+  min-height: 8px;
+  border-radius: 5px 5px 0 0;
+  background: linear-gradient(180deg, #ffc400 0%, #ffae00 100%);
+  box-shadow: inset -5px 0 0 rgba(255, 130, 0, 0.16);
+}
+
+.chartBar em {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  color: #111827;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 950;
+  line-height: 1;
+  white-space: nowrap;
+  writing-mode: vertical-rl;
+  transform: translateX(-50%) rotate(180deg);
+}
+
+.chartBarItem strong {
+  margin-top: 6px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.chartNotice {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  margin: 10px 0 0;
+  border-radius: 6px;
+  padding: 6px 16px;
+  background: #fff2c2;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.resultCostPanel {
+  position: sticky;
+  top: 18px;
+  overflow: hidden;
+}
+
+.costPanelHeader {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 26px;
+  background: linear-gradient(135deg, #064eb4 0%, #003278 100%);
+  color: #ffffff;
+}
+
+.costPanelHeader img {
+  width: 48px;
+  height: 44px;
+  object-fit: contain;
+}
+
+.costPanelHeader strong {
+  font-size: 26px;
+  font-weight: 950;
+}
+
+.costPanelList {
+  margin: 0;
+  padding: 18px 28px 4px;
+}
+
+.costPanelList div {
+  display: grid;
+  gap: 10px;
+  border-bottom: 1px dashed #c9d3e1;
+  padding: 18px 0 22px;
+}
+
+.costPanelList dt,
+.costPanelList dd {
+  margin: 0;
+}
+
+.costPanelList dt {
+  color: #111827;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.costPanelList dd {
+  color: #05070b;
+  font-size: 25px;
+  font-weight: 950;
+  line-height: 1.15;
+}
+
+.policyInfoBox {
+  display: grid;
+  gap: 8px;
+  margin: 22px 28px 28px;
+  border-radius: 8px;
+  padding: 20px;
+  background: #f1f4f8;
+}
+
+.policyInfoBox span {
+  color: #4b5870;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.policyInfoBox p,
+.policyInfoBox strong {
+  margin: 0;
+  color: #4b5870;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.policyInfoBox strong {
+  color: #27324f;
+  font-weight: 850;
+}
+
+.policyInfoBox button {
+  justify-self: start;
+  padding: 0;
+  background: transparent;
+  color: #006be6;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.consultApplyButton {
+  width: calc(100% - 56px);
+  min-height: 60px;
+  margin: 0 28px 28px;
+  color: #111827;
+  font-size: 18px;
+}
+
+.resultBottomNote {
+  margin: 12px 0 0;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 750;
+  text-align: right;
+}
+
+@media (max-width: 1400px) {
+  .resultSiteHeader {
+    padding: 0 32px;
+  }
+
+  .resultNav {
+    gap: 22px;
+    font-size: 15px;
+  }
+
+  .simulationResultLayout {
+    grid-template-columns: minmax(0, 1fr) 370px;
+    gap: 24px;
+  }
+
+  .metricItem {
+    padding-inline: 16px;
+  }
+}
+
+@media (max-width: 1120px) {
+  .resultSiteHeader {
+    min-height: auto;
+    flex-wrap: wrap;
+    padding: 18px 24px;
+  }
+
+  .resultNav {
+    order: 3;
+    width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .simulationResultLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .resultCostPanel {
+    position: static;
+  }
+
+  .resultBottomNote {
+    text-align: left;
+  }
+}
+
+@media (max-width: 760px) {
+  .simulationResultMain {
+    width: calc(100% - 32px);
+    padding-top: 20px;
+  }
+
+  .resultTitleArea {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .resultHeaderActions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 86px minmax(0, 1fr);
+  }
+
+  .resultLoginButton,
+  .resultHeaderCta {
+    width: 100%;
+    padding-inline: 12px;
+    font-size: 14px;
+  }
+
+  .resultAddressSummary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .addressRows,
+  .addressRows div {
+    width: 100%;
+  }
+
+  .addressRows div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .resultBadgeGroup {
+    justify-content: flex-start;
+  }
+
+  .metricSectionBody {
+    grid-template-columns: 1fr;
+  }
+
+  .metricGrid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .metricItem,
+  .metricItem:first-child {
+    border-right: 0;
+    border-bottom: 1px solid #e5ebf3;
+    padding: 0 0 14px;
+  }
+
+  .metricItem:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .sectionResultImage {
+    justify-self: center;
+  }
+
+  .ecoCardGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .chartScrollArea {
+    grid-template-columns: 62px minmax(620px, 1fr);
+  }
+
+  .chartPlot {
+    min-width: 620px;
+  }
+
+  .costPanelList dd {
+    font-size: 22px;
+  }
+}
+
+@media (max-width: 460px) {
+  .resultSiteHeader {
+    padding: 16px;
+  }
+
+  .resultLogo strong {
+    font-size: 24px;
+  }
+
+  .resultSunMark {
+    width: 36px;
+    height: 36px;
+  }
+
+  .ecoResultCard {
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px 16px;
+  }
+
+  .ecoResultCard img {
+    width: 60px;
+    height: 48px;
+  }
+}

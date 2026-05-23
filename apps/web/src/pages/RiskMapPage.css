@@ -923,6 +923,12 @@
   box-shadow: 0 16px 30px rgba(15, 118, 110, 0.22);
 }
 
+.resultDetailButton {
+  background: linear-gradient(180deg, #ffc900 0%, #ffb800 100%);
+  color: #111827;
+  box-shadow: 0 16px 30px rgba(234, 179, 8, 0.24);
+}
+
 .riskAnalysisButton:disabled {
   cursor: not-allowed;
   opacity: 0.72;

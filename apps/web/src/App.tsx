@@ -3,6 +3,7 @@ import SafeLocalImage from './components/SafeLocalImage';
 import SolarFeedSection from './components/SolarFeedSection';
 import ServiceIntroSection from './components/ServiceIntroSection';
 import RiskMapPage from './pages/RiskMapPage';
+import SimulationResultPage from './pages/SimulationResultPage';
 import SimulationSetupPage from './pages/SimulationSetupPage';
 
 const heroMetrics = [
@@ -54,6 +55,7 @@ function App() {
   const pathname = window.location.pathname.replace(/\/$/, '') || '/';
   const isRiskMapPage = pathname === '/risk-map';
   const isSimulationSetupPage = pathname === '/simulation/setup';
+  const isSimulationResultPage = pathname === '/simulation/result';
 
   useEffect(() => {
     if (!window.location.hash) {
@@ -71,6 +73,10 @@ function App() {
 
   if (isSimulationSetupPage) {
     return <SimulationSetupPage />;
+  }
+
+  if (isSimulationResultPage) {
+    return <SimulationResultPage />;
   }
 
   return (
