@@ -4,6 +4,7 @@ import SolarFeedSection from './components/SolarFeedSection';
 import ServiceIntroSection from './components/ServiceIntroSection';
 import ConsultationCompletePage from './pages/ConsultationCompletePage';
 import ConsultationPage from './pages/ConsultationPage';
+import MemberAsPage from './pages/MemberAsPage';
 import MemberDashboardPage from './pages/MemberDashboardPage';
 import NoticePage from './pages/NoticePage';
 import RiskMapPage from './pages/RiskMapPage';
@@ -66,6 +67,7 @@ function App() {
   const isSolarAdoptionPage = pathname === '/solar-adoption';
   const isNoticePage = pathname === '/notice';
   const isMemberDashboardPage = pathname === '/member/dashboard';
+  const isMemberAsPage = pathname === '/member/as' || pathname === '/customer-center';
 
   useEffect(() => {
     if (!window.location.hash) {
@@ -109,6 +111,10 @@ function App() {
     return <MemberDashboardPage />;
   }
 
+  if (isMemberAsPage) {
+    return <MemberAsPage />;
+  }
+
   const goMemberDashboard = () => {
     window.location.assign('/member/dashboard');
   };
@@ -129,7 +135,7 @@ function App() {
             <a href="/simulation/setup">우리 아파트 가상설치</a>
             <a href="#service-intro">서비스 소개</a>
             <a href="/notice">공지사항</a>
-            <a href="#contact">고객센터</a>
+            <a href="/member/as">고객센터</a>
           </nav>
 
           <div className="headerActions">

@@ -208,7 +208,7 @@ function SolarFeedSection() {
             <a href="#service-intro-status">예상 절감액</a>
             <a href="#service-intro">설치 사례</a>
             <a href="#solar-feed">정책 정보</a>
-            <a href="#contact">고객센터</a>
+            <a href="/member/as">고객센터</a>
           </div>
 
           <div className="solarFooterColumn">

@@ -2216,7 +2216,7 @@ function RiskMapPage() {
           <a href="/risk-map">전기세 위험 진단</a>
           <a href="/#service-intro-status">절감 시나리오</a>
           <a href="/#solar-feed">정책 지원</a>
-          <a href="/#contact">고객센터</a>
+          <a href="/member/as">고객센터</a>
         </nav>
 
         <div className="headerActions">

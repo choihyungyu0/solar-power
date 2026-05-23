@@ -115,6 +115,15 @@ export default function MemberDashboardPage() {
   const [activeTab, setActiveTab] = useState<DashboardTab>('generation');
   const activeTabInfo = dashboardTabs.find((tab) => tab.id === activeTab) ?? dashboardTabs[0];
 
+  const handleTabClick = (tab: DashboardTab) => {
+    if (tab === 'as') {
+      window.location.assign('/member/as');
+      return;
+    }
+
+    setActiveTab(tab);
+  };
+
   return (
     <div className="member-dashboard-page">
       <MemberDashboardHeader />
@@ -153,7 +162,7 @@ export default function MemberDashboardPage() {
                   type="button"
                   role="tab"
                   aria-selected={isActive}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => handleTabClick(tab.id)}
                 >
                   {tab.label}
                 </button>
@@ -198,7 +207,7 @@ function MemberDashboardHeader() {
         </a>
         <a href="/#service-intro">서비스 소개</a>
         <a href="/notice">공지사항</a>
-        <a href="/#contact">고객센터</a>
+        <a href="/member/as">고객센터</a>
       </nav>
 
       <button className="member-dashboard-login-button" type="button" onClick={stayOnDashboard}>

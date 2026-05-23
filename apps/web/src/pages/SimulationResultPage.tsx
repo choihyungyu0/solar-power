@@ -318,7 +318,7 @@ function ResultHeader() {
         <a href="/risk-map">우리 아파트 가상설치</a>
         <a href="/#solar-feed">보조금·정책자금</a>
         <a href="/#service-intro-status">도입 사례</a>
-        <a href="/#contact">고객센터</a>
+        <a href="/member/as">고객센터</a>
       </nav>
 
       <div className="resultHeaderActions">

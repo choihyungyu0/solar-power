@@ -67,7 +67,7 @@ function SolarAdoptionHeader() {
         </a>
         <a href="/#service-intro">서비스 소개</a>
         <a href="/notice">공지사항</a>
-        <a href="/#contact">고객센터</a>
+        <a href="/member/as">고객센터</a>
       </nav>
 
       <button
