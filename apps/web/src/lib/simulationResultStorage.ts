@@ -25,6 +25,7 @@ export type StoredSimulationSolar = {
   carbonReductionKg: number;
   pineTreeEffect: number;
   monthlyGeneration: number[];
+  monthlyGenerationKwh?: number[];
   yearlyRevenue: number[];
   firstYearSavingKrw?: number;
   tenYearSavingKrw?: number;
@@ -129,6 +130,11 @@ function buildSolarPayload(
   const monthlyFallback = createMonthlyGenerationFallback(annualGenerationKwh);
   const yearlyFallback = createYearlyRevenueFallback(annualSavingKrw);
 
+  const monthlyGeneration = normalizeNumberArray(
+    values.monthlyGeneration ?? selectedEstimate?.monthlyGeneration,
+    monthlyFallback,
+  );
+
   return {
     panelCount: Math.round(panelCount),
     installCapacityKw: roundNumber(installCapacityKw, 1),
@@ -151,7 +157,8 @@ function buildSolarPayload(
           toFiniteNumber(selectedEstimate?.pineTreeEffect) ??
           FALLBACK_PINE_TREE_EFFECT,
       ),
-    monthlyGeneration: normalizeNumberArray(values.monthlyGeneration ?? selectedEstimate?.monthlyGeneration, monthlyFallback),
+    monthlyGeneration,
+    monthlyGenerationKwh: monthlyGeneration,
     yearlyRevenue: normalizeNumberArray(values.yearlyRevenue ?? selectedEstimate?.yearlyRevenue, yearlyFallback),
   };
 }
@@ -233,7 +240,24 @@ export function saveSimulationResultToSession(result: StoredSimulationResult) {
   }
 
   try {
-    window.sessionStorage.setItem(SELECTED_SIMULATION_RESULT_STORAGE_KEY, JSON.stringify(result));
+    const currentValue = window.sessionStorage.getItem(SELECTED_SIMULATION_RESULT_STORAGE_KEY);
+    const currentResult = currentValue ? (JSON.parse(currentValue) as Partial<StoredSimulationResult>) : null;
+    const isFallbackDemoResult = result.source === 'demo' && result.storedAt === 'demo';
+
+    if (isFallbackDemoResult && currentResult?.source && currentResult.source !== 'demo') {
+      return true;
+    }
+
+    const monthlyGenerationKwh = result.solar.monthlyGenerationKwh ?? result.solar.monthlyGeneration;
+    const dashboardCompatibleResult: StoredSimulationResult = {
+      ...result,
+      solar: {
+        ...result.solar,
+        monthlyGenerationKwh,
+      },
+    };
+
+    window.sessionStorage.setItem(SELECTED_SIMULATION_RESULT_STORAGE_KEY, JSON.stringify(dashboardCompatibleResult));
     return true;
   } catch {
     return false;

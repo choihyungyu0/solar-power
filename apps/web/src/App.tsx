@@ -4,9 +4,7 @@ import SolarFeedSection from './components/SolarFeedSection';
 import ServiceIntroSection from './components/ServiceIntroSection';
 import ConsultationCompletePage from './pages/ConsultationCompletePage';
 import ConsultationPage from './pages/ConsultationPage';
-import MemberAsPage from './pages/MemberAsPage';
 import MemberDashboardPage from './pages/MemberDashboardPage';
-import MemberProfilePage from './pages/MemberProfilePage';
 import NoticePage from './pages/NoticePage';
 import RiskMapPage from './pages/RiskMapPage';
 import SolarAdoptionPage from './pages/SolarAdoptionPage';
@@ -114,11 +112,11 @@ function App() {
   }
 
   if (isMemberAsPage) {
-    return <MemberAsPage />;
+    return <MemberDashboardPage initialTab="as" />;
   }
 
   if (isMemberProfilePage) {
-    return <MemberProfilePage />;
+    return <MemberDashboardPage initialTab="profile" />;
   }
 
   const goMemberDashboard = () => {

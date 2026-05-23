@@ -1,4 +1,19 @@
 import type { CSSProperties } from 'react';
+import type { IconType } from 'react-icons';
+import {
+  LuBell,
+  LuBuilding2,
+  LuChartNoAxesColumnIncreasing,
+  LuChevronRight,
+  LuCircleCheck,
+  LuCoins,
+  LuInfo,
+  LuMapPin,
+  LuMenu,
+  LuPhone,
+  LuSunMedium,
+  LuZap,
+} from 'react-icons/lu';
 import {
   readSimulationResultFromSession,
   saveSimulationResultToSession,
@@ -19,6 +34,7 @@ type ResultMetric = {
 type ResultSection = {
   title: string;
   color: SectionColor;
+  icon: IconType;
   image: string;
   imageAlt: string;
   metrics: ResultMetric[];
@@ -128,6 +144,7 @@ function normalizeResult(result: StoredSimulationResult): NormalizedResult {
   const annualSavingKrw = pickNumber(solar.annualSavingKrw, fallbackSolar.annualSavingKrw);
   const paybackCandidate = toFiniteNumber(solar.paybackYears);
   const annualGenerationKwh = pickNumber(solar.annualGenerationKwh, fallbackSolar.annualGenerationKwh);
+  const monthlyGenerationSource = solar.monthlyGenerationKwh ?? solar.monthlyGeneration;
 
   return {
     result,
@@ -146,7 +163,7 @@ function normalizeResult(result: StoredSimulationResult): NormalizedResult {
     tenYearSavingKrw: Math.round(pickNumber(solar.tenYearSavingKrw, annualSavingKrw * 10)),
     twentyYearSavingKrw: Math.round(pickNumber(solar.twentyYearSavingKrw, annualSavingKrw * 20)),
     monthlyGeneration: normalizeSeries(
-      solar.monthlyGeneration,
+      monthlyGenerationSource,
       12,
       createMonthlyGenerationFallback(annualGenerationKwh),
     ),
@@ -158,8 +175,12 @@ function formatKrw(value: number) {
   return `${Math.round(value).toLocaleString('ko-KR')}원`;
 }
 
+function formatPercent(value: number) {
+  return `${value.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+}
+
 function formatKwh(value: number) {
-  return `${Math.round(value).toLocaleString('ko-KR')}kWh`;
+  return `${Math.round(value).toLocaleString('ko-KR')} kWh`;
 }
 
 function formatKw(value: number) {
@@ -197,51 +218,83 @@ function getChartMax(values: number[]) {
   return Math.ceil((maxValue * 1.14) / unit) * unit;
 }
 
+function getInvestmentReturnRate(normalized: NormalizedResult) {
+  if (normalized.investmentKrw <= 0) {
+    return 0;
+  }
+
+  return (normalized.annualSavingKrw / normalized.investmentKrw) * 100;
+}
+
+function createCumulativeValues(values: number[]) {
+  let total = 0;
+
+  return values.map((value) => {
+    total += value;
+
+    return total;
+  });
+}
+
+function getCostItems(normalized: NormalizedResult) {
+  return [
+    { label: '투자비', value: formatKrw(normalized.investmentKrw), tone: 'blue' as ValueTone },
+    { label: '최대 보조금', value: formatKrw(normalized.subsidyMaxKrw), tone: 'green' as ValueTone },
+    { label: '자부담금', value: formatKrw(normalized.selfPaymentKrw), tone: 'orange' as ValueTone },
+    { label: '대출한도 (75%)', value: formatKrw(normalized.loanLimitKrw), tone: 'navy' as ValueTone },
+  ];
+}
+
 function SimulationResultPage() {
   const storedResult = readSimulationResultFromSession();
   const normalized = normalizeResult(storedResult ?? fallbackDemoResult);
   const { result } = normalized;
   const sourceLabel = getSourceLabel(result.source);
   const isDemo = result.source === 'demo';
+  const cumulativeSaving = createCumulativeValues(normalized.yearlyRevenue);
+  const cumulativeNetProfit = cumulativeSaving.map((value) => Math.max(0, value - normalized.selfPaymentKrw));
   const resultSections: ResultSection[] = [
     {
       title: '투자',
-      color: 'orange',
-      image: resultImages.building,
-      imageAlt: '태양광 패널이 설치된 아파트 예상 이미지',
+      color: 'blue',
+      icon: LuChartNoAxesColumnIncreasing,
+      image: resultImages.profit,
+      imageAlt: '태양광 투자 수익 예상 이미지',
       metrics: [
-        { label: '투자비용', value: formatKrw(normalized.investmentKrw), tone: 'orange' },
-        { label: '예상 패널 수', value: `${normalized.panelCount.toLocaleString('ko-KR')}개`, tone: 'navy' },
-        { label: '최대설치용량', value: formatKw(normalized.installCapacityKw), tone: 'navy' },
+        { label: '투자 수익률', value: formatPercent(getInvestmentReturnRate(normalized)), tone: 'blue' },
+        { label: '투자 회수 기간', value: formatPaybackYears(normalized.paybackYears), tone: 'blue' },
+        { label: '20년 총 수익', value: formatKrw(normalized.twentyYearSavingKrw), tone: 'blue' },
       ],
     },
     {
       title: '수익',
       color: 'green',
-      image: resultImages.profit,
-      imageAlt: '태양광 패널과 예상 수익 이미지',
+      icon: LuZap,
+      image: resultImages.building,
+      imageAlt: '태양광 패널이 설치된 아파트 예상 이미지',
       metrics: [
-        { label: '연간 절감 매출', value: formatKrw(normalized.annualSavingKrw), tone: 'green' },
-        { label: '투자비 회수 시점', value: formatPaybackYears(normalized.paybackYears), tone: 'navy' },
-        { label: '연간 발전 예상량', value: formatKwh(normalized.annualGenerationKwh), tone: 'navy' },
+        { label: '연간 발전량', value: formatKwh(normalized.annualGenerationKwh), tone: 'green' },
+        { label: '연간 매출', value: formatKrw(normalized.annualSavingKrw), tone: 'green' },
+        { label: '20년 총 매출', value: formatKrw(cumulativeSaving[cumulativeSaving.length - 1] ?? 0), tone: 'green' },
       ],
     },
     {
       title: '절감',
-      color: 'blue',
+      color: 'orange',
+      icon: LuCoins,
       image: resultImages.saving,
       imageAlt: '태양광 주택과 예상 절감 효과 이미지',
       metrics: [
-        { label: '첫해 절감비용', value: formatKrw(normalized.firstYearSavingKrw), tone: 'blue' },
-        { label: '10년 예상 절감량', value: formatKrw(normalized.tenYearSavingKrw), tone: 'blue' },
-        { label: '20년 예상 절감량', value: formatKrw(normalized.twentyYearSavingKrw), tone: 'blue' },
+        { label: '연간 전기요금 절감', value: formatKrw(normalized.firstYearSavingKrw), tone: 'orange' },
+        { label: '20년 총 절감액', value: formatKrw(normalized.twentyYearSavingKrw), tone: 'orange' },
+        { label: '전기요금 상승 반영', value: '연 2.0%', tone: 'orange' },
       ],
     },
   ];
 
   return (
     <div className="simulationResultPage">
-      <ResultHeader />
+      <ResultHeader selectedResult={normalized.result} />
 
       <main className="simulationResultMain">
         <section className="resultTitleArea" aria-labelledby="simulation-result-title">
@@ -258,6 +311,8 @@ function SimulationResultPage() {
         <section className="simulationResultLayout">
           <div className="simulationResultContent">
             <AddressSummary result={result} />
+
+            <MobileCostCard normalized={normalized} />
 
             {resultSections.map((section) => (
               <ResultSectionCard key={section.title} section={section} />
@@ -278,12 +333,10 @@ function SimulationResultPage() {
               />
             </div>
 
-            <BarChart
+            <TrendLineChart
               title="20년 수익 추이"
-              data={normalized.yearlyRevenue}
-              labels={normalized.yearlyRevenue.map((_, index) => `${index + 1}년`)}
-              valueFormatter={formatChartKrw}
-              notice="20년간 수익은 월별 효율 및 설비 운영 조건에 따라 변동될 수 있습니다."
+              netProfit={cumulativeNetProfit}
+              cumulativeSaving={cumulativeSaving}
             />
 
             <BarChart
@@ -297,19 +350,30 @@ function SimulationResultPage() {
           <CostPanel normalized={normalized} />
         </section>
 
-        <p className="resultBottomNote">본 시뮬레이션은 예측 값으로 실제와 차이가 있을 수 있습니다.</p>
+        <p className="resultBottomNote">
+          <LuInfo aria-hidden="true" />
+          본 시뮬레이션은 예상치로 실제 결과와 다를 수 있습니다.
+        </p>
       </main>
     </div>
   );
 }
 
-function ResultHeader() {
+function ResultHeader({ selectedResult }: { selectedResult: StoredSimulationResult }) {
+  const handleDashboardClick = () => {
+    saveSimulationResultToSession(selectedResult);
+    window.location.assign('/member/dashboard');
+  };
+
   return (
     <header className="resultSiteHeader">
       <a className="resultLogo" href="/" aria-label="솔라메이트 홈">
-        <span className="resultSunMark" aria-hidden="true" />
+        <span className="resultLogoMark" aria-hidden="true">
+          <img src="/assets/landing/apartment-isometric.png" alt="" />
+        </span>
         <strong>
-          Solar<span>Mate</span>
+          <span className="resultLogoKorean">솔라메이트</span>
+          <small>SolarMate</small>
         </strong>
       </a>
 
@@ -322,12 +386,21 @@ function ResultHeader() {
       </nav>
 
       <div className="resultHeaderActions">
-        <button className="resultLoginButton" type="button" onClick={() => window.location.assign('/member/dashboard')}>
+        <button className="resultLoginButton" type="button" onClick={handleDashboardClick}>
           로그인
         </button>
         <a className="resultHeaderCta" href="/simulation/setup">
           우리 아파트 태양광 설치하기
         </a>
+      </div>
+
+      <div className="resultMobileHeaderActions" aria-label="모바일 빠른 메뉴">
+        <button type="button" aria-label="알림">
+          <LuBell aria-hidden="true" />
+        </button>
+        <button type="button" aria-label="메뉴">
+          <LuMenu aria-hidden="true" />
+        </button>
       </div>
     </header>
   );
@@ -336,6 +409,17 @@ function ResultHeader() {
 function AddressSummary({ result }: { result: StoredSimulationResult }) {
   return (
     <section className="resultAddressSummary" aria-label="선택 건물 주소 요약">
+      <div className="addressHeaderLine">
+        <span className="addressPinIcon" aria-hidden="true">
+          <LuMapPin />
+        </span>
+        <div>
+          <strong>{result.building.name}</strong>
+          <p>{result.building.roadAddress}</p>
+        </div>
+        <LuChevronRight className="addressChevronIcon" aria-hidden="true" />
+      </div>
+
       <div className="addressRows">
         <div>
           <span>도로명주소</span>
@@ -348,20 +432,32 @@ function AddressSummary({ result }: { result: StoredSimulationResult }) {
       </div>
 
       <div className="resultBadgeGroup">
-        {badges.map((badge, index) => (
-          <span className={`resultBadge badge${index + 1}`} key={badge}>
-            {badge}
-          </span>
-        ))}
+        {badges.map((badge, index) => {
+          const BadgeIcon = index === 0 ? LuBuilding2 : index === 1 ? LuSunMedium : LuCircleCheck;
+
+          return (
+            <span className={`resultBadge badge${index + 1}`} key={badge}>
+              <BadgeIcon aria-hidden="true" />
+              {badge}
+            </span>
+          );
+        })}
       </div>
     </section>
   );
 }
 
 function ResultSectionCard({ section }: { section: ResultSection }) {
+  const SectionIcon = section.icon;
+
   return (
-    <section className="resultMetricSection">
-      <div className={`metricSectionHeader is-${section.color}`}>{section.title}</div>
+    <section className={`resultMetricSection is-${section.color}`}>
+      <div className={`metricSectionHeader is-${section.color}`}>
+        <span className="metricSectionIcon" aria-hidden="true">
+          <SectionIcon />
+        </span>
+        <strong>{section.title}</strong>
+      </div>
       <div className="metricSectionBody">
         <div className="metricGrid">
           {section.metrics.map((metric) => (
@@ -386,6 +482,116 @@ function EcoCard({ image, title, value, alt }: { image: string; title: string; v
         <span>{title}</span>
         <strong>{value}</strong>
       </div>
+    </section>
+  );
+}
+
+function TrendLineChart({
+  title,
+  netProfit,
+  cumulativeSaving,
+}: {
+  title: string;
+  netProfit: number[];
+  cumulativeSaving: number[];
+}) {
+  const allValues = [...netProfit, ...cumulativeSaving];
+  const maxValue = getChartMax(allValues);
+  const axisValues = [maxValue, maxValue * 0.75, maxValue * 0.5, maxValue * 0.25, 0];
+  const startYear = 2025;
+  const width = 680;
+  const height = 232;
+  const padding = { top: 24, right: 96, bottom: 42, left: 54 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const labelIndexes = [0, 5, 10, 15, 19].filter((index) => index < cumulativeSaving.length);
+
+  const getPoint = (value: number, index: number, total: number) => {
+    const ratio = total > 1 ? index / (total - 1) : 0;
+    const x = padding.left + ratio * plotWidth;
+    const y = padding.top + plotHeight - (value / maxValue) * plotHeight;
+
+    return [x, y] as const;
+  };
+
+  const createPath = (values: number[]) =>
+    values
+      .map((value, index) => {
+        const [x, y] = getPoint(value, index, values.length);
+
+        return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+      })
+      .join(' ');
+
+  const netProfitPath = createPath(netProfit);
+  const cumulativeSavingPath = createPath(cumulativeSaving);
+  const lastNetProfitPoint = getPoint(netProfit[netProfit.length - 1] ?? 0, Math.max(0, netProfit.length - 1), netProfit.length);
+  const lastSavingPoint = getPoint(
+    cumulativeSaving[cumulativeSaving.length - 1] ?? 0,
+    Math.max(0, cumulativeSaving.length - 1),
+    cumulativeSaving.length,
+  );
+
+  return (
+    <section className="resultChartCard trendChartCard">
+      <div className="chartCardHeader">
+        <h2>{title}</h2>
+        <span>(단위: 만원)</span>
+      </div>
+
+      <div className="trendLegend" aria-label="수익 추이 범례">
+        <span className="legendNet">누적 순수익</span>
+        <span className="legendSaving">누적 절감액 (전기요금)</span>
+      </div>
+
+      <svg className="trendChartSvg" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="20년 수익 추이 그래프">
+        {axisValues.map((value) => {
+          const y = padding.top + plotHeight - (value / maxValue) * plotHeight;
+
+          return (
+            <g key={value}>
+              <line x1={padding.left} x2={width - padding.right} y1={y} y2={y} className="trendGridLine" />
+              <text x={padding.left - 12} y={y + 4} className="trendAxisLabel" textAnchor="end">
+                {formatChartKrw(value).replace('만원', '')}
+              </text>
+            </g>
+          );
+        })}
+
+        <path d={netProfitPath} className="trendLine trendLineNet" />
+        <path d={cumulativeSavingPath} className="trendLine trendLineSaving" />
+
+        {netProfit.map((value, index) => {
+          const [x, y] = getPoint(value, index, netProfit.length);
+
+          return <circle key={`net-${index}-${value}`} cx={x} cy={y} r="4.5" className="trendDot trendDotNet" />;
+        })}
+
+        {cumulativeSaving.map((value, index) => {
+          const [x, y] = getPoint(value, index, cumulativeSaving.length);
+
+          return <circle key={`saving-${index}-${value}`} cx={x} cy={y} r="4.5" className="trendDot trendDotSaving" />;
+        })}
+
+        {labelIndexes.map((index) => {
+          const [x] = getPoint(0, index, cumulativeSaving.length);
+
+          return (
+            <text key={index} x={x} y={height - 12} className="trendYearLabel" textAnchor="middle">
+              {startYear + index}
+            </text>
+          );
+        })}
+
+        <text x={lastSavingPoint[0] + 18} y={lastSavingPoint[1] + 4} className="trendEndLabel trendEndSaving">
+          {formatChartKrw(cumulativeSaving[cumulativeSaving.length - 1] ?? 0)}
+        </text>
+        <text x={lastNetProfitPoint[0] + 18} y={lastNetProfitPoint[1] + 4} className="trendEndLabel trendEndNet">
+          {formatChartKrw(netProfit[netProfit.length - 1] ?? 0)}
+        </text>
+      </svg>
+
+      <p className="chartNotice">전기요금 연 2.0% 상승 가정 시 추정값입니다.</p>
     </section>
   );
 }
@@ -446,18 +652,46 @@ function BarChart({
   );
 }
 
+function MobileCostCard({ normalized }: { normalized: NormalizedResult }) {
+  const handleConsultationApply = () => {
+    saveSimulationResultToSession(normalized.result);
+    window.location.assign('/consultation');
+  };
+
+  return (
+    <section className="resultMobileCostCard" aria-label="모바일 도입비용">
+      <div className="mobileCostHeader">
+        <span aria-hidden="true">
+          <LuCoins />
+        </span>
+        <strong>도입비용</strong>
+        <img src={resultImages.building} alt="태양광 패널이 설치된 아파트 예상 이미지" />
+      </div>
+
+      <dl className="mobileCostGrid">
+        {getCostItems(normalized).map((item) => (
+          <div key={item.label}>
+            <dt>{item.label}</dt>
+            <dd className={`tone-${item.tone}`}>{item.value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <button className="consultApplyButton mobileConsultButton" type="button" onClick={handleConsultationApply}>
+        <LuPhone aria-hidden="true" />
+        상담 신청하기
+      </button>
+    </section>
+  );
+}
+
 function CostPanel({ normalized }: { normalized: NormalizedResult }) {
   const handleConsultationApply = () => {
     saveSimulationResultToSession(normalized.result);
     window.location.assign('/consultation');
   };
 
-  const costItems = [
-    ['투자비', formatKrw(normalized.investmentKrw)],
-    ['최대 보조금', formatKrw(normalized.subsidyMaxKrw)],
-    ['자부담금', formatKrw(normalized.selfPaymentKrw)],
-    ['대출한도 (75%)', formatKrw(normalized.loanLimitKrw)],
-  ];
+  const costItems = getCostItems(normalized);
 
   return (
     <aside className="resultCostPanel" aria-label="도입비용">
@@ -467,10 +701,10 @@ function CostPanel({ normalized }: { normalized: NormalizedResult }) {
       </div>
 
       <dl className="costPanelList">
-        {costItems.map(([label, value]) => (
-          <div key={label}>
-            <dt>{label}</dt>
-            <dd>{value}</dd>
+        {costItems.map((item) => (
+          <div key={item.label}>
+            <dt>{item.label}</dt>
+            <dd>{item.value}</dd>
           </div>
         ))}
       </dl>
@@ -483,6 +717,7 @@ function CostPanel({ normalized }: { normalized: NormalizedResult }) {
       </section>
 
       <button className="consultApplyButton" type="button" onClick={handleConsultationApply}>
+        <LuPhone aria-hidden="true" />
         상담 신청하기
       </button>
     </aside>
