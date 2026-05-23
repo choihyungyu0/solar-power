@@ -56,11 +56,12 @@ export type ScenarioDayCard = {
   previousDailyGenerationKwh: number;
   dailyBillKrw: number;
   previousDailyBillKrw: number;
+  generationRatio: number;
+  visualGenerationRatio: number;
   stage: string;
   stageColor: 'green' | 'yellow';
   temp: string;
   tooltip: string;
-  hasGenerationSegments: boolean;
   segments: ScenarioHourSegment[];
   bars: ScenarioComparisonBar[];
 };
@@ -280,7 +281,7 @@ export function buildScenarioDayCards(normalized: NormalizedDashboardData): Scen
     .sort((left, right) => left.generationKwh - right.generationKwh);
   const pickedMonths = [sortedMonths[0], sortedMonths[Math.floor((sortedMonths.length - 1) / 2)], sortedMonths[sortedMonths.length - 1]];
 
-  return pickedMonths.map((monthData, index) => {
+  const scenarioCards = pickedMonths.map((monthData, index) => {
     const id = (index + 1) as 1 | 2 | 3;
     const daysInSelectedMonth = getDaysInMonth(monthData.month);
     const dailyGenerationKwh = monthData.generationKwh / daysInSelectedMonth;
@@ -294,6 +295,7 @@ export function buildScenarioDayCards(normalized: NormalizedDashboardData): Scen
     const previousDailyBillKrw = previousDailyUsageKwh * normalized.solar.electricityPriceKrwPerKwh;
     const segments = buildHourSegments(dailyUsageKwh, dailyGenerationKwh);
     const maxBarValue = Math.max(dailyUsageKwh, previousDailyUsageKwh, dailyGenerationKwh, previousDailyGenerationKwh, 1);
+    const stageColor: 'green' | 'yellow' = id === 2 ? 'yellow' : 'green';
 
     return {
       id,
@@ -307,11 +309,12 @@ export function buildScenarioDayCards(normalized: NormalizedDashboardData): Scen
       previousDailyGenerationKwh,
       dailyBillKrw,
       previousDailyBillKrw,
+      generationRatio: 0,
+      visualGenerationRatio: 0,
       stage: `시나리오 단가 : ${normalized.solar.electricityPriceKrwPerKwh.toLocaleString('ko-KR')}원/kWh`,
-      stageColor: id === 2 ? 'yellow' : 'green',
+      stageColor,
       temp: getSeasonalTemperatureText(monthData.month),
       tooltip: `${monthData.month}월 대표일 발전 ${formatKwh(dailyGenerationKwh)}`,
-      hasGenerationSegments: id === 3,
       segments,
       bars: buildComparisonBars({
         id,
@@ -323,6 +326,19 @@ export function buildScenarioDayCards(normalized: NormalizedDashboardData): Scen
         previousDailyBillKrw,
         maxBarValue,
       }),
+    };
+  });
+
+  const maxDailyGenerationKwh = Math.max(...scenarioCards.map((card) => card.dailyGenerationKwh), 0);
+
+  return scenarioCards.map((card) => {
+    const generationRatio = maxDailyGenerationKwh > 0 ? card.dailyGenerationKwh / maxDailyGenerationKwh : 0;
+    const visualGenerationRatio = card.dailyGenerationKwh > 0 ? Math.max(generationRatio, 0.25) : 0;
+
+    return {
+      ...card,
+      generationRatio,
+      visualGenerationRatio,
     };
   });
 }
@@ -456,15 +472,15 @@ function normalizeMonthlyElectricity(raw: unknown) {
 
 function buildHourSegments(dailyUsageKwh: number, dailyGenerationKwh: number): ScenarioHourSegment[] {
   const usageTotal = usageHourlyProfile.reduce((sum, value) => sum + value, 0);
-  const generationTotal = generationHourlyProfile.reduce((sum, value) => sum + value, 0);
   const usageByHour = usageHourlyProfile.map((weight) => (dailyUsageKwh * weight) / usageTotal);
-  const generationByHour = generationHourlyProfile.map((weight) => (dailyGenerationKwh * weight) / generationTotal);
-  const maxHourKwh = Math.max(1, ...usageByHour, ...generationByHour);
+  const maxUsageHourKwh = Math.max(1, ...usageByHour);
+  const maxGenerationProfileWeight = Math.max(...generationHourlyProfile, 1);
 
   return usageByHour.map((usageKwh, hour) => ({
     hour,
-    usagePercent: Math.max(12, (usageKwh / maxHourKwh) * 100),
-    generationPercent: Math.max(0, (generationByHour[hour] / maxHourKwh) * 100),
+    usagePercent: Math.max(12, (usageKwh / maxUsageHourKwh) * 100),
+    generationPercent:
+      dailyGenerationKwh > 0 ? Math.max(0, (generationHourlyProfile[hour] / maxGenerationProfileWeight) * 100) : 0,
   }));
 }
 

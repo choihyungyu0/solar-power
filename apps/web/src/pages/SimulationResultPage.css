@@ -181,6 +181,13 @@
   min-width: 0;
 }
 
+.resultMetricGrid,
+.resultChartGrid {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
 .resultAddressSummary,
 .resultMetricSection,
 .ecoResultCard,
@@ -960,40 +967,134 @@
   }
 
   .simulationResultMain {
-    padding-top: 14px;
-    padding-bottom: 22px;
+    padding-top: 10px;
+    padding-bottom: 16px;
   }
 
   .resultTitleArea {
-    margin-bottom: 12px;
+    margin-bottom: 8px;
   }
 
   .resultTitleArea h1 {
-    margin-block: 7px 5px;
-    font-size: 34px;
+    margin-block: 5px 3px;
+    font-size: 31px;
   }
 
   .resultAddressSummary {
-    min-height: 66px;
-    padding-block: 10px;
+    min-height: 58px;
+    padding-block: 8px;
+  }
+
+  .resultMetricGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .metricSectionBody {
-    min-height: 82px;
-    padding-block: 10px;
+    min-height: 132px;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    align-content: start;
+    padding: 10px 16px;
+  }
+
+  .metricGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .metricItem,
+  .metricItem:first-child {
+    border-right: 0;
+    border-bottom: 1px solid #e5ebf3;
+    padding: 5px 0 7px;
+  }
+
+  .metricItem:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .metricItem span {
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
+
+  .metricItem strong {
+    font-size: 18px;
+  }
+
+  .sectionResultImage {
+    display: none;
   }
 
   .ecoResultCard {
-    min-height: 68px;
+    min-height: 58px;
+    grid-template-columns: 64px minmax(0, 1fr);
+    padding-block: 8px;
+  }
+
+  .ecoResultCard img {
+    width: 58px;
+    height: 46px;
+  }
+
+  .ecoResultCard span {
+    margin-bottom: 2px;
+    font-size: 13px;
+  }
+
+  .ecoResultCard strong {
+    font-size: 22px;
+  }
+
+  .resultChartGrid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
   }
 
   .resultChartCard {
-    padding-block: 12px 10px;
+    padding: 10px 14px 9px;
+  }
+
+  .chartCardHeader {
+    margin-bottom: 5px;
+  }
+
+  .trendLegend {
+    margin-bottom: 2px;
+  }
+
+  .trendChartSvg {
+    max-height: 178px;
   }
 
   .chartAxis,
   .chartPlot {
-    height: 132px;
+    height: 112px;
+  }
+
+  .chartScrollArea {
+    grid-template-columns: 66px minmax(0, 1fr);
+  }
+
+  .chartPlot {
+    min-width: 0;
+  }
+
+  .chartBars {
+    gap: 5px;
+  }
+
+  .chartBar {
+    width: min(22px, 100%);
+  }
+
+  .chartBar em {
+    display: none;
+  }
+
+  .chartNotice {
+    min-height: 24px;
+    margin-top: 6px;
+    padding-block: 4px;
   }
 
   .costPanelHeader {
@@ -1009,7 +1110,13 @@
   }
 
   .policyInfoBox {
-    margin-block: 18px 22px;
+    margin-block: 14px 18px;
+    padding: 16px;
+  }
+
+  .consultApplyButton {
+    min-height: 54px;
+    margin-bottom: 22px;
   }
 }
 

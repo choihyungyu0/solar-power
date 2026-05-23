@@ -791,35 +791,103 @@
 
   .simulationSetupMain {
     min-height: calc(100dvh - 88px);
-    gap: 14px;
-    padding-block: 20px;
+    gap: 10px;
+    padding-block: 14px;
   }
 
   .setupTopSection {
-    gap: 32px;
+    gap: 28px;
   }
 
   .setupAddressCard {
-    min-height: 94px;
-    padding-block: 18px;
+    min-height: 82px;
+    padding-block: 14px;
+  }
+
+  .setupTitleBox h1 {
+    margin-bottom: 8px;
+    font-size: 40px;
+  }
+
+  .setupTitleBox p {
+    line-height: 1.45;
+  }
+
+  .setupOptionColumn {
+    gap: 8px;
+  }
+
+  .setupSectionTitle {
+    min-height: 42px;
+  }
+
+  .setupOptionGrid {
+    gap: 16px;
   }
 
   .setupOptionCard {
-    padding-block: 16px 12px;
+    padding-block: 12px 10px;
   }
 
   .setupOptionCard h2 {
+    margin-bottom: 6px;
+    font-size: 21px;
+  }
+
+  .setupOptionImageWrap {
+    height: clamp(76px, 8.8vh, 104px);
     margin-bottom: 8px;
-    font-size: 23px;
+  }
+
+  .setupOptionImageWrap.isAngle {
+    height: clamp(58px, 6.8vh, 82px);
+  }
+
+  .setupSpecTable {
+    font-size: 13px;
+  }
+
+  .setupSpecTable th,
+  .setupSpecTable td {
+    padding-block: 4px;
   }
 
   .setupSummaryPanel {
-    padding: 20px 26px;
+    padding: 16px 22px;
+  }
+
+  .setupSummaryPanel h2 {
+    margin-bottom: 16px;
+  }
+
+  .setupSummaryList {
+    gap: 10px;
+  }
+
+  .setupSummaryIcon {
+    width: 46px;
+    height: 46px;
+  }
+
+  .setupSummaryItem strong {
+    font-size: 22px;
+  }
+
+  .setupSummaryDivider {
+    margin: 12px 0;
+  }
+
+  .setupPreviewImage {
+    max-height: 180px;
+  }
+
+  .setupSummaryNote {
+    margin-top: 10px;
   }
 
   .setupPreviousButton,
   .setupNextButton {
-    min-height: 58px;
+    min-height: 54px;
   }
 }
 

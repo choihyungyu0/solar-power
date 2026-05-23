@@ -283,10 +283,12 @@
 
   .consultation-complete-nav {
     grid-column: 1 / -1;
+    flex-wrap: wrap;
     justify-content: flex-start;
-    gap: 34px;
-    overflow-x: auto;
+    gap: 10px 22px;
+    overflow: visible;
     padding-bottom: 6px;
+    white-space: normal;
   }
 
   .consultation-complete-main {
@@ -336,6 +338,7 @@
 
   .consultation-complete-login-button {
     justify-self: start;
+    white-space: nowrap;
   }
 
   .consultation-complete-logo-text strong {

@@ -415,6 +415,7 @@
 .member-dashboard-radial-segment.is-generation {
   stroke: #1f88e5;
   stroke-width: 15;
+  opacity: var(--generation-opacity, 1);
   filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.45));
 }
 
@@ -529,6 +530,43 @@
   font-size: 12px;
   font-weight: 800;
   white-space: nowrap;
+}
+
+.member-dashboard-radial-legend {
+  min-height: 28px;
+  margin: -8px 0 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 7px 14px;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.member-dashboard-radial-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.member-dashboard-radial-legend i {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+.member-dashboard-radial-legend i.is-usage {
+  background: linear-gradient(90deg, #ffbd00 0%, #ff5a00 100%);
+}
+
+.member-dashboard-radial-legend i.is-generation {
+  background: #1f88e5;
 }
 
 .member-dashboard-meter-meta {
@@ -1305,10 +1343,12 @@
 
   .member-dashboard-nav {
     grid-column: 1 / -1;
+    flex-wrap: wrap;
     justify-content: flex-start;
-    gap: 34px;
-    overflow-x: auto;
+    gap: 10px 22px;
+    overflow: visible;
     padding-bottom: 8px;
+    white-space: normal;
   }
 
   .member-dashboard-nav a {
@@ -1403,9 +1443,10 @@
   }
 
   .member-dashboard-login-button {
-    width: 96px;
+    width: 108px;
     min-height: 46px;
     font-size: 16px;
+    white-space: nowrap;
   }
 
   .member-dashboard-main {
@@ -1492,6 +1533,15 @@
     top: 132px;
     right: 4px;
     font-size: 11px;
+  }
+
+  .member-dashboard-radial-legend {
+    margin-top: -4px;
+    font-size: 11px;
+  }
+
+  .member-dashboard-radial-legend span {
+    white-space: normal;
   }
 
   .member-dashboard-meter-meta {
@@ -1638,6 +1688,126 @@
 
   .member-dashboard-profile-change-button {
     flex-shrink: 0;
+  }
+}
+
+@media (min-width: 1600px) and (max-height: 1100px) {
+  .member-dashboard-header {
+    min-height: 88px;
+  }
+
+  .member-dashboard-main {
+    margin-top: 22px;
+    padding-bottom: 22px;
+  }
+
+  .member-dashboard-shell {
+    min-height: 0;
+    padding: 22px 28px 24px;
+  }
+
+  .member-dashboard-tab-content {
+    min-height: 0;
+  }
+
+  .member-dashboard-warranty-row {
+    min-height: 56px;
+    padding-bottom: 12px;
+  }
+
+  .member-dashboard-warranty-row strong {
+    font-size: 24px;
+  }
+
+  .member-dashboard-warranty-bar {
+    height: 44px;
+  }
+
+  .member-dashboard-title-row {
+    margin-bottom: 12px;
+  }
+
+  .member-dashboard-data-strip strong {
+    font-size: 15px;
+  }
+
+  .member-dashboard-address-summary,
+  .member-dashboard-source-summary,
+  .member-dashboard-metric-summary {
+    min-height: 70px;
+    padding-block: 12px;
+  }
+
+  .member-dashboard-scenario-note {
+    margin: 10px 0 12px;
+  }
+
+  .member-dashboard-meter-card {
+    min-height: 480px;
+    padding: 6px 12px 12px;
+  }
+
+  .member-dashboard-meter-top {
+    min-height: 34px;
+  }
+
+  .member-dashboard-radial-area {
+    height: 276px;
+  }
+
+  .member-dashboard-radial-svg {
+    width: 276px;
+    height: 276px;
+  }
+
+  .member-dashboard-radial-center {
+    top: 84px;
+  }
+
+  .member-dashboard-number-badge {
+    bottom: 12px;
+    width: 52px;
+    height: 52px;
+    font-size: 31px;
+  }
+
+  .member-dashboard-tooltip {
+    top: 132px;
+  }
+
+  .member-dashboard-radial-legend {
+    margin-bottom: 5px;
+  }
+
+  .member-dashboard-meter-meta {
+    min-height: 34px;
+  }
+
+  .member-dashboard-card-source {
+    margin-block: 3px 6px;
+  }
+
+  .member-dashboard-usage-box {
+    min-height: 78px;
+    padding: 8px 12px;
+  }
+
+  .member-dashboard-usage-box.is-mixed {
+    min-height: 104px;
+    padding-block: 8px;
+  }
+
+  .member-dashboard-progress-row {
+    min-height: 25px;
+  }
+
+  .member-dashboard-tab-row {
+    padding-top: 14px;
+  }
+
+  .member-dashboard-tab-button {
+    min-height: 54px;
+    font-size: 21px;
   }
 }
 

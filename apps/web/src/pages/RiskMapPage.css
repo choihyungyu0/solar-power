@@ -1308,9 +1308,9 @@
   }
 
   .riskMapWorkspace {
-    height: calc(100dvh - 164px);
+    height: calc(100dvh - 188px);
     min-height: 0;
-    padding-bottom: 24px;
+    padding-bottom: 12px;
   }
 
   .riskInfoPanel {

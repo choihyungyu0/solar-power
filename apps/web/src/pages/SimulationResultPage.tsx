@@ -314,9 +314,11 @@ function SimulationResultPage() {
 
             <MobileCostCard normalized={normalized} />
 
-            {resultSections.map((section) => (
-              <ResultSectionCard key={section.title} section={section} />
-            ))}
+            <div className="resultMetricGrid">
+              {resultSections.map((section) => (
+                <ResultSectionCard key={section.title} section={section} />
+              ))}
+            </div>
 
             <div className="ecoCardGrid">
               <EcoCard
@@ -333,18 +335,20 @@ function SimulationResultPage() {
               />
             </div>
 
-            <TrendLineChart
-              title="20년 수익 추이"
-              netProfit={cumulativeNetProfit}
-              cumulativeSaving={cumulativeSaving}
-            />
+            <div className="resultChartGrid">
+              <TrendLineChart
+                title="20년 수익 추이"
+                netProfit={cumulativeNetProfit}
+                cumulativeSaving={cumulativeSaving}
+              />
 
-            <BarChart
-              title="월간 발전량 차트"
-              data={normalized.monthlyGeneration}
-              labels={normalized.monthlyGeneration.map((_, index) => `${index + 1}월`)}
-              valueFormatter={(value) => `${Math.round(value).toLocaleString('ko-KR')}kWh`}
-            />
+              <BarChart
+                title="월간 발전량 차트"
+                data={normalized.monthlyGeneration}
+                labels={normalized.monthlyGeneration.map((_, index) => `${index + 1}월`)}
+                valueFormatter={(value) => `${Math.round(value).toLocaleString('ko-KR')}kWh`}
+              />
+            </div>
           </div>
 
           <CostPanel normalized={normalized} />

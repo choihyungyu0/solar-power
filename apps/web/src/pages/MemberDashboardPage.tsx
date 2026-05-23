@@ -173,8 +173,8 @@ export default function MemberDashboardPage({ initialTab }: MemberDashboardPageP
   const isDemoSource = dashboardData.source === 'demo';
   const badgeText = isDemoSource ? '데모 대시보드 데이터' : '선택 건물 분석값 기반';
   const noticeText = isDemoSource
-    ? '실제 계량기 사용량이나 실측 발전량으로 표시하지 않습니다.'
-    : '선택 건물의 시뮬레이션 결과를 기반으로 표시합니다.';
+    ? '데모 산식 기반 예상 시나리오입니다. 실제 계량기 사용량이나 실측 발전량으로 표시하지 않습니다.'
+    : '선택 건물 분석값 기반 시나리오입니다.';
 
   return (
     <div className="member-dashboard-page">
@@ -585,6 +585,7 @@ function ScenarioMeterCard({ card }: { card: ScenarioDayCard }) {
       </div>
 
       <RadialMeter card={card} />
+      <RadialChartLegend />
 
       <div className="member-dashboard-meter-meta">
         <div className="member-dashboard-stage-line">
@@ -610,6 +611,9 @@ function ScenarioMeterCard({ card }: { card: ScenarioDayCard }) {
 }
 
 function RadialMeter({ card }: { card: ScenarioDayCard }) {
+  const shouldShowGenerationSegments = card.dailyGenerationKwh > 0;
+  const generationOpacity = Math.min(1, 0.42 + card.visualGenerationRatio * 0.58);
+
   return (
     <div className="member-dashboard-radial-area">
       <svg className="member-dashboard-radial-svg" viewBox="0 0 260 260" role="img" aria-label={`${card.month}월 대표일 시간대별 시나리오 그래프`}>
@@ -639,17 +643,21 @@ function RadialMeter({ card }: { card: ScenarioDayCard }) {
           );
         })}
 
-        {card.hasGenerationSegments &&
+        {shouldShowGenerationSegments &&
           card.segments.map((segment, index) => {
-            if (segment.generationPercent < 3) {
+            if (segment.generationPercent <= 0) {
               return null;
             }
 
             const angle = index * 15 - 90;
             const inner = 56;
-            const outer = 56 + Math.max(10, segment.generationPercent) * 0.68;
+            const generationVisualPercent = Math.max(16, segment.generationPercent * card.visualGenerationRatio);
+            const outer = 56 + generationVisualPercent * 0.68;
             const start = polarToCartesian(130, 130, inner, angle);
             const end = polarToCartesian(130, 130, outer, angle);
+            const style = {
+              '--generation-opacity': generationOpacity,
+            } as CSSProperties;
 
             return (
               <line
@@ -659,6 +667,7 @@ function RadialMeter({ card }: { card: ScenarioDayCard }) {
                 y1={start.y}
                 x2={end.x}
                 y2={end.y}
+                style={style}
               />
             );
           })}
@@ -701,6 +710,21 @@ function RadialMeter({ card }: { card: ScenarioDayCard }) {
 
       <div className="member-dashboard-number-badge">{card.id}</div>
       <div className="member-dashboard-tooltip">{card.tooltip}</div>
+    </div>
+  );
+}
+
+function RadialChartLegend() {
+  return (
+    <div className="member-dashboard-radial-legend" aria-label="방사형 차트 범례">
+      <span>
+        <i className="is-usage" aria-hidden="true" />
+        노랑/주황: 예상 전기 사용량
+      </span>
+      <span>
+        <i className="is-generation" aria-hidden="true" />
+        파랑: 예상 태양광 발전량
+      </span>
     </div>
   );
 }
