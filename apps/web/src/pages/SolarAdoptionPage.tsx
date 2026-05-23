@@ -66,7 +66,7 @@ function SolarAdoptionHeader() {
           태양광 도입
         </a>
         <a href="/#service-intro">서비스 소개</a>
-        <a href="/#solar-feed">공지사항</a>
+        <a href="/notice">공지사항</a>
         <a href="/#contact">고객센터</a>
       </nav>
 

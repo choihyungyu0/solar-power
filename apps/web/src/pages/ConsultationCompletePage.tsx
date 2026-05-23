@@ -120,7 +120,7 @@ function CompletionHeader() {
         <a href="/#service-intro">제품소개</a>
         <a href="/#service-intro-status">설치사례</a>
         <a href="/simulation/setup">이용안내</a>
-        <a href="/#contact">고객지원</a>
+        <a href="/notice">공지사항</a>
         <a href="/">회사소개</a>
       </nav>
 

@@ -4,6 +4,7 @@ import SolarFeedSection from './components/SolarFeedSection';
 import ServiceIntroSection from './components/ServiceIntroSection';
 import ConsultationCompletePage from './pages/ConsultationCompletePage';
 import ConsultationPage from './pages/ConsultationPage';
+import NoticePage from './pages/NoticePage';
 import RiskMapPage from './pages/RiskMapPage';
 import SolarAdoptionPage from './pages/SolarAdoptionPage';
 import SimulationResultPage from './pages/SimulationResultPage';
@@ -62,6 +63,7 @@ function App() {
   const isConsultationPage = pathname === '/consultation';
   const isConsultationCompletePage = pathname === '/consultation/complete';
   const isSolarAdoptionPage = pathname === '/solar-adoption';
+  const isNoticePage = pathname === '/notice';
 
   useEffect(() => {
     if (!window.location.hash) {
@@ -97,6 +99,10 @@ function App() {
     return <SolarAdoptionPage />;
   }
 
+  if (isNoticePage) {
+    return <NoticePage />;
+  }
+
   return (
     <main className="pageShell">
       <div className="siteFrame">
@@ -112,7 +118,7 @@ function App() {
           <nav className="desktopNav" aria-label="주요 메뉴">
             <a href="/simulation/setup">우리 아파트 가상설치</a>
             <a href="#service-intro">서비스 소개</a>
-            <a href="#solar-feed">공지사항</a>
+            <a href="/notice">공지사항</a>
             <a href="#contact">고객센터</a>
           </nav>
 
