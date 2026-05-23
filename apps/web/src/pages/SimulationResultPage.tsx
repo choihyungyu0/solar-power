@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import {
   readSimulationResultFromSession,
+  saveSimulationResultToSession,
   type SimulationResultSource,
   type StoredSimulationResult,
 } from '../lib/simulationResultStorage';
@@ -446,6 +447,11 @@ function BarChart({
 }
 
 function CostPanel({ normalized }: { normalized: NormalizedResult }) {
+  const handleConsultationApply = () => {
+    saveSimulationResultToSession(normalized.result);
+    window.location.assign('/consultation');
+  };
+
   const costItems = [
     ['투자비', formatKrw(normalized.investmentKrw)],
     ['최대 보조금', formatKrw(normalized.subsidyMaxKrw)],
@@ -476,9 +482,9 @@ function CostPanel({ normalized }: { normalized: NormalizedResult }) {
         <button type="button">자세히 보기</button>
       </section>
 
-      <a className="consultApplyButton" href="/simulation/setup">
+      <button className="consultApplyButton" type="button" onClick={handleConsultationApply}>
         상담 신청하기
-      </a>
+      </button>
     </aside>
   );
 }

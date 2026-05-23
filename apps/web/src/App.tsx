@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import SafeLocalImage from './components/SafeLocalImage';
 import SolarFeedSection from './components/SolarFeedSection';
 import ServiceIntroSection from './components/ServiceIntroSection';
+import ConsultationPage from './pages/ConsultationPage';
 import RiskMapPage from './pages/RiskMapPage';
 import SimulationResultPage from './pages/SimulationResultPage';
 import SimulationSetupPage from './pages/SimulationSetupPage';
@@ -56,6 +57,7 @@ function App() {
   const isRiskMapPage = pathname === '/risk-map';
   const isSimulationSetupPage = pathname === '/simulation/setup';
   const isSimulationResultPage = pathname === '/simulation/result';
+  const isConsultationPage = pathname === '/consultation';
 
   useEffect(() => {
     if (!window.location.hash) {
@@ -77,6 +79,10 @@ function App() {
 
   if (isSimulationResultPage) {
     return <SimulationResultPage />;
+  }
+
+  if (isConsultationPage) {
+    return <ConsultationPage />;
   }
 
   return (
