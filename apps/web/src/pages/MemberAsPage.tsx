@@ -60,6 +60,10 @@ export default function MemberAsPage() {
     window.alert('챗봇 상담은 추후 연동 예정입니다.');
   };
 
+  const goMemberProfile = () => {
+    window.location.assign('/member/profile');
+  };
+
   return (
     <div className="member-as-page">
       <MemberAsHeader />
@@ -132,7 +136,7 @@ export default function MemberAsPage() {
             <button
               className="member-as-tab-button"
               type="button"
-              onClick={() => window.alert('회원관리 화면은 추후 연동 예정입니다.')}
+              onClick={goMemberProfile}
             >
               <LuCircleUserRound aria-hidden="true" />
               회원관리
@@ -142,6 +146,13 @@ export default function MemberAsPage() {
       </main>
     </div>
   );
+}
+
+function handleMemberLogout() {
+  Object.keys(window.sessionStorage)
+    .filter((key) => key.startsWith('solarmate:'))
+    .forEach((key) => window.sessionStorage.removeItem(key));
+  window.location.assign('/');
 }
 
 function MemberAsHeader() {
@@ -172,9 +183,9 @@ function MemberAsHeader() {
         </a>
       </nav>
 
-      <button className="member-as-login-button" type="button" onClick={() => window.location.assign('/member/dashboard')}>
+      <button className="member-as-login-button" type="button" onClick={handleMemberLogout}>
         <LuUserRound aria-hidden="true" />
-        로그인
+        로그아웃
       </button>
     </header>
   );

@@ -6,6 +6,7 @@ import ConsultationCompletePage from './pages/ConsultationCompletePage';
 import ConsultationPage from './pages/ConsultationPage';
 import MemberAsPage from './pages/MemberAsPage';
 import MemberDashboardPage from './pages/MemberDashboardPage';
+import MemberProfilePage from './pages/MemberProfilePage';
 import NoticePage from './pages/NoticePage';
 import RiskMapPage from './pages/RiskMapPage';
 import SolarAdoptionPage from './pages/SolarAdoptionPage';
@@ -68,6 +69,7 @@ function App() {
   const isNoticePage = pathname === '/notice';
   const isMemberDashboardPage = pathname === '/member/dashboard';
   const isMemberAsPage = pathname === '/member/as' || pathname === '/customer-center';
+  const isMemberProfilePage = pathname === '/member/profile';
 
   useEffect(() => {
     if (!window.location.hash) {
@@ -113,6 +115,10 @@ function App() {
 
   if (isMemberAsPage) {
     return <MemberAsPage />;
+  }
+
+  if (isMemberProfilePage) {
+    return <MemberProfilePage />;
   }
 
   const goMemberDashboard = () => {

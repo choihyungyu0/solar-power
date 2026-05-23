@@ -105,10 +105,11 @@ const dashboardTabs: { id: DashboardTab; label: string; placeholder: string }[] 
   },
 ];
 
-function stayOnDashboard() {
-  if (window.location.pathname !== '/member/dashboard') {
-    window.location.assign('/member/dashboard');
-  }
+function handleMemberLogout() {
+  Object.keys(window.sessionStorage)
+    .filter((key) => key.startsWith('solarmate:'))
+    .forEach((key) => window.sessionStorage.removeItem(key));
+  window.location.assign('/');
 }
 
 export default function MemberDashboardPage() {
@@ -118,6 +119,11 @@ export default function MemberDashboardPage() {
   const handleTabClick = (tab: DashboardTab) => {
     if (tab === 'as') {
       window.location.assign('/member/as');
+      return;
+    }
+
+    if (tab === 'member') {
+      window.location.assign('/member/profile');
       return;
     }
 
@@ -210,8 +216,8 @@ function MemberDashboardHeader() {
         <a href="/member/as">고객센터</a>
       </nav>
 
-      <button className="member-dashboard-login-button" type="button" onClick={stayOnDashboard}>
-        로그인
+      <button className="member-dashboard-login-button" type="button" onClick={handleMemberLogout}>
+        로그아웃
       </button>
     </header>
   );
