@@ -60,25 +60,8 @@ function getCompletionAddress(): CompletionAddress {
   };
 }
 
-function canSafelyGoBack() {
-  try {
-    if (!document.referrer || window.history.length <= 1) {
-      return false;
-    }
-
-    return new URL(document.referrer).origin === window.location.origin;
-  } catch {
-    return false;
-  }
-}
-
 function handlePreviousClick() {
-  if (canSafelyGoBack()) {
-    window.history.back();
-    return;
-  }
-
-  window.location.assign('/consultation');
+  window.location.assign('/solar-adoption');
 }
 
 export default function ConsultationCompletePage() {

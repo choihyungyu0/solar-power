@@ -5,6 +5,7 @@ import ServiceIntroSection from './components/ServiceIntroSection';
 import ConsultationCompletePage from './pages/ConsultationCompletePage';
 import ConsultationPage from './pages/ConsultationPage';
 import RiskMapPage from './pages/RiskMapPage';
+import SolarAdoptionPage from './pages/SolarAdoptionPage';
 import SimulationResultPage from './pages/SimulationResultPage';
 import SimulationSetupPage from './pages/SimulationSetupPage';
 
@@ -60,6 +61,7 @@ function App() {
   const isSimulationResultPage = pathname === '/simulation/result';
   const isConsultationPage = pathname === '/consultation';
   const isConsultationCompletePage = pathname === '/consultation/complete';
+  const isSolarAdoptionPage = pathname === '/solar-adoption';
 
   useEffect(() => {
     if (!window.location.hash) {
@@ -89,6 +91,10 @@ function App() {
 
   if (isConsultationCompletePage) {
     return <ConsultationCompletePage />;
+  }
+
+  if (isSolarAdoptionPage) {
+    return <SolarAdoptionPage />;
   }
 
   return (
