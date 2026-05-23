@@ -9,16 +9,31 @@ import type {
 
 const BASE = 'https://climate.gg.go.kr';
 const SELECT_BULD_URL = `${BASE}/gcs/book/cmm/selectBuld.do`;
-const SELECT_BULD_TIMEOUT_MS = 8_000;
+const OVERALL_TIMEOUT_MS = 25_000;
+const SELECT_BULD_TIMEOUT_MS = 5_000;
+const WFS_METADATA_TIMEOUT_MS = 5_000;
+const SELECT_SUN_LIST_TIMEOUT_MS = 12_000;
+const SELECT_BULD_INFO_TIMEOUT_MS = 4_000;
+const SELECT_RULE_LIST_TIMEOUT_MS = 4_000;
+const PV_ANALYSIS_TIMEOUT_MS = 8_000;
 const SELECT_BULD_MAX_ATTEMPTS = 1;
 const CELL_W_M = 1;
 const CELL_H_M = 3.5;
 const MAX_CELLS = 2500;
+const MAX_CELL_SCAN_COUNT = 100_000;
 const DEFAULT_PANEL_CAPACITY_W = 640;
 const DEFAULT_PANEL_ANGLE = 35;
 const DEFAULT_PANEL_TYPE = 1;
 const DEFAULT_CELLS_PER_PANEL = 2;
 const SELECT_BULD_MATCH_DISTANCE_THRESHOLD_M = 15;
+const ANNUAL_GENERATION_KWH_PER_KW = 1265;
+const ELECTRICITY_VALUE_KRW_PER_KWH = 150;
+const FALLBACK_PAYBACK_YEARS = 6.8;
+const CARBON_REDUCTION_KG_PER_KWH = 0.4594;
+const PINE_TREE_KG_CO2_PER_YEAR = 6.6;
+const MONTHLY_GENERATION_WEIGHTS = [0.072, 0.079, 0.092, 0.101, 0.107, 0.104, 0.097, 0.096, 0.087, 0.073, 0.049, 0.043];
+
+export const maxDuration = 60;
 
 const COMMON_HEADERS = {
   Accept: 'application/json, text/javascript, */*; q=0.01',
@@ -48,6 +63,7 @@ type Coordinate4326 = [number, number];
 type Ring5186 = Coordinate5186[];
 type Ring4326 = Coordinate4326[];
 type SelectBuldStatus = 'success' | 'timeout' | 'not_found' | 'skipped' | 'mismatch_selected_building';
+type ExternalStepStatus = 'success' | 'timeout' | 'failed' | 'skipped' | 'fallback';
 
 type Cell = {
   id: number;
@@ -84,7 +100,13 @@ type LiveDiagnostics = {
   shadingAverage: number;
   panelCount: number;
   roofSource: ClimateLiveRoofSource;
+  overallTimeoutMs: number;
+  elapsedMs: number;
+  timedOutStep?: string | null;
   selectBuldStatus: SelectBuldStatus;
+  selectSunListStatus?: ExternalStepStatus;
+  pvAnalysisStatus?: ExternalStepStatus;
+  fallbackReason?: string;
   selectBuldRoofMatchesSelectedBuilding?: boolean | null;
   selectBuldCentroidInsideSelectedBuilding?: boolean;
   selectBuldCentroidDistanceToSelectedBuildingM?: number | null;
@@ -143,6 +165,12 @@ function readNumber(value: unknown, fallback: number | null = null) {
   }
 
   return fallback;
+}
+
+function roundDecimal(value: number, digits = 1) {
+  const multiplier = 10 ** digits;
+
+  return Math.round(value * multiplier) / multiplier;
 }
 
 function readString(value: unknown) {
@@ -315,6 +343,11 @@ function createFailureResponse(
   } = {},
 ) {
   const responseDiagnostics = {
+    overallTimeoutMs: OVERALL_TIMEOUT_MS,
+    timedOutStep: null,
+    selectBuldStatus: 'skipped',
+    selectSunListStatus: 'skipped',
+    pvAnalysisStatus: 'skipped',
     ...diagnostics,
     requestSelectedBuildingId:
       identity.selectedBuildingId ?? (diagnostics.requestSelectedBuildingId as string | null | undefined) ?? null,
@@ -341,13 +374,42 @@ function createFailureResponse(
   );
 }
 
-async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  options: { step: string; overallSignal?: AbortSignal } = { step: 'fetch' },
+) {
   const controller = new AbortController();
+  let didOverallAbort = false;
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const abortFromOverall = () => {
+    didOverallAbort = true;
+    controller.abort();
+  };
+
+  if (options.overallSignal?.aborted) {
+    throw new ExternalStepError(options.step, '전체 분석 시간이 초과되었습니다.', {
+      timedOutStep: options.step,
+      overallTimeoutMs: OVERALL_TIMEOUT_MS,
+    });
+  }
+
+  options.overallSignal?.addEventListener('abort', abortFromOverall, { once: true });
 
   try {
     return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (didOverallAbort) {
+      throw new ExternalStepError(options.step, '전체 분석 시간이 초과되었습니다.', {
+        timedOutStep: options.step,
+        overallTimeoutMs: OVERALL_TIMEOUT_MS,
+      });
+    }
+
+    throw error;
   } finally {
+    options.overallSignal?.removeEventListener('abort', abortFromOverall);
     clearTimeout(timeoutId);
   }
 }
@@ -368,11 +430,12 @@ async function timedJson<T>(
   url: string,
   init: RequestInit,
   timeoutMs: number,
+  overallSignal?: AbortSignal,
 ): Promise<T> {
   const startedAt = Date.now();
 
   try {
-    const response = await fetchWithTimeout(url, init, timeoutMs);
+    const response = await fetchWithTimeout(url, init, timeoutMs, { step, overallSignal });
     timings[step] = Date.now() - startedAt;
 
     if (!response.ok) {
@@ -494,7 +557,7 @@ function extractSelectBuldRing(payload: unknown, diagnostics: SelectBuldDiagnost
   }
 }
 
-async function runSelectBuldRequest(x: number, y: number, timings?: Record<string, number>) {
+async function runSelectBuldRequest(x: number, y: number, timings?: Record<string, number>, overallSignal?: AbortSignal) {
   const requestBody = createSelectBuldBody(x, y);
   const diagnostics: SelectBuldDiagnostics = {
     selectBuldUrl: SELECT_BULD_URL,
@@ -518,6 +581,7 @@ async function runSelectBuldRequest(x: number, y: number, timings?: Record<strin
           body: requestBody,
         },
         SELECT_BULD_TIMEOUT_MS,
+        { step: 'selectBuld', overallSignal },
       );
       const rawText = await response.text();
       const payload = parseJsonOrNull(rawText);
@@ -579,8 +643,8 @@ async function runSelectBuldRequest(x: number, y: number, timings?: Record<strin
   throw new ExternalStepError('selectBuld', 'selectBuld 호출에 실패했습니다.', diagnostics);
 }
 
-async function selectBuld(x: number, y: number, timings: Record<string, number>) {
-  const result = await runSelectBuldRequest(x, y, timings);
+async function selectBuld(x: number, y: number, timings: Record<string, number>, overallSignal?: AbortSignal) {
+  const result = await runSelectBuldRequest(x, y, timings, overallSignal);
 
   if (!result.ring) {
     throw new ExternalStepError(
@@ -593,7 +657,12 @@ async function selectBuld(x: number, y: number, timings: Record<string, number>)
   return { ring: result.ring, diagnostics: result.diagnostics };
 }
 
-async function runSelectBuldCandidateRequest(x: number, y: number, timings?: Record<string, number>) {
+async function runSelectBuldCandidateRequest(
+  x: number,
+  y: number,
+  timings?: Record<string, number>,
+  overallSignal?: AbortSignal,
+) {
   const requestBody = createSelectBuldBody(x, y);
   const diagnostics: SelectBuldDiagnostics = {
     selectBuldUrl: SELECT_BULD_URL,
@@ -613,6 +682,7 @@ async function runSelectBuldCandidateRequest(x: number, y: number, timings?: Rec
         body: requestBody,
       },
       SELECT_BULD_TIMEOUT_MS,
+      { step: 'selectBuld', overallSignal },
     );
     const rawText = await response.text();
     const payload = parseJsonOrNull(rawText);
@@ -669,7 +739,7 @@ async function runSelectBuldCandidateRequest(x: number, y: number, timings?: Rec
   }
 }
 
-async function loadWfsMetadata(x: number, y: number, timings: Record<string, number>) {
+async function loadWfsMetadata(x: number, y: number, timings: Record<string, number>, overallSignal?: AbortSignal) {
   const cqlFilter = encodeURIComponent(`INTERSECTS(shape, Point(${x} ${y}))`);
   const url =
     `${BASE}/geoserver/spggcee/ows?service=WFS&version=1.0.0&request=GetFeature` +
@@ -683,7 +753,8 @@ async function loadWfsMetadata(x: number, y: number, timings: Record<string, num
       method: 'GET',
       headers: COMMON_HEADERS,
     },
-    15_000,
+    WFS_METADATA_TIMEOUT_MS,
+    overallSignal,
   );
 
   const features = isRecord(payload) && Array.isArray(payload.features) ? payload.features : [];
@@ -823,9 +894,16 @@ function generateCells(ring: Ring5186) {
   const bbox = polygonBbox(ring);
   const cells: Cell[] = [];
   let id = 0;
+  let scannedCellCount = 0;
 
   for (let y = bbox.minY; y + CELL_H_M <= bbox.maxY; y += CELL_H_M) {
     for (let x = bbox.minX; x + CELL_W_M <= bbox.maxX; x += CELL_W_M) {
+      scannedCellCount += 1;
+
+      if (scannedCellCount > MAX_CELL_SCAN_COUNT) {
+        return { cells, maxCellsApplied: cells.length > MAX_CELLS, scanLimitApplied: true };
+      }
+
       const centroid: Coordinate5186 = [x + CELL_W_M / 2, y + CELL_H_M / 2];
 
       if (isPointInPolygon(centroid, ring)) {
@@ -834,16 +912,20 @@ function generateCells(ring: Ring5186) {
           bbox5186: [x, y, x + CELL_W_M, y + CELL_H_M],
           centroid5186: { x: centroid[0], y: centroid[1] },
         });
+
+        if (cells.length > MAX_CELLS) {
+          return { cells, maxCellsApplied: true, scanLimitApplied: false };
+        }
       }
 
       id += 1;
     }
   }
 
-  return cells;
+  return { cells, maxCellsApplied: false, scanLimitApplied: false };
 }
 
-async function selectSunList(cells: Cell[], timings: Record<string, number>) {
+async function selectSunList(cells: Cell[], timings: Record<string, number>, overallSignal?: AbortSignal) {
   const body = new URLSearchParams();
 
   cells.forEach((cell) => {
@@ -861,7 +943,8 @@ async function selectSunList(cells: Cell[], timings: Record<string, number>) {
       headers: FORM_HEADERS,
       body,
     },
-    30_000,
+    SELECT_SUN_LIST_TIMEOUT_MS,
+    overallSignal,
   );
 
   if (!Array.isArray(payload)) {
@@ -885,7 +968,7 @@ async function selectSunList(cells: Cell[], timings: Record<string, number>) {
   }, {});
 }
 
-async function selectBuldInfo(unqId: string | null, timings: Record<string, number>) {
+async function selectBuldInfo(unqId: string | null, timings: Record<string, number>, overallSignal?: AbortSignal) {
   if (!unqId) {
     return { labels: [], electricity_kwh: [], gas_m3: [] };
   }
@@ -900,7 +983,8 @@ async function selectBuldInfo(unqId: string | null, timings: Record<string, numb
       headers: FORM_HEADERS,
       body,
     },
-    15_000,
+    SELECT_BULD_INFO_TIMEOUT_MS,
+    overallSignal,
   );
 
   const firstRow =
@@ -931,7 +1015,7 @@ function createRoofWkt(ring: Ring5186) {
   return `MULTIPOLYGON(((${coordinates})))`;
 }
 
-async function selectRuleList(ring: Ring5186, timings: Record<string, number>) {
+async function selectRuleList(ring: Ring5186, timings: Record<string, number>, overallSignal?: AbortSignal) {
   const body = new URLSearchParams({ text: createRoofWkt(ring) });
   const payload = await timedJson<unknown>(
     timings,
@@ -942,7 +1026,8 @@ async function selectRuleList(ring: Ring5186, timings: Record<string, number>) {
       headers: FORM_HEADERS,
       body,
     },
-    15_000,
+    SELECT_RULE_LIST_TIMEOUT_MS,
+    overallSignal,
   );
 
   const items = isRecord(payload) && Array.isArray(payload.list) ? payload.list : [];
@@ -968,6 +1053,7 @@ async function callPvAnalysis({
   panelAngle,
   panelType,
   timings,
+  overallSignal,
 }: {
   longitude: number;
   latitude: number;
@@ -977,6 +1063,7 @@ async function callPvAnalysis({
   panelAngle: number;
   panelType: number;
   timings: Record<string, number>;
+  overallSignal?: AbortSignal;
 }) {
   const pvInput = {
     latitude,
@@ -998,7 +1085,8 @@ async function callPvAnalysis({
       headers: JSON_HEADERS,
       body: JSON.stringify(pvInput),
     },
-    15_000,
+    PV_ANALYSIS_TIMEOUT_MS,
+    overallSignal,
   );
   const data = isRecord(payload) && isRecord(payload.data) ? payload.data : null;
 
@@ -1007,6 +1095,34 @@ async function callPvAnalysis({
   }
 
   return { pvInput, pvOutput: data as unknown as ClimateBundlePvOutputRaw };
+}
+
+function createFallbackPvOutput(panelCapacityW: number, panelCount: number): ClimateBundlePvOutputRaw {
+  const installKw = roundDecimal((panelCapacityW * panelCount) / 1000, 1);
+  const annualGeneration = Math.round(installKw * ANNUAL_GENERATION_KWH_PER_KW);
+  const firstYearSaveCost = Math.round(annualGeneration * ELECTRICITY_VALUE_KRW_PER_KWH);
+  const expectedInvestment = Math.round(firstYearSaveCost * FALLBACK_PAYBACK_YEARS);
+  const carbonReduction = roundDecimal(annualGeneration * CARBON_REDUCTION_KG_PER_KWH, 1);
+
+  return {
+    annual_generation: annualGeneration,
+    expected_revenue: {
+      install_kw: installKw,
+      first_year_revenue: firstYearSaveCost,
+      first_year_save_cost: firstYearSaveCost,
+      expected_investment: expectedInvestment,
+    },
+    environmental_contribution: {
+      pine_tree_effect: roundDecimal(carbonReduction / PINE_TREE_KG_CO2_PER_YEAR, 1),
+      carbon_reduction: carbonReduction,
+    },
+    annual_revenue: [],
+    annual_saveCost: [],
+    monthly_generation: MONTHLY_GENERATION_WEIGHTS.map((weight, index) => ({
+      month: index + 1,
+      generation: roundDecimal(annualGeneration * weight, 1),
+    })),
+  };
 }
 
 function createCellRing4326([x1, y1, x2, y2]: [number, number, number, number]) {
@@ -1152,7 +1268,17 @@ export async function runDebugSelectBuld(payload: unknown) {
 }
 
 export default async function handler(request: Request) {
+  const overallStartedAt = Date.now();
+  const overallController = new AbortController();
+  let timedOutStep: string | null = null;
+  const overallTimeoutId = setTimeout(() => {
+    timedOutStep = timedOutStep ?? 'overall';
+    overallController.abort();
+  }, OVERALL_TIMEOUT_MS);
+  const getElapsedMs = () => Date.now() - overallStartedAt;
+
   if (request.method !== 'POST') {
+    clearTimeout(overallTimeoutId);
     return jsonResponse({ error: 'Method not allowed.' }, 405);
   }
 
@@ -1173,6 +1299,29 @@ export default async function handler(request: Request) {
   let selectBuldCentroidInsideSelectedBuilding = false;
   let selectBuldCentroidDistanceToSelectedBuildingM: number | null = null;
   let selectBuldCentroidWgs84: { longitude: number; latitude: number } | null = null;
+  let selectSunListStatus: ExternalStepStatus = 'skipped';
+  let pvAnalysisStatus: ExternalStepStatus = 'skipped';
+  let fallbackReason: string | undefined;
+  const getCommonDiagnostics = () => ({
+    overallTimeoutMs: OVERALL_TIMEOUT_MS,
+    elapsedMs: getElapsedMs(),
+    timedOutStep,
+    selectSunListStatus,
+    pvAnalysisStatus,
+    fallbackReason,
+  });
+  const markTimedOutStep = (error: unknown, step: string) => {
+    if (error instanceof ExternalStepError) {
+      const diagnosticStep =
+        error.diagnostics && typeof error.diagnostics.timedOutStep === 'string' ? error.diagnostics.timedOutStep : null;
+
+      if (diagnosticStep || error.message.includes('초과')) {
+        timedOutStep = diagnosticStep ?? step;
+      }
+    } else if (error instanceof Error && error.name === 'AbortError') {
+      timedOutStep = step;
+    }
+  };
 
   try {
     const requestBody = await request.json().catch(() => null);
@@ -1194,15 +1343,29 @@ export default async function handler(request: Request) {
     inputWgs84 = { longitude: input.longitude, latitude: input.latitude };
     input5186 = { x: x5186, y: y5186 };
 
+    const metadataPromise = loadWfsMetadata(x5186, y5186, apiTimingsMs, overallController.signal).catch((error) => {
+      warnings.push(error instanceof Error ? error.message : 'WFS 건물 메타데이터 조회에 실패했습니다.');
+
+      return {};
+    });
     let roofRing = input.selectedBuildingRing5186;
-    const selectBuldResult = await runSelectBuldCandidateRequest(x5186, y5186, apiTimingsMs).catch((error) => {
+    const selectBuldResult = await runSelectBuldCandidateRequest(
+      x5186,
+      y5186,
+      apiTimingsMs,
+      overallController.signal,
+    ).catch((error) => {
       if (error instanceof ExternalStepError && error.step === 'selectBuld') {
+        markTimedOutStep(error, 'selectBuld');
+
         if (error.diagnostics) {
           selectBuldDiagnostics = error.diagnostics as SelectBuldDiagnostics;
         }
 
         selectBuldStatus =
-          selectBuldDiagnostics?.selectBuldFeatureParseStatus === 'request-timeout' ? 'timeout' : 'not_found';
+          selectBuldDiagnostics?.selectBuldFeatureParseStatus === 'request-timeout' || error.message.includes('초과')
+            ? 'timeout'
+            : 'not_found';
         warnings.push(
           selectBuldStatus === 'timeout'
             ? 'climate.gg 옥상 polygon 조회가 시간 초과되어 선택 건물 footprint 기반 옥상 추정으로 진행했습니다.'
@@ -1244,20 +1407,16 @@ export default async function handler(request: Request) {
     }
 
     const roofAreaM2 = polygonAreaM2(roofRing);
-    const metadata: Record<string, unknown> = await loadWfsMetadata(x5186, y5186, apiTimingsMs).catch((error) => {
-      warnings.push(error instanceof Error ? error.message : 'WFS 건물 메타데이터 조회에 실패했습니다.');
-
-      return {};
-    });
     const generatedCells = generateCells(roofRing);
-    maxCellsApplied = generatedCells.length > MAX_CELLS;
-    const cells =
-      maxCellsApplied
-        ? generatedCells.slice(0, MAX_CELLS)
-        : generatedCells;
+    maxCellsApplied = generatedCells.maxCellsApplied;
+    const cells = maxCellsApplied ? generatedCells.cells.slice(0, MAX_CELLS) : generatedCells.cells;
 
-    if (generatedCells.length > MAX_CELLS) {
-      warnings.push(`셀 수가 ${generatedCells.length.toLocaleString('ko-KR')}개여서 ${MAX_CELLS}개만 분석했습니다.`);
+    if (generatedCells.maxCellsApplied) {
+      warnings.push(`셀 수가 ${generatedCells.cells.length.toLocaleString('ko-KR')}개를 넘어 ${MAX_CELLS}개만 분석했습니다.`);
+    }
+
+    if (generatedCells.scanLimitApplied) {
+      warnings.push('건물 footprint 범위가 커서 셀 탐색 상한을 적용했습니다.');
     }
 
     if (cells.length === 0) {
@@ -1281,6 +1440,7 @@ export default async function handler(request: Request) {
         liveHybridMode: true,
         maxCellsApplied,
         apiTimingsMs,
+        ...getCommonDiagnostics(),
         ...(selectBuldDiagnostics ?? {}),
         warnings,
       }, 200, requestIdentity);
@@ -1289,9 +1449,14 @@ export default async function handler(request: Request) {
     let shadingByCellId: Record<number, number>;
 
     try {
-      shadingByCellId = await selectSunList(cells, apiTimingsMs);
+      shadingByCellId = await selectSunList(cells, apiTimingsMs, overallController.signal);
+      selectSunListStatus = 'success';
     } catch (error) {
-      return createFailureResponse('climate.gg 셀별 음영 분석 호출에 실패했습니다.', {
+      markTimedOutStep(error, 'selectSunList');
+      selectSunListStatus = timedOutStep === 'selectSunList' ? 'timeout' : 'failed';
+      fallbackReason = selectSunListStatus === 'timeout' ? 'selectSunList-timeout' : 'selectSunList-failed';
+
+      return createFailureResponse('climate.gg 음영 분석 응답 지연으로 건물 footprint 기반 자체 배치를 유지합니다.', {
         inputWgs84,
         input5186,
         roofAreaM2,
@@ -1311,6 +1476,7 @@ export default async function handler(request: Request) {
         liveHybridMode: true,
         maxCellsApplied,
         apiTimingsMs,
+        ...getCommonDiagnostics(),
         ...(selectBuldDiagnostics ?? {}),
         selectSunListLastError: error instanceof Error ? error.message : 'unknown',
         warnings,
@@ -1322,6 +1488,9 @@ export default async function handler(request: Request) {
     const panelCount = Math.max(1, Math.floor(shadingValues.length / input.cellsPerPanel));
 
     if (shadingValues.length === 0) {
+      selectSunListStatus = 'failed';
+      fallbackReason = 'selectSunList-empty';
+
       return createFailureResponse('climate.gg 셀별 음영 분석 결과가 비어 있습니다.', {
         inputWgs84,
         input5186,
@@ -1342,23 +1511,36 @@ export default async function handler(request: Request) {
         liveHybridMode: true,
         maxCellsApplied,
         apiTimingsMs,
+        ...getCommonDiagnostics(),
         ...(selectBuldDiagnostics ?? {}),
         warnings,
       }, 200, requestIdentity);
     }
 
+    const metadata: Record<string, unknown> = await metadataPromise;
     const unqId = readString(metadata.unq_id);
-    const usageMonthly = await selectBuldInfo(unqId, apiTimingsMs).catch((error) => {
+    const usageMonthlyPromise = selectBuldInfo(unqId, apiTimingsMs, overallController.signal).catch((error) => {
       warnings.push(error instanceof Error ? error.message : 'selectBuldInfo 사용량 조회에 실패했습니다.');
 
       return { labels: [], electricity_kwh: [], gas_m3: [] };
     });
-    const regulationHits = await selectRuleList(roofRing, apiTimingsMs).catch((error) => {
+    const regulationHitsPromise = selectRuleList(roofRing, apiTimingsMs, overallController.signal).catch((error) => {
       warnings.push(error instanceof Error ? error.message : 'selectRuleList 규제 조회에 실패했습니다.');
 
       return [];
     });
-    const { pvInput, pvOutput } = await callPvAnalysis({
+    const fallbackPvInput = {
+      latitude: input.latitude,
+      longitude: input.longitude,
+      shading_index_average: shadingAverage,
+      solar_panel_angle: input.panelAngle,
+      solar_panel_info: {
+        panel_capacity: input.panelCapacityW,
+        panel_count: panelCount,
+        panel_type: input.panelType,
+      },
+    };
+    const pvAnalysisPromise = callPvAnalysis({
       longitude: input.longitude,
       latitude: input.latitude,
       shadingAverage,
@@ -1367,7 +1549,33 @@ export default async function handler(request: Request) {
       panelAngle: input.panelAngle,
       panelType: input.panelType,
       timings: apiTimingsMs,
-    });
+      overallSignal: overallController.signal,
+    })
+      .then((result) => {
+        pvAnalysisStatus = 'success';
+
+        return result;
+      })
+      .catch((error) => {
+        markTimedOutStep(error, 'pvAnalysis');
+        pvAnalysisStatus = timedOutStep === 'pvAnalysis' ? 'timeout' : 'fallback';
+        fallbackReason = pvAnalysisStatus === 'timeout' ? 'pvAnalysis-timeout' : 'pvAnalysis-failed';
+        warnings.push(
+          error instanceof Error
+            ? `pv/analysis 실패로 데모 경제성 산식을 사용했습니다: ${error.message}`
+            : 'pv/analysis 실패로 데모 경제성 산식을 사용했습니다.',
+        );
+
+        return {
+          pvInput: fallbackPvInput,
+          pvOutput: createFallbackPvOutput(input.panelCapacityW, panelCount),
+        };
+      });
+    const [usageMonthly, regulationHits, { pvInput, pvOutput }] = await Promise.all([
+      usageMonthlyPromise,
+      regulationHitsPromise,
+      pvAnalysisPromise,
+    ]);
     const panelsGeojson = createPanelsGeojson(cells, shadingByCellId);
     const bundle = createBundle({
       longitude: input.longitude,
@@ -1402,6 +1610,7 @@ export default async function handler(request: Request) {
       liveHybridMode: true,
       maxCellsApplied,
       apiTimingsMs,
+      ...getCommonDiagnostics(),
       ...(selectBuldDiagnostics ?? {}),
       warnings,
       unqId,
@@ -1420,6 +1629,9 @@ export default async function handler(request: Request) {
       diagnostics,
     });
   } catch (error) {
+    markTimedOutStep(error, error instanceof ExternalStepError ? error.step : 'handler');
+    fallbackReason = fallbackReason ?? (timedOutStep ? `${timedOutStep}-timeout` : 'handler-error');
+
     const message =
       error instanceof ExternalStepError || error instanceof ValidationError
         ? error.message
@@ -1450,11 +1662,14 @@ export default async function handler(request: Request) {
         liveHybridMode: true,
         maxCellsApplied,
         apiTimingsMs,
+        ...getCommonDiagnostics(),
         ...errorDiagnostics,
         warnings,
       },
       error instanceof ValidationError ? 400 : 200,
       requestIdentity,
     );
+  } finally {
+    clearTimeout(overallTimeoutId);
   }
 }

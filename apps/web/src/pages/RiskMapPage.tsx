@@ -1840,13 +1840,17 @@ function RiskMapPage() {
     }
 
     if (!response.ok) {
+      const fallbackMessage = response.fallbackRecommended
+        ? 'climate.gg 라이브 분석 응답 지연으로 자체 배치를 표시합니다.'
+        : response.message;
+
       setLiveClimateStatus('error');
-      setLiveClimateStep('climate.gg 라이브 분석 실패');
-      setLiveClimateError(response.message);
+      setLiveClimateStep('건물 footprint 기반 자체 배치 유지');
+      setLiveClimateError(fallbackMessage);
       setLiveClimateDiagnostics(response.diagnostics);
-      setPvAnalysisStatus('idle');
-      setPvAnalysisMessage('');
-      setAnalysisStatus('climate.gg 라이브 분석 실패로 건물 footprint 기반 자체 배치를 표시합니다.');
+      setPvAnalysisStatus('fallback');
+      setPvAnalysisMessage(fallbackMessage);
+      setAnalysisStatus(fallbackMessage);
       setIsSolarPanelLayerVisible(true);
       return;
     }

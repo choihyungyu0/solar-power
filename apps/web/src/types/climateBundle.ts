@@ -138,7 +138,13 @@ export type ClimateLiveAnalysisDiagnostics = {
   shadingAverage?: number;
   panelCount?: number;
   roofSource?: ClimateLiveRoofSource;
+  overallTimeoutMs?: number;
+  elapsedMs?: number;
+  timedOutStep?: string | null;
   selectBuldStatus?: ClimateLiveSelectBuldStatus;
+  selectSunListStatus?: 'success' | 'timeout' | 'failed' | 'skipped' | 'fallback';
+  pvAnalysisStatus?: 'success' | 'timeout' | 'failed' | 'skipped' | 'fallback';
+  fallbackReason?: string;
   selectBuldRoofMatchesSelectedBuilding?: boolean | null;
   selectBuldCentroidInsideSelectedBuilding?: boolean;
   selectBuldCentroidDistanceToSelectedBuildingM?: number | null;
