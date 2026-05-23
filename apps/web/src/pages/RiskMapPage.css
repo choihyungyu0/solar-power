@@ -356,6 +356,111 @@
   color: #b91c1c;
 }
 
+.mapDataHealthAlert,
+.selectionStatusOverlay,
+.selectionDebugPanel {
+  position: absolute;
+  z-index: 6;
+  border: 1px solid rgba(201, 213, 225, 0.86);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.16);
+}
+
+.mapDataHealthAlert {
+  left: 20px;
+  right: 20px;
+  top: 104px;
+  border-color: rgba(239, 68, 68, 0.36);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: rgba(255, 247, 237, 0.96);
+  color: #9a3412;
+  font-size: 14px;
+  font-weight: 900;
+  pointer-events: none;
+}
+
+.selectionStatusOverlay {
+  left: 50%;
+  top: 112px;
+  transform: translateX(-50%);
+  width: min(360px, calc(100% - 40px));
+  border-radius: 8px;
+  padding: 11px 13px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 950;
+  text-align: center;
+  pointer-events: none;
+}
+
+.selectionStatusOverlay.is-loading {
+  border-color: rgba(20, 120, 255, 0.34);
+  color: #075bd8;
+}
+
+.selectionStatusOverlay.is-success {
+  border-color: rgba(22, 163, 74, 0.34);
+  color: #166534;
+}
+
+.selectionStatusOverlay.is-not_found,
+.selectionStatusOverlay.is-error {
+  border-color: rgba(249, 115, 22, 0.34);
+  color: #9a3412;
+}
+
+.selectionDebugPanel {
+  top: 164px;
+  right: 20px;
+  width: min(340px, calc(100% - 40px));
+  max-height: calc(100% - 270px);
+  overflow: auto;
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(15, 23, 42, 0.86);
+  color: #f8fafc;
+  pointer-events: none;
+}
+
+.selectionDebugPanel > strong {
+  display: block;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.selectionDebugPanel dl {
+  display: grid;
+  gap: 5px;
+  margin: 9px 0 0;
+}
+
+.selectionDebugPanel div {
+  display: grid;
+  grid-template-columns: minmax(118px, 0.86fr) minmax(0, 1.14fr);
+  gap: 8px;
+}
+
+.selectionDebugPanel dt,
+.selectionDebugPanel dd {
+  min-width: 0;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.selectionDebugPanel dt {
+  color: #cbd5e1;
+  font-weight: 850;
+}
+
+.selectionDebugPanel dd {
+  color: #ffffff;
+  font-weight: 800;
+}
+
 .riskInfoPanel {
   position: sticky;
   top: 86px;
@@ -1182,6 +1287,23 @@
     top: 14px;
     left: 14px;
     right: 14px;
+  }
+
+  .mapDataHealthAlert {
+    top: 218px;
+    left: 14px;
+    right: 14px;
+  }
+
+  .selectionStatusOverlay {
+    top: 218px;
+  }
+
+  .selectionDebugPanel {
+    top: 268px;
+    right: 14px;
+    width: min(320px, calc(100% - 28px));
+    max-height: calc(100% - 360px);
   }
 
   .riskLegend {

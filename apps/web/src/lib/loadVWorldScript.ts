@@ -25,9 +25,10 @@ const VWORLD_ENGINE_SCRIPT_DEFINITIONS = [
     statusKey: 'ol3WebglLoaded',
   },
 ] as const;
-const HWASEONG_INITIAL_LONGITUDE = 127.073;
-const HWASEONG_INITIAL_LATITUDE = 37.1995;
-const HWASEONG_INITIAL_HEIGHT = 8_000;
+const HWASEONG_INITIAL_LONGITUDE = 127.07213319715528;
+const HWASEONG_INITIAL_LATITUDE = 37.203936096777305;
+const HWASEONG_INITIAL_HEIGHT = 720;
+const HWASEONG_INITIAL_PITCH = -82;
 const ENABLE_VWORLD_CAMERA_FALLBACK = import.meta.env.VITE_ENABLE_VWORLD_CAMERA_FALLBACK === 'true';
 
 let vworldScriptPromise: Promise<void> | null = null;
@@ -39,6 +40,11 @@ export type VWorldSelection = {
   rawEvent?: unknown;
   source?: string;
   method?: string;
+  clickPickMethod?: string;
+  clickPickStatus?: 'success' | 'fallback' | 'failed';
+  pickPositionSupported?: boolean;
+  cameraHeightM?: number | null;
+  pickAttempts?: string[];
 };
 
 export type VWorldMapFocusResult = {
@@ -87,6 +93,19 @@ type LonLatCoordinate = {
   method: string;
 };
 
+type ClickPickDiagnostics = {
+  clickPickMethod: string;
+  clickPickStatus: 'success' | 'fallback' | 'failed';
+  pickPositionSupported: boolean;
+  cameraHeightM: number | null;
+  pickAttempts: string[];
+};
+
+type ClickPickResult = {
+  coordinate: LonLatCoordinate | null;
+  diagnostics: ClickPickDiagnostics;
+};
+
 type ScreenPoint = {
   x: number;
   y: number;
@@ -112,6 +131,9 @@ type CesiumViewerLike = {
     flyTo?: (options: unknown) => void;
     getPickRay?: (point: unknown) => unknown;
     pickEllipsoid?: (point: unknown, ellipsoid?: unknown) => unknown;
+    positionCartographic?: {
+      height?: unknown;
+    };
   };
   entities?: CesiumEntityCollectionLike;
   scene?: {
@@ -121,6 +143,9 @@ type CesiumViewerLike = {
       flyTo?: (options: unknown) => void;
       getPickRay?: (point: unknown) => unknown;
       pickEllipsoid?: (point: unknown, ellipsoid?: unknown) => unknown;
+      positionCartographic?: {
+        height?: unknown;
+      };
     };
     globe?: {
       ellipsoid?: unknown;
@@ -726,46 +751,163 @@ function getLonLatFromCartesian(cartesian: unknown, method: string): LonLatCoord
   }
 }
 
+function getCameraHeightM(viewer: CesiumViewerLike | null) {
+  const camera = viewer?.scene?.camera ?? viewer?.camera;
+  const height = camera?.positionCartographic?.height;
+
+  return typeof height === 'number' && Number.isFinite(height) ? height : null;
+}
+
+function createClickPickDiagnostics(
+  overrides: Partial<ClickPickDiagnostics>,
+  viewer: CesiumViewerLike | null,
+): ClickPickDiagnostics {
+  return {
+    clickPickMethod: '-',
+    clickPickStatus: 'failed',
+    pickPositionSupported: Boolean(viewer?.scene?.pickPositionSupported),
+    cameraHeightM: getCameraHeightM(viewer),
+    pickAttempts: [],
+    ...overrides,
+  };
+}
+
+function createClickPickResult(
+  coordinate: LonLatCoordinate | null,
+  diagnostics: ClickPickDiagnostics,
+): ClickPickResult {
+  return {
+    coordinate,
+    diagnostics: {
+      ...diagnostics,
+      clickPickMethod: coordinate?.method ?? diagnostics.clickPickMethod,
+      clickPickStatus: coordinate ? diagnostics.clickPickStatus : 'failed',
+    },
+  };
+}
+
+function createFallbackClickPickResult(
+  fallbackCoordinate: LonLatCoordinate | null,
+  viewer: CesiumViewerLike | null,
+  pickAttempts: string[],
+): ClickPickResult {
+  return createClickPickResult(
+    fallbackCoordinate,
+    createClickPickDiagnostics(
+      {
+        clickPickMethod: fallbackCoordinate?.method ?? '-',
+        clickPickStatus: fallbackCoordinate ? 'fallback' : 'failed',
+        pickAttempts,
+      },
+      viewer,
+    ),
+  );
+}
+
 function pickCoordinateFromCesiumCanvas(
   map: VWorldMapInstance | null,
   event: MouseEvent | null,
-): LonLatCoordinate | null {
-  if (!event) {
-    return null;
-  }
-
+  fallbackCoordinate: LonLatCoordinate | null = null,
+): ClickPickResult {
   const cesium = getCesiumSdk();
   const viewer = findCesiumViewer(map);
+  const pickAttempts: string[] = [];
+
+  if (!event) {
+    return createFallbackClickPickResult(fallbackCoordinate, viewer, ['mouse-event-missing']);
+  }
+
   const screenPoint = viewer ? getScreenPointFromMouseEvent(event, viewer) : null;
 
   if (!cesium?.Cartesian2 || !viewer || !screenPoint) {
-    return null;
+    return createFallbackClickPickResult(fallbackCoordinate, viewer, [
+      !viewer ? 'cesium-viewer-missing' : 'cesium-screen-point-missing',
+    ]);
   }
 
   const cesiumPoint = new cesium.Cartesian2(screenPoint.x, screenPoint.y);
+  const pickPositionSupported = Boolean(viewer.scene?.pickPositionSupported && viewer.scene?.pickPosition);
+
+  if (pickPositionSupported) {
+    pickAttempts.push('cesium.scene.pickPosition');
+
+    try {
+      const pickedCartesian = viewer.scene?.pickPosition?.(cesiumPoint);
+      const pickedCoordinate = getLonLatFromCartesian(pickedCartesian, 'cesium.scene.pickPosition');
+
+      if (pickedCoordinate) {
+        return createClickPickResult(
+          pickedCoordinate,
+          createClickPickDiagnostics(
+            {
+              clickPickMethod: pickedCoordinate.method,
+              clickPickStatus: 'success',
+              pickPositionSupported,
+              pickAttempts,
+            },
+            viewer,
+          ),
+        );
+      }
+    } catch {
+      // Try globe picking next.
+    }
+  } else {
+    pickAttempts.push('cesium.scene.pickPosition:unsupported');
+  }
 
   try {
+    pickAttempts.push('cesium.globe.pick');
     const camera = viewer.scene?.camera ?? viewer.camera;
     const pickRay = camera?.getPickRay?.(cesiumPoint);
     const pickedCartesian = pickRay ? viewer.scene?.globe?.pick?.(pickRay, viewer.scene) : null;
     const pickedCoordinate = getLonLatFromCartesian(pickedCartesian, 'cesium.globe.pick');
 
     if (pickedCoordinate) {
-      return pickedCoordinate;
+      return createClickPickResult(
+        pickedCoordinate,
+        createClickPickDiagnostics(
+          {
+            clickPickMethod: pickedCoordinate.method,
+            clickPickStatus: 'success',
+            pickPositionSupported,
+            pickAttempts,
+          },
+          viewer,
+        ),
+      );
     }
   } catch {
     // Fall back to ellipsoid picking below.
   }
 
   try {
+    pickAttempts.push('cesium.camera.pickEllipsoid');
     const camera = viewer.scene?.camera ?? viewer.camera;
     const ellipsoid = viewer.scene?.globe?.ellipsoid;
     const pickedCartesian = camera?.pickEllipsoid?.(cesiumPoint, ellipsoid);
+    const pickedCoordinate = getLonLatFromCartesian(pickedCartesian, 'cesium.camera.pickEllipsoid');
 
-    return getLonLatFromCartesian(pickedCartesian, 'cesium.camera.pickEllipsoid');
+    if (pickedCoordinate) {
+      return createClickPickResult(
+        pickedCoordinate,
+        createClickPickDiagnostics(
+          {
+            clickPickMethod: pickedCoordinate.method,
+            clickPickStatus: 'success',
+            pickPositionSupported,
+            pickAttempts,
+          },
+          viewer,
+        ),
+      );
+    }
   } catch {
-    return null;
+    // Fall back to VWorld native coordinate payload below.
   }
+
+  pickAttempts.push(fallbackCoordinate ? fallbackCoordinate.method : 'vworld-coordinate-missing');
+  return createFallbackClickPickResult(fallbackCoordinate, viewer, pickAttempts);
 }
 
 function extractSelectionFromVWorldClick(
@@ -775,7 +917,12 @@ function extractSelectionFromVWorldClick(
 ): VWorldSelection {
   const coordinateFromArgs = extractCoordinateFromValue(args, 'vworld.args');
   const rawEvent = findMouseEvent(args) ?? args[4] ?? args[0];
-  const coordinate = coordinateFromArgs ?? pickCoordinateFromCesiumCanvas(map, rawEvent instanceof MouseEvent ? rawEvent : null);
+  const pickResult = pickCoordinateFromCesiumCanvas(
+    map,
+    rawEvent instanceof MouseEvent ? rawEvent : null,
+    coordinateFromArgs,
+  );
+  const coordinate = pickResult.coordinate;
 
   return {
     longitude: coordinate?.longitude,
@@ -783,6 +930,11 @@ function extractSelectionFromVWorldClick(
     method: coordinate?.method,
     source,
     rawEvent,
+    clickPickMethod: pickResult.diagnostics.clickPickMethod,
+    clickPickStatus: pickResult.diagnostics.clickPickStatus,
+    pickPositionSupported: pickResult.diagnostics.pickPositionSupported,
+    cameraHeightM: pickResult.diagnostics.cameraHeightM,
+    pickAttempts: pickResult.diagnostics.pickAttempts,
   };
 }
 
@@ -791,7 +943,8 @@ export function createVWorldSelectionFromMouseEvent(
   event: MouseEvent,
   source = 'dom.click',
 ): VWorldSelection {
-  const coordinate = pickCoordinateFromCesiumCanvas(map, event);
+  const pickResult = pickCoordinateFromCesiumCanvas(map, event);
+  const coordinate = pickResult.coordinate;
 
   return {
     longitude: coordinate?.longitude,
@@ -799,6 +952,11 @@ export function createVWorldSelectionFromMouseEvent(
     method: coordinate?.method,
     source,
     rawEvent: event,
+    clickPickMethod: pickResult.diagnostics.clickPickMethod,
+    clickPickStatus: pickResult.diagnostics.clickPickStatus,
+    pickPositionSupported: pickResult.diagnostics.pickPositionSupported,
+    cameraHeightM: pickResult.diagnostics.cameraHeightM,
+    pickAttempts: pickResult.diagnostics.pickAttempts,
   };
 }
 
@@ -807,7 +965,7 @@ function createVWorldCameraPosition(
   latitude = HWASEONG_INITIAL_LATITUDE,
   height = HWASEONG_INITIAL_HEIGHT,
   heading = 0,
-  pitch = -70,
+  pitch = HWASEONG_INITIAL_PITCH,
   roll = 0,
 ) {
   const vw = window.vw;
@@ -1139,7 +1297,7 @@ export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWo
     longitude: HWASEONG_INITIAL_LONGITUDE,
     latitude: HWASEONG_INITIAL_LATITUDE,
     height: HWASEONG_INITIAL_HEIGHT,
-    pitch: -70,
+    pitch: HWASEONG_INITIAL_PITCH,
   });
 
   function updateClickDiagnostics(selection: VWorldSelection, status: 'selected' | 'ignored') {
@@ -1149,6 +1307,10 @@ export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWo
         status,
         source: selection.source ?? '-',
         method: selection.method ?? '-',
+        clickPickMethod: selection.clickPickMethod ?? selection.method ?? '-',
+        clickPickStatus: selection.clickPickStatus ?? 'failed',
+        pickPositionSupported: selection.pickPositionSupported ?? false,
+        cameraHeightM: selection.cameraHeightM ?? null,
         longitude: selection.longitude ?? null,
         latitude: selection.latitude ?? null,
         selectedAt: new Date().toISOString(),

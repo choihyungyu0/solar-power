@@ -76,7 +76,9 @@ import {
   type BuildingFootprintDiagnostics,
   type BuildingFootprintLoadState,
   type BuildingFootprintMatch,
+  type BuildingFootprintSelectionMode,
 } from '../lib/buildingFootprints';
+import { findVisibleCesiumViewer, removeCesiumEntitiesByIdPrefix } from '../lib/vworldCesiumViewer';
 import {
   buildVWorldFeatureProxyPath,
   getConfiguredVWorldBuildingDataId,
@@ -120,10 +122,28 @@ const CLIMATE_POC_FOCUS_HEIGHT_PADDING_M = 320;
 const SIMPLE_PAYBACK_MAX_REASONABLE_YEARS = 100;
 const FOOTPRINT_FALLBACK_SIMPLE_PAYBACK_YEARS = 6.8;
 const DEFAULT_PANEL_PLACEMENT_SOURCE = '건물 footprint 기반 자체 배치';
+const BUILDING_DATA_HEALTH_ERROR_MESSAGE =
+  '건물 polygon 데이터를 불러오지 못했습니다. 배포 데이터 경로를 확인해주세요.';
+const SELECTION_NOT_FOUND_MESSAGE =
+  '선택 좌표 주변에서 건물 polygon을 찾지 못했습니다. 지도를 확대하거나 건물 중심을 다시 클릭해주세요.';
+const RISK_MAP_SELECTION_ENTITY_PREFIXES = [
+  'solarmate-selected-building-',
+  'solarmate-self-panel-',
+  'solarmate-panel-',
+  'solarmate-panel-debug-',
+  'solarmate-climate-panel-',
+  'solarmate-poc-panel-',
+];
+const RISK_MAP_SELECTION_OBJECT_IDS = [
+  'solarmate-click-selected-building',
+  'solarmate-click-selected-building-layer',
+];
 
 type MapLoadStatus = 'loading' | 'ready' | 'error';
 type RiskPanelTab = 'risk' | 'solar' | 'policy';
 type SelectionMode = 'screen-fallback' | 'coordinate-fallback' | 'parcel-fallback' | 'geometry' | 'building_footprint';
+type SelectionFeedbackStatus = 'idle' | 'loading' | 'success' | 'not_found' | 'error';
+type BuildingDataHealthStatus = 'idle' | 'loading' | 'ok' | 'error';
 type PvAnalysisStatus = 'idle' | 'loading' | 'success' | 'fallback' | 'error';
 type ClimatePanelLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
 type LiveClimateStatus = 'idle' | 'loading' | 'success' | 'error';
@@ -169,7 +189,28 @@ type SelectedBuildingFootprint = {
   address: string;
   name: string;
   geometryType: 'Polygon' | 'MultiPolygon';
+  selectionMode?: BuildingFootprintSelectionMode;
+  distanceMeters?: number | null;
 } | null;
+
+type BuildingDataHealthDiagnostics = {
+  buildingIndexStatus: BuildingDataHealthStatus;
+  buildingMetaStatus: BuildingDataHealthStatus;
+  buildingIndexEntryCount: number;
+  buildingDataBaseUrl: string;
+  indexUrl: string;
+  metaUrl: string;
+  message: string;
+};
+
+type SelectionClickDiagnostics = {
+  clickPickMethod: string;
+  clickPickStatus: string;
+  selectedLat: number | null;
+  selectedLon: number | null;
+  pickPositionSupported: boolean;
+  cameraHeightM: number | null;
+};
 
 type SelectableBuildingFeature = {
   type: 'Feature';
@@ -453,6 +494,22 @@ function formatDiagnosticBoolean(value: boolean | null) {
   return typeof value === 'boolean' ? String(value) : '-';
 }
 
+function formatHealthStatus(status: BuildingDataHealthStatus) {
+  if (status === 'ok') {
+    return 'ok';
+  }
+
+  if (status === 'loading') {
+    return 'loading';
+  }
+
+  if (status === 'error') {
+    return 'error';
+  }
+
+  return 'idle';
+}
+
 function formatDiagnosticMatch(value: boolean | null) {
   if (value === true) {
     return '같음';
@@ -720,6 +777,88 @@ function createInitialBuildingFootprintLoadState(): BuildingFootprintLoadState {
   };
 }
 
+function getBuildingDataBaseUrl(indexUrl: string) {
+  const slashIndex = indexUrl.lastIndexOf('/');
+
+  return slashIndex >= 0 ? indexUrl.slice(0, slashIndex + 1) : indexUrl;
+}
+
+function readBuildingIndexEntryCount(value: unknown) {
+  if (!value || typeof value !== 'object') {
+    return 0;
+  }
+
+  const files = (value as { files?: unknown }).files;
+
+  return Array.isArray(files) ? files.length : 0;
+}
+
+function createInitialBuildingDataHealthDiagnostics(): BuildingDataHealthDiagnostics {
+  const indexUrl = getBuildingAdmdongIndexUrl();
+  const metaUrl = getBuildingMetaUrl();
+
+  return {
+    buildingIndexStatus: 'idle',
+    buildingMetaStatus: 'idle',
+    buildingIndexEntryCount: 0,
+    buildingDataBaseUrl: getBuildingDataBaseUrl(indexUrl),
+    indexUrl,
+    metaUrl,
+    message: '건물 polygon 데이터 경로 확인 대기',
+  };
+}
+
+function createSelectionClickDiagnostics(selection?: VWorldSelection, coordinate?: Coordinate | null): SelectionClickDiagnostics {
+  return {
+    clickPickMethod: selection?.clickPickMethod ?? selection?.method ?? '-',
+    clickPickStatus:
+      selection?.clickPickStatus ??
+      (typeof selection?.longitude === 'number' && typeof selection?.latitude === 'number' ? 'success' : 'failed'),
+    selectedLat: coordinate?.[1] ?? null,
+    selectedLon: coordinate?.[0] ?? null,
+    pickPositionSupported: selection?.pickPositionSupported ?? false,
+    cameraHeightM: selection?.cameraHeightM ?? null,
+  };
+}
+
+function getFootprintSelectionModeText(mode?: BuildingFootprintSelectionMode | null) {
+  if (mode === 'polygon') {
+    return 'polygon 내부 선택';
+  }
+
+  if (mode === 'nearest') {
+    return '근접 건물 선택';
+  }
+
+  return '-';
+}
+
+function clearRiskMapSelectionEntities(map: VWorldMapInstance | null) {
+  if (!map) {
+    return;
+  }
+
+  const viewer = findVisibleCesiumViewer(map);
+
+  if (viewer) {
+    removeCesiumEntitiesByIdPrefix(viewer, RISK_MAP_SELECTION_ENTITY_PREFIXES);
+  }
+
+  RISK_MAP_SELECTION_OBJECT_IDS.forEach((id) => {
+    try {
+      map.removeObjectById?.(id);
+    } catch {
+      // VWorld cleanup APIs differ by SDK build.
+    }
+
+    try {
+      map.removeLayerElement?.(id);
+    } catch {
+      // VWorld cleanup APIs differ by SDK build.
+    }
+  });
+}
+
 function getDataTypeDisplayText(featureDataInfo: FeatureDataInfo) {
   if (featureDataInfo.sourceKind === 'parcel-fallback') {
     return '필지 polygon';
@@ -799,6 +938,11 @@ function RiskMapPage() {
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('screen-fallback');
   const [geometryQueryStatus, setGeometryQueryStatus] = useState<GeometryQueryStatus>('idle');
   const [geometryQueryMessage, setGeometryQueryMessage] = useState('건물을 클릭하면 브이월드 공간정보 조회를 시도합니다.');
+  const [selectionFeedbackStatus, setSelectionFeedbackStatus] = useState<SelectionFeedbackStatus>('idle');
+  const [selectionFeedbackMessage, setSelectionFeedbackMessage] = useState('지도에서 건물을 클릭해 선택하세요.');
+  const [selectionClickDiagnostics, setSelectionClickDiagnostics] = useState<SelectionClickDiagnostics>(
+    createSelectionClickDiagnostics,
+  );
   const [mapFocusStatus, setMapFocusStatus] = useState<MapFocusStatus>({
     message: '지도에서 건물을 클릭하면 해당 위치로 시점 이동을 시도합니다.',
     moved: false,
@@ -809,6 +953,9 @@ function RiskMapPage() {
     createInitialFeatureQueryDiagnostics,
   );
   const [buildingFootprints, setBuildingFootprints] = useState<BuildingFootprintCollection | null>(null);
+  const [buildingDataHealth, setBuildingDataHealth] = useState<BuildingDataHealthDiagnostics>(
+    createInitialBuildingDataHealthDiagnostics,
+  );
   const [buildingFootprintLoadState, setBuildingFootprintLoadState] = useState<BuildingFootprintLoadState>(
     createInitialBuildingFootprintLoadState,
   );
@@ -870,7 +1017,12 @@ function RiskMapPage() {
   const [isDeveloperDiagnosticsOpen, setIsDeveloperDiagnosticsOpen] = useState(false);
   const hasMapAnchoredGeometry =
     selectionMode === 'geometry' || selectionMode === 'parcel-fallback' || selectionMode === 'building_footprint';
-  const shouldShowDevDiagnostics = import.meta.env.DEV;
+  const shouldShowDevDiagnostics = import.meta.env.DEV || import.meta.env.VITE_SHOW_SELECTION_DEBUG === 'true';
+  const appEnv = import.meta.env.DEV ? 'development' : import.meta.env.MODE || 'production';
+  const hasBuildingDataHealthError = buildingDataHealth.buildingIndexStatus === 'error';
+  const buildingDataHealthStatusText = `index ${formatHealthStatus(
+    buildingDataHealth.buildingIndexStatus,
+  )} / meta ${formatHealthStatus(buildingDataHealth.buildingMetaStatus)}`;
   const pvAnalysisResult = pvAnalysisResponse?.result ?? null;
   const monthlyGenerationMaxKwh = Math.max(
     1,
@@ -1069,7 +1221,9 @@ function RiskMapPage() {
     {
       title: '건물 선택',
       state: !isBuildingPolygonDataReady ? 'disabled' : hasSelectedBuilding ? 'complete' : 'active',
-      message: !isBuildingPolygonDataReady
+      message: hasBuildingDataHealthError
+        ? BUILDING_DATA_HEALTH_ERROR_MESSAGE
+        : !isBuildingPolygonDataReady
         ? '화성시 건물 polygon 데이터 연결 필요'
         : hasSelectedBuilding
           ? `${selectedBuildingFootprint?.buildingId ?? '선택 건물'} 선택 완료`
@@ -1290,8 +1444,11 @@ function RiskMapPage() {
       const polygon = normalizeGeoJsonPolygon(match.feature);
 
       if (!polygon) {
+        clearRiskMapSelectionEntities(vworldMapRef.current);
         setGeometryQueryStatus('not-found');
         setGeometryQueryMessage('선택 좌표에서 건물 polygon을 찾았지만 표시 가능한 Polygon/MultiPolygon 좌표가 없습니다.');
+        setSelectionFeedbackStatus('not_found');
+        setSelectionFeedbackMessage(SELECTION_NOT_FOUND_MESSAGE);
         setSelectedBuildingFootprint(null);
         setSelectedBuildingFeature(null);
         setSelectedBuildingGeometry(null);
@@ -1315,7 +1472,13 @@ function RiskMapPage() {
         height: focusHeightM,
         pitch: -88,
       });
+      const selectionModeText = getFootprintSelectionModeText(match.metadata.selectionMode);
+      const distanceText =
+        typeof match.metadata.distanceMeters === 'number' && match.metadata.distanceMeters > 0
+          ? ` · 클릭 좌표와 약 ${Math.round(match.metadata.distanceMeters).toLocaleString('ko-KR')}m`
+          : '';
 
+      clearRiskMapSelectionEntities(vworldMapRef.current);
       setSelectedCoordinate(coordinate);
       setSelectedBuildingFootprint({
         ...match.metadata,
@@ -1343,8 +1506,12 @@ function RiskMapPage() {
       });
       setSelectionMode('building_footprint');
       setGeometryQueryStatus('found');
+      setSelectionFeedbackStatus('success');
+      setSelectionFeedbackMessage('건물 선택 완료');
       setGeometryQueryMessage(
-        `건물 footprint 기반 옥상 추정: ${match.metadata.geometryType} geometry에서 ${panelPolygons.length.toLocaleString(
+        `건물 선택 완료: ${selectionModeText}${distanceText}. 건물 footprint 기반 옥상 추정: ${
+          match.metadata.geometryType
+        } geometry에서 ${panelPolygons.length.toLocaleString(
           'ko-KR',
         )}개 패널 후보를 배치했습니다.${layoutWarningMessage}`,
       );
@@ -1370,7 +1537,7 @@ function RiskMapPage() {
         apartmentName: match.metadata.name,
         address: match.metadata.address,
         ...solarEstimate,
-        selectionNote: `building_id ${match.metadata.buildingId} / ${match.metadata.geometryType} 기반으로 선택했습니다.`,
+        selectionNote: `${selectionModeText} · building_id ${match.metadata.buildingId} / ${match.metadata.geometryType} 기반으로 선택했습니다.${distanceText}`,
         simulationConfidence: '건물 footprint 기반 옥상 추정',
         simulationNote: `건물 footprint 기반 옥상 추정입니다. ${layoutResult.reason ?? ''} 실제 설치 가능 여부는 옥상 장애물, 음영, 구조안전성, 관리주체 협의, 현장조사에 따라 달라질 수 있습니다.`,
       });
@@ -1407,7 +1574,7 @@ function RiskMapPage() {
 
   const handleMapSelection = useCallback(async (selection?: VWorldSelection) => {
     const coordinate =
-      typeof selection?.longitude === 'number' && typeof selection.latitude === 'number'
+      typeof selection?.longitude === 'number' && typeof selection?.latitude === 'number'
         ? ([selection.longitude, selection.latitude] as Coordinate)
         : null;
 
@@ -1415,12 +1582,15 @@ function RiskMapPage() {
     setPvAnalysisStatus('idle');
     setPvAnalysisMessage('');
     setPvAnalysisResponse(null);
+    setSelectionClickDiagnostics(createSelectionClickDiagnostics(selection, coordinate));
 
     if (!coordinate) {
       mapSelectionRequestIdRef.current += 1;
       setSelectionMode('screen-fallback');
       setGeometryQueryStatus('idle');
       setGeometryQueryMessage('지도 좌표가 없어 화면 기준 예시 배치를 표시합니다.');
+      setSelectionFeedbackStatus('error');
+      setSelectionFeedbackMessage('지도 좌표를 읽지 못했습니다. 지도를 확대하거나 다시 클릭해주세요.');
       setSelectedBuildingFootprint(null);
       setSelectedBuildingFeature(null);
       setSelectedBuildingGeometry(null);
@@ -1449,6 +1619,14 @@ function RiskMapPage() {
 
     const selectionRequestId = mapSelectionRequestIdRef.current + 1;
     mapSelectionRequestIdRef.current = selectionRequestId;
+    setSelectionFeedbackStatus('loading');
+    setSelectionFeedbackMessage('건물 선택 중...');
+    setLiveClimateStatus('idle');
+    setLiveClimateStep('새 선택 건물 기준 라이브 분석 대기');
+    setLiveClimateError('');
+    setLiveClimateDiagnostics(null);
+    setLiveClimateBundle(null);
+    setLiveClimatePanelGeojson(null);
 
     const dataId = getConfiguredVWorldBuildingDataId();
     const buffer = 10;
@@ -1506,6 +1684,7 @@ function RiskMapPage() {
       });
     }
     if (!selectedBuildingFootprint) {
+      clearRiskMapSelectionEntities(vworldMapRef.current);
       setSelectedBuildingFeature(null);
       setSelectedBuildingGeometry(null);
       setSelectedRoofPolygon(null);
@@ -1518,6 +1697,7 @@ function RiskMapPage() {
     const buildingPolygonResult = await requestSelectedBuildingPolygon({
       longitude: coordinate[0],
       latitude: coordinate[1],
+      cameraHeightM: selection?.cameraHeightM,
     });
 
     if (mapSelectionRequestIdRef.current !== selectionRequestId) {
@@ -1540,6 +1720,8 @@ function RiskMapPage() {
             address: buildingPolygonResult.building.address,
             name: buildingPolygonResult.building.name,
             geometryType: buildingPolygonResult.building.geometryType,
+            selectionMode: diagnostics?.selectionMode ?? undefined,
+            distanceMeters: diagnostics?.nearestDistanceM ?? null,
           },
         },
         coordinate,
@@ -1592,6 +1774,8 @@ function RiskMapPage() {
     const fallbackMessage = selectedBuildingFootprint
       ? `${buildingPolygonResult.message} 기존 선택 건물은 유지했습니다.`
       : buildingPolygonResult.message;
+    const userFacingFallbackMessage =
+      buildingPolygonResult.status === 'not_found' ? SELECTION_NOT_FOUND_MESSAGE : fallbackMessage;
     setMapFocusStatus({
       message: selectedBuildingFootprint
         ? '건물 매칭 실패로 시점 이동을 건너뛰고 기존 선택을 유지했습니다.'
@@ -1608,7 +1792,9 @@ function RiskMapPage() {
           ? 'not-found'
           : 'error',
     );
-    setGeometryQueryMessage(fallbackMessage);
+    setSelectionFeedbackStatus(buildingPolygonResult.status === 'not_found' ? 'not_found' : 'error');
+    setSelectionFeedbackMessage(userFacingFallbackMessage);
+    setGeometryQueryMessage(userFacingFallbackMessage);
     setFeatureDataInfo({
       dataId: getBuildingSourceDataId(buildingPolygonResult.source),
       dataTypeLabel: buildingPolygonResult.sourceLabel,
@@ -1635,11 +1821,12 @@ function RiskMapPage() {
       errorMessage: buildingPolygonResult.status === 'error' ? buildingPolygonResult.message : undefined,
     });
     if (!selectedBuildingFootprint) {
+      clearRiskMapSelectionEntities(vworldMapRef.current);
       setSelectedBuilding({
         ...demoBuilding,
-        selectionNote: buildingPolygonResult.message,
+        selectionNote: userFacingFallbackMessage,
         simulationConfidence: '건물 polygon 미선택',
-        simulationNote: buildingPolygonResult.message,
+        simulationNote: userFacingFallbackMessage,
       });
     }
     return;
@@ -2000,6 +2187,84 @@ function RiskMapPage() {
   );
 
   useEffect(() => {
+    let isMounted = true;
+    const indexUrl = getBuildingAdmdongIndexUrl();
+    const metaUrl = getBuildingMetaUrl();
+    const buildingDataBaseUrl = getBuildingDataBaseUrl(indexUrl);
+
+    setBuildingDataHealth({
+      buildingIndexStatus: 'loading',
+      buildingMetaStatus: 'loading',
+      buildingIndexEntryCount: 0,
+      buildingDataBaseUrl,
+      indexUrl,
+      metaUrl,
+      message: '건물 polygon 데이터 경로를 확인하는 중입니다.',
+    });
+
+    const loadIndexHealth = fetch(indexUrl)
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`index fetch failed: ${response.status}`);
+        }
+
+        return readBuildingIndexEntryCount(await response.json());
+      })
+      .then((entryCount) => ({ status: 'ok' as const, entryCount, message: '' }))
+      .catch((error: unknown) => ({
+        status: 'error' as const,
+        entryCount: 0,
+        message: error instanceof Error ? error.message : 'index fetch failed',
+      }));
+
+    const loadMetaHealth = fetch(metaUrl)
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`meta fetch failed: ${response.status}`);
+        }
+
+        await response.json().catch(() => null);
+        return { status: 'ok' as const, message: '' };
+      })
+      .catch((error: unknown) => ({
+        status: 'error' as const,
+        message: error instanceof Error ? error.message : 'meta fetch failed',
+      }));
+
+    Promise.all([loadIndexHealth, loadMetaHealth]).then(([indexHealth, metaHealth]) => {
+      if (!isMounted) {
+        return;
+      }
+
+      const hasIndexError = indexHealth.status === 'error';
+      const message = hasIndexError
+        ? BUILDING_DATA_HEALTH_ERROR_MESSAGE
+        : `건물 polygon 데이터 확인 완료: index ${indexHealth.entryCount.toLocaleString('ko-KR')}개 항목`;
+
+      setBuildingDataHealth({
+        buildingIndexStatus: indexHealth.status,
+        buildingMetaStatus: metaHealth.status,
+        buildingIndexEntryCount: indexHealth.entryCount,
+        buildingDataBaseUrl,
+        indexUrl,
+        metaUrl,
+        message,
+      });
+
+      if (hasIndexError) {
+        setSelectionFeedbackStatus('error');
+        setSelectionFeedbackMessage(BUILDING_DATA_HEALTH_ERROR_MESSAGE);
+        setGeometryQueryStatus('error');
+        setGeometryQueryMessage(BUILDING_DATA_HEALTH_ERROR_MESSAGE);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (isBuildingAdmdongIndexEnabled()) {
       let isMounted = true;
       const url = getBuildingAdmdongIndexUrl();
@@ -2345,6 +2610,65 @@ function RiskMapPage() {
               </div>
             )}
 
+            {hasBuildingDataHealthError && (
+              <div className="mapDataHealthAlert" role="alert">
+                {BUILDING_DATA_HEALTH_ERROR_MESSAGE}
+              </div>
+            )}
+
+            {selectionFeedbackStatus !== 'idle' && !hasBuildingDataHealthError && (
+              <div className={`selectionStatusOverlay is-${selectionFeedbackStatus}`} role="status">
+                {selectionFeedbackMessage}
+              </div>
+            )}
+
+            {shouldShowDevDiagnostics && (
+              <div className="selectionDebugPanel" aria-label="건물 선택 디버그 패널">
+                <strong>selection debug</strong>
+                <dl>
+                  <div>
+                    <dt>appEnv</dt>
+                    <dd>{appEnv}</dd>
+                  </div>
+                  <div>
+                    <dt>data health</dt>
+                    <dd>{buildingDataHealthStatusText}</dd>
+                  </div>
+                  <div>
+                    <dt>clickPickMethod</dt>
+                    <dd>{selectionClickDiagnostics.clickPickMethod}</dd>
+                  </div>
+                  <div>
+                    <dt>clickPickStatus</dt>
+                    <dd>{selectionClickDiagnostics.clickPickStatus}</dd>
+                  </div>
+                  <div>
+                    <dt>selectedLat/Lon</dt>
+                    <dd>
+                      {selectionClickDiagnostics.selectedLat?.toFixed(6) ?? '-'} /{' '}
+                      {selectionClickDiagnostics.selectedLon?.toFixed(6) ?? '-'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>candidateFileCount</dt>
+                    <dd>{buildingFootprintDiagnostics.candidateFileCount.toLocaleString('ko-KR')}</dd>
+                  </div>
+                  <div>
+                    <dt>searchedFeatureCount</dt>
+                    <dd>{buildingFootprintDiagnostics.searchedFeatureCount.toLocaleString('ko-KR')}</dd>
+                  </div>
+                  <div>
+                    <dt>matchedBuildingId</dt>
+                    <dd>{buildingFootprintDiagnostics.matchedBuildingId ?? '-'}</dd>
+                  </div>
+                  <div>
+                    <dt>nearestDistanceM</dt>
+                    <dd>{formatDiagnosticMeters(buildingFootprintDiagnostics.nearestDistanceM)}</dd>
+                  </div>
+                </dl>
+              </div>
+            )}
+
             <div className="riskLegend" aria-label="위험 등급 범례">
               {riskLegendItems.map((item) => (
                 <span key={item.label}>
@@ -2424,6 +2748,9 @@ function RiskMapPage() {
               </dl>
 
               <p className="selectionNote">{selectedBuilding.selectionNote}</p>
+              <p className={`selectionNote selectionFeedbackText is-${selectionFeedbackStatus}`}>
+                {selectionFeedbackMessage}
+              </p>
               <p className="selectionNote">
                 지도 이동: {mapFocusStatus.message}
                 {mapFocusStatus.method ? ` (${mapFocusStatus.method})` : ''}
@@ -2894,6 +3221,26 @@ function RiskMapPage() {
                   <strong>개발용 건물 polygon 매칭 진단</strong>
                   <dl>
                     <div>
+                      <dt>appEnv</dt>
+                      <dd>{appEnv}</dd>
+                    </div>
+                    <div>
+                      <dt>data health</dt>
+                      <dd>{buildingDataHealthStatusText}</dd>
+                    </div>
+                    <div>
+                      <dt>building data base URL</dt>
+                      <dd>{buildingDataHealth.buildingDataBaseUrl}</dd>
+                    </div>
+                    <div>
+                      <dt>meta URL</dt>
+                      <dd>{buildingDataHealth.metaUrl}</dd>
+                    </div>
+                    <div>
+                      <dt>health index entry count</dt>
+                      <dd>{buildingDataHealth.buildingIndexEntryCount.toLocaleString('ko-KR')}</dd>
+                    </div>
+                    <div>
                       <dt>source mode</dt>
                       <dd>{buildingFootprintDiagnostics.sourceMode}</dd>
                     </div>
@@ -2922,6 +3269,14 @@ function RiskMapPage() {
                       <dd>{buildingFootprintDiagnostics.candidateFileCount.toLocaleString('ko-KR')}</dd>
                     </div>
                     <div>
+                      <dt>selection mode</dt>
+                      <dd>{getFootprintSelectionModeText(buildingFootprintDiagnostics.selectionMode)}</dd>
+                    </div>
+                    <div>
+                      <dt>selection tolerance</dt>
+                      <dd>{formatDiagnosticMeters(buildingFootprintDiagnostics.selectionToleranceM)}</dd>
+                    </div>
+                    <div>
                       <dt>loaded file names</dt>
                       <dd>{buildingFootprintDiagnostics.loadedFileNames.join(', ') || '-'}</dd>
                     </div>
@@ -2939,11 +3294,27 @@ function RiskMapPage() {
                     </div>
                     <div>
                       <dt>selected lat</dt>
-                      <dd>{featureQueryDiagnostics.requestedLat?.toFixed(6) ?? '-'}</dd>
+                      <dd>{selectionClickDiagnostics.selectedLat?.toFixed(6) ?? featureQueryDiagnostics.requestedLat?.toFixed(6) ?? '-'}</dd>
                     </div>
                     <div>
                       <dt>selected lon</dt>
-                      <dd>{featureQueryDiagnostics.requestedLon?.toFixed(6) ?? '-'}</dd>
+                      <dd>{selectionClickDiagnostics.selectedLon?.toFixed(6) ?? featureQueryDiagnostics.requestedLon?.toFixed(6) ?? '-'}</dd>
+                    </div>
+                    <div>
+                      <dt>click pick method</dt>
+                      <dd>{selectionClickDiagnostics.clickPickMethod}</dd>
+                    </div>
+                    <div>
+                      <dt>click pick status</dt>
+                      <dd>{selectionClickDiagnostics.clickPickStatus}</dd>
+                    </div>
+                    <div>
+                      <dt>pickPositionSupported</dt>
+                      <dd>{selectionClickDiagnostics.pickPositionSupported ? 'true' : 'false'}</dd>
+                    </div>
+                    <div>
+                      <dt>camera height</dt>
+                      <dd>{formatDiagnosticMeters(selectionClickDiagnostics.cameraHeightM)}</dd>
                     </div>
                     <div>
                       <dt>selected geometry type</dt>
@@ -2956,6 +3327,18 @@ function RiskMapPage() {
                     <div>
                       <dt>matched building address</dt>
                       <dd>{buildingFootprintDiagnostics.matchedAddress ?? selectedBuildingFootprint?.address ?? '-'}</dd>
+                    </div>
+                    <div>
+                      <dt>nearest distance</dt>
+                      <dd>{formatDiagnosticMeters(buildingFootprintDiagnostics.nearestDistanceM)}</dd>
+                    </div>
+                    <div>
+                      <dt>nearest building id</dt>
+                      <dd>{buildingFootprintDiagnostics.nearestBuildingId ?? '-'}</dd>
+                    </div>
+                    <div>
+                      <dt>nearest building address</dt>
+                      <dd>{buildingFootprintDiagnostics.nearestBuildingAddress ?? '-'}</dd>
                     </div>
                     {selectedCoordinate && !selectedBuildingFootprint && (
                       <div>
