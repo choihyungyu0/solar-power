@@ -57,7 +57,12 @@ import {
   type ClimatePocBbox,
   type ClimatePocPanelExtent,
 } from '../lib/climateBundleClient';
-import { runExternalClimateBackendAnalysis } from '../lib/climateBackendClient';
+import {
+  getConfiguredClimateBackendBaseUrl,
+  isExternalClimateBackendConfigured,
+  runExternalClimateBackendAnalysis,
+} from '../lib/climateBackendClient';
+import { normalizeClimateBundlePvOutput } from '../lib/climateLiveClient';
 import {
   createBuildingFootprintDiagnostics,
   getBuildingAdmdongIndexUrl,
@@ -95,7 +100,7 @@ import type {
   ClimatePanelsGeoJson,
   ClimateSelectedBuildingFeature,
 } from '../types/climateBundle';
-import type { PvAnalysisInput, PvAnalysisProxyResponse, PvAnalysisResult } from '../types/pvAnalysis';
+import type { PvAnalysisInput, PvAnalysisProxyResponse, PvAnalysisResult, PvAnalysisSource } from '../types/pvAnalysis';
 import './RiskMapPage.css';
 
 const MAP_CONTAINER_ID = 'vworld-risk-map';
@@ -144,7 +149,7 @@ type RiskPanelTab = 'risk' | 'solar' | 'policy';
 type SelectionMode = 'screen-fallback' | 'coordinate-fallback' | 'parcel-fallback' | 'geometry' | 'building_footprint';
 type SelectionFeedbackStatus = 'idle' | 'loading' | 'success' | 'not_found' | 'error';
 type BuildingDataHealthStatus = 'idle' | 'loading' | 'ok' | 'error';
-type PvAnalysisStatus = 'idle' | 'calculating' | 'success' | 'fallback' | 'error';
+type PvAnalysisStatus = 'idle' | 'calculating' | 'success' | 'fallback' | 'backend-result' | 'local-fallback' | 'error';
 type ClimatePanelLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
 type LiveClimateStatus = 'idle' | 'loading' | 'success' | 'error';
 type LiveShadingStatus = 'idle' | 'trying' | 'success' | 'timeout' | 'fallback';
@@ -479,6 +484,131 @@ function createLivePvScenarioFallbackResult(input: PvAnalysisInput): PvAnalysisR
       month: index + 1,
       generationKwh: roundDecimal(annualGenerationKwh * weight, 1),
     })),
+  };
+}
+
+function getClimatePvOutputSource(output: ClimateBundle['pv_analysis_output']): PvAnalysisSource {
+  if (output?.source === 'backend-pv-analysis' || output?.source === 'local-fallback-formula') {
+    return output.source;
+  }
+
+  return output ? 'backend-pv-analysis' : 'local-fallback-formula';
+}
+
+function createPvInputFromClimateBundle({
+  bundle,
+  diagnostics,
+  fallbackPanelCapacityW,
+  fallbackPanelAngle,
+  fallbackPanelType,
+}: {
+  bundle: ClimateBundle;
+  diagnostics: ClimateLiveAnalysisDiagnostics | null;
+  fallbackPanelCapacityW: number;
+  fallbackPanelAngle: number;
+  fallbackPanelType: number;
+}): PvAnalysisInput {
+  const bundlePanelInfo = bundle.pv_analysis_input.solar_panel_info;
+  const panelCapacityW = toFiniteNumber(bundlePanelInfo.panel_capacity) ?? fallbackPanelCapacityW;
+  const diagnosticPanelCount = toFiniteNumber(diagnostics?.panelCount);
+  const diagnosticInstallKw =
+    toFiniteNumber(diagnostics?.installKw) ?? toFiniteNumber(diagnostics?.installCapacityKw);
+  const panelCountFromInstallKw =
+    diagnosticInstallKw && panelCapacityW > 0 ? Math.max(1, Math.round((diagnosticInstallKw * 1000) / panelCapacityW)) : null;
+  const panelCount =
+    diagnosticPanelCount ?? toFiniteNumber(bundlePanelInfo.panel_count) ?? panelCountFromInstallKw ?? PV_DEFAULT_PANEL_COUNT;
+  const shadingAverage =
+    toFiniteNumber(diagnostics?.shadingAverage) ?? toFiniteNumber(bundle.pv_analysis_input.shading_index_average) ?? PV_DEFAULT_SHADING_INDEX_AVERAGE;
+
+  return {
+    latitude: toFiniteNumber(bundle.pv_analysis_input.latitude) ?? bundle.meta.click_wgs84.latitude,
+    longitude: toFiniteNumber(bundle.pv_analysis_input.longitude) ?? bundle.meta.click_wgs84.longitude,
+    shading_index_average: shadingAverage,
+    solar_panel_angle:
+      toFiniteNumber(bundle.pv_analysis_input.solar_panel_angle) ?? fallbackPanelAngle,
+    solar_panel_info: {
+      panel_capacity: panelCapacityW,
+      panel_count: panelCount,
+      panel_type: toFiniteNumber(bundlePanelInfo.panel_type) ?? fallbackPanelType,
+    },
+  };
+}
+
+function createBackendPvAnalysisResponse({
+  bundle,
+  diagnostics,
+  selectedBuildingId,
+  selectedAnalysisSessionId,
+  roofSource,
+  selectedFeatureBuildingId,
+  backendBaseUrl,
+  fallbackPanelCapacityW,
+  fallbackPanelAngle,
+  fallbackPanelType,
+}: {
+  bundle: ClimateBundle;
+  diagnostics: ClimateLiveAnalysisDiagnostics | null;
+  selectedBuildingId: string;
+  selectedAnalysisSessionId: string;
+  roofSource: string;
+  selectedFeatureBuildingId?: string | null;
+  backendBaseUrl: string;
+  fallbackPanelCapacityW: number;
+  fallbackPanelAngle: number;
+  fallbackPanelType: number;
+}): { response: PvAnalysisProxyResponse; status: PvAnalysisStatus } {
+  const input = createPvInputFromClimateBundle({
+    bundle,
+    diagnostics,
+    fallbackPanelCapacityW,
+    fallbackPanelAngle,
+    fallbackPanelType,
+  });
+  const output = bundle.pv_analysis_output;
+  const pvAnalysisSource = getClimatePvOutputSource(output);
+  const status: PvAnalysisStatus = output ? 'backend-result' : 'local-fallback';
+  const identityDiagnostics = {
+    requestSelectedBuildingId: selectedBuildingId,
+    requestSessionId: selectedAnalysisSessionId,
+    ignoredStaleLiveResponse: false,
+    pvAnalysisSource,
+    pvAnalysisStatus: status,
+    usedVercelPvAnalysis: false,
+    backendBaseUrl,
+  };
+
+  if (output) {
+    return {
+      status,
+      response: {
+        ok: true,
+        source: pvAnalysisSource,
+        selectedBuildingId,
+        selectedAnalysisSessionId,
+        roofSource,
+        selectedFeatureBuildingId: selectedFeatureBuildingId ?? null,
+        diagnostics: identityDiagnostics,
+        input: createSafePvInputSummary(input),
+        result: normalizeClimateBundlePvOutput(output),
+      },
+    };
+  }
+
+  return {
+    status,
+    response: {
+      ok: false,
+      fallback: true,
+      source: 'local-fallback-formula',
+      message: 'Render 백엔드 PV 결과가 없어 시나리오 산식으로 발전량을 표시합니다.',
+      selectedBuildingId,
+      selectedAnalysisSessionId,
+      roofSource,
+      selectedFeatureBuildingId: selectedFeatureBuildingId ?? null,
+      diagnostics: identityDiagnostics,
+      input: createSafePvInputSummary(input),
+      result: createLivePvScenarioFallbackResult(input),
+    },
   };
 }
 
@@ -1121,6 +1251,8 @@ function RiskMapPage() {
     buildingDataHealth.buildingIndexStatus,
   )} / meta ${formatHealthStatus(buildingDataHealth.buildingMetaStatus)}`;
   const isClimateLiveBackendEnabled = import.meta.env.VITE_ENABLE_CLIMATE_LIVE_BACKEND === 'true';
+  const isClimateBackendPvBypassEnabled = isExternalClimateBackendConfigured();
+  const configuredClimateBackendBaseUrl = getConfiguredClimateBackendBaseUrl();
   const pvAnalysisResult = pvAnalysisResponse?.result ?? null;
   const monthlyGenerationMaxKwh = Math.max(
     1,
@@ -1220,7 +1352,11 @@ function RiskMapPage() {
     ? '선택 건물 footprint + climate.gg 음영 분석'
     : DEFAULT_PANEL_PLACEMENT_SOURCE;
   const hasAnyPanelLayout = hasGeneratedPanelLayout || hasStaticClimatePanelLayout || hasLiveClimatePanelLayout;
-  const hasPvAnalysisCompleted = pvAnalysisStatus === 'success' || pvAnalysisStatus === 'fallback';
+  const hasPvAnalysisCompleted =
+    pvAnalysisStatus === 'success' ||
+    pvAnalysisStatus === 'fallback' ||
+    pvAnalysisStatus === 'backend-result' ||
+    pvAnalysisStatus === 'local-fallback';
   const hasResultDetailReady = hasPvAnalysisCompleted || hasLiveClimatePanelLayout;
   const liveRoofAreaM2 = liveClimateDiagnostics?.roofAreaM2 ?? null;
   const liveCellCount = liveClimateDiagnostics?.cellCount ?? null;
@@ -1233,7 +1369,10 @@ function RiskMapPage() {
   const liveSelectSunListTimeoutMs = liveClimateDiagnostics?.selectSunListTimeoutMs ?? null;
   const liveFrontendAbortMs = liveClimateDiagnostics?.frontendAbortMs ?? null;
   const liveFallbackReason = typeof liveClimateDiagnostics?.fallbackReason === 'string' ? liveClimateDiagnostics.fallbackReason : '-';
-  const liveBackendBaseUrl = typeof liveClimateDiagnostics?.backendBaseUrl === 'string' ? liveClimateDiagnostics.backendBaseUrl : '-';
+  const liveBackendBaseUrl =
+    typeof liveClimateDiagnostics?.backendBaseUrl === 'string'
+      ? liveClimateDiagnostics.backendBaseUrl
+      : configuredClimateBackendBaseUrl || '-';
   const liveBackendHealthStatus = toFiniteNumber(liveClimateDiagnostics?.backendHealthStatus);
   const liveBackendPostStatus = toFiniteNumber(liveClimateDiagnostics?.backendPostStatus);
   const liveBackendFetchErrorName =
@@ -1248,6 +1387,33 @@ function RiskMapPage() {
   const liveInstallCapacityKw = liveClimateDiagnostics?.installCapacityKw ?? null;
   const liveApiSource = liveClimateStatus === 'success' ? 'climate.gg-live-hybrid' : '-';
   const activeClimatePvOutput = activeClimateBundle?.pv_analysis_output ?? null;
+  const pvAnalysisDiagnostics = pvAnalysisResponse?.diagnostics;
+  const pvAnalysisSource =
+    pvAnalysisDiagnostics?.pvAnalysisSource ??
+    pvAnalysisResponse?.source ??
+    (pvAnalysisStatus === 'backend-result'
+      ? getClimatePvOutputSource(activeClimatePvOutput)
+      : pvAnalysisStatus === 'local-fallback'
+        ? 'local-fallback-formula'
+        : pvAnalysisStatus === 'fallback'
+          ? 'local-scenario-fallback'
+          : pvAnalysisStatus === 'calculating'
+            ? 'separate-request-pending'
+            : '-');
+  const usedVercelPvAnalysis =
+    typeof pvAnalysisDiagnostics?.usedVercelPvAnalysis === 'boolean'
+      ? pvAnalysisDiagnostics.usedVercelPvAnalysis
+      : isClimateBackendPvBypassEnabled
+        ? false
+        : pvAnalysisStatus === 'success' || pvAnalysisStatus === 'fallback';
+  const pvAnalysisPanelSourceLabel =
+    pvAnalysisStatus === 'backend-result'
+      ? 'Render 백엔드 결과 · 시나리오 산식 포함'
+      : pvAnalysisStatus === 'local-fallback'
+        ? '시나리오 산식 · 로컬 fallback'
+        : pvAnalysisResponse?.ok
+          ? '경기 기후 플랫폼 응답 · 시나리오 기준'
+          : '대체 데모 산식 · 시나리오 기준';
   const climateExpectedRevenue = activeClimatePvOutput?.expected_revenue;
   const isSeparatePvCalculating = hasLiveClimatePanelLayout && pvAnalysisStatus === 'calculating';
   const simplePaybackSource: SimplePaybackSource = hasLiveClimatePanelLayout
@@ -1992,7 +2158,82 @@ function RiskMapPage() {
     setPvAnalysisStatus('calculating');
     setPvAnalysisMessage('경기 기후 플랫폼 기준 발전량 분석을 요청하고 있습니다.');
 
-    const response = await requestPvAnalysis(input);
+    if (isClimateBackendPvBypassEnabled) {
+      const selectedBuildingIdForPv = selectedBuildingId ?? selectedBuildingFootprint?.buildingId ?? 'demo-building';
+      const selectedSessionIdForPv = selectedAnalysisSessionId ?? selectedBuildingFootprint?.analysisSessionId ?? 'manual-pv';
+      const backendBaseUrl = configuredClimateBackendBaseUrl || '-';
+      const backendBundle = liveClimateStatus === 'success' && liveClimateBundle ? liveClimateBundle : null;
+      const backendPvResult = backendBundle
+        ? createBackendPvAnalysisResponse({
+            bundle: backendBundle,
+            diagnostics: liveClimateDiagnostics,
+            selectedBuildingId: selectedBuildingIdForPv,
+            selectedAnalysisSessionId: selectedSessionIdForPv,
+            roofSource: liveRoofSource ?? 'vworld-building-footprint-fallback',
+            selectedFeatureBuildingId: null,
+            backendBaseUrl,
+            fallbackPanelCapacityW: PV_DEFAULT_PANEL_CAPACITY_W,
+            fallbackPanelAngle: PV_DEFAULT_PANEL_ANGLE,
+            fallbackPanelType: PV_DEFAULT_PANEL_TYPE,
+          })
+        : {
+            status: 'local-fallback' as PvAnalysisStatus,
+            response: {
+              ok: false,
+              fallback: true,
+              source: 'local-fallback-formula',
+              message: 'Render 백엔드 PV 결과가 없어 시나리오 산식으로 발전량을 표시합니다.',
+              selectedBuildingId: selectedBuildingIdForPv,
+              selectedAnalysisSessionId: selectedSessionIdForPv,
+              roofSource: liveRoofSource ?? 'vworld-building-footprint-fallback',
+              selectedFeatureBuildingId: null,
+              diagnostics: {
+                requestSelectedBuildingId: selectedBuildingIdForPv,
+                requestSessionId: selectedSessionIdForPv,
+                ignoredStaleLiveResponse: false,
+                pvAnalysisSource: 'local-fallback-formula',
+                pvAnalysisStatus: 'local-fallback',
+                usedVercelPvAnalysis: false,
+                backendBaseUrl,
+              },
+              input: createSafePvInputSummary(input),
+              result: createLivePvScenarioFallbackResult(input),
+            } satisfies PvAnalysisProxyResponse,
+          };
+
+      setPvAnalysisResponse(backendPvResult.response);
+      setPvAnalysisStatus(backendPvResult.status);
+      setPvAnalysisMessage(
+        backendBundle?.pv_analysis_output
+          ? '음영 분석은 Render 백엔드에서 완료되었습니다. 발전량은 백엔드 결과 또는 시나리오 산식으로 표시합니다.'
+          : '발전량은 백엔드 결과 또는 시나리오 산식으로 표시합니다.',
+      );
+      return;
+    }
+
+    const rawResponse = await requestPvAnalysis(input);
+    const response: PvAnalysisProxyResponse = rawResponse.ok
+      ? {
+          ...rawResponse,
+          diagnostics: {
+            ...(rawResponse.diagnostics ?? {}),
+            pvAnalysisSource: rawResponse.source,
+            pvAnalysisStatus: 'success',
+            usedVercelPvAnalysis: true,
+            backendBaseUrl: configuredClimateBackendBaseUrl,
+          },
+        }
+      : {
+          ...rawResponse,
+          source: 'local-scenario-fallback',
+          diagnostics: {
+            ...(rawResponse.diagnostics ?? {}),
+            pvAnalysisSource: 'local-scenario-fallback',
+            pvAnalysisStatus: 'fallback',
+            usedVercelPvAnalysis: true,
+            backendBaseUrl: configuredClimateBackendBaseUrl,
+          },
+        };
 
     setPvAnalysisResponse(response);
     setPvAnalysisStatus(response.ok ? 'success' : 'fallback');
@@ -2001,7 +2242,20 @@ function RiskMapPage() {
         ? '경기 기후 플랫폼 응답을 시나리오 기준 값으로 표시합니다.'
         : response.message,
     );
-  }, [selectedBuilding.estimatedPanelCount, selectedCoordinate, selectionMode]);
+  }, [
+    configuredClimateBackendBaseUrl,
+    isClimateBackendPvBypassEnabled,
+    liveClimateBundle,
+    liveClimateDiagnostics,
+    liveClimateStatus,
+    liveRoofSource,
+    selectedAnalysisSessionId,
+    selectedBuilding.estimatedPanelCount,
+    selectedBuildingFootprint,
+    selectedBuildingId,
+    selectedCoordinate,
+    selectionMode,
+  ]);
 
   const handleResultDetailRequest = useCallback(() => {
     const selectedAddress = selectedBuildingFootprint?.address ?? selectedBuilding.address;
@@ -2205,16 +2459,79 @@ function RiskMapPage() {
       return;
     }
 
+    {
+    const backendCompletionMessage =
+      '음영 분석은 Render 백엔드에서 완료되었습니다. 발전량은 백엔드 결과 또는 시나리오 산식으로 표시합니다.';
+    const backendPvResult = createBackendPvAnalysisResponse({
+      bundle: response.bundle,
+      diagnostics: response.diagnostics,
+      selectedBuildingId: responseBuildingId,
+      selectedAnalysisSessionId: responseSessionId,
+      roofSource: response.roofSource,
+      selectedFeatureBuildingId: response.selectedFeatureBuildingId ?? null,
+      backendBaseUrl: configuredClimateBackendBaseUrl || liveBackendBaseUrl,
+      fallbackPanelCapacityW: livePanelCapacityW,
+      fallbackPanelAngle: livePanelAngle,
+      fallbackPanelType: livePanelType,
+    });
+    const nextPvResponse = backendPvResult.response;
+
+    setLiveShadingStatus('success');
+    setLiveClimateStatus('success');
+    setLiveClimateStep('음영 분석은 Render 백엔드에서 완료되었습니다.');
+    setLiveClimateError('');
+    setLiveClimateDiagnostics({
+      ...response.diagnostics,
+      pvAnalysisSource: nextPvResponse.diagnostics?.pvAnalysisSource,
+      pvAnalysisStatus: backendPvResult.status,
+      usedVercelPvAnalysis: false,
+      backendBaseUrl: configuredClimateBackendBaseUrl || liveBackendBaseUrl,
+    });
+    setLiveClimateBundle(response.bundle);
+    setLiveClimatePanelGeojson(response.panelsGeojson);
+    setIsSolarPanelLayerVisible(true);
+    setPvAnalysisResponse(nextPvResponse);
+    setPvAnalysisStatus(backendPvResult.status);
+    setPvAnalysisMessage(backendCompletionMessage);
+
+    const storedResult = buildStoredSimulationResult({
+      building: {
+        name: selectedBuildingFootprint?.name ?? selectedBuilding.apartmentName,
+        roadAddress: selectedBuildingFootprint?.address ?? selectedBuilding.address,
+        jibunAddress: selectedBuildingFootprint ? '지번 정보 확인 필요' : selectedBuilding.address,
+        buildingId: selectedBuildingFootprint?.buildingId ?? 'demo-building',
+      },
+      liveClimateBundle: response.bundle.pv_analysis_output ? response.bundle : null,
+      pvAnalysisResult: nextPvResponse.result,
+      selectedEstimate: {
+        panelCount: selectedBuilding.estimatedPanelCount,
+        installCapacityKw: selectedBuilding.estimatedCapacityKw,
+        annualGenerationKwh: selectedBuilding.estimatedAnnualGenerationKwh,
+        annualSavingKrw: selectedBuilding.estimatedAnnualSavingsKrw,
+        paybackYears: selectedBuilding.estimatedPaybackYears,
+      },
+    });
+
+    saveSimulationResultToSession(storedResult);
+    setAnalysisStatus(backendCompletionMessage);
+    return;
+    }
+
+    const legacyLiveResponse = response as {
+      bundle: ClimateBundle;
+      panelsGeojson: ClimatePanelsGeoJson;
+    };
+
     const liveCompletionMessage = 'AI 음영 분석 완료';
     const pvInput: PvAnalysisInput = {
-      latitude: response.bundle.pv_analysis_input.latitude,
-      longitude: response.bundle.pv_analysis_input.longitude,
-      shading_index_average: response.bundle.pv_analysis_input.shading_index_average,
-      solar_panel_angle: Number(response.bundle.pv_analysis_input.solar_panel_angle) || livePanelAngle,
+      latitude: legacyLiveResponse.bundle.pv_analysis_input.latitude,
+      longitude: legacyLiveResponse.bundle.pv_analysis_input.longitude,
+      shading_index_average: legacyLiveResponse.bundle.pv_analysis_input.shading_index_average,
+      solar_panel_angle: Number(legacyLiveResponse.bundle.pv_analysis_input.solar_panel_angle) || livePanelAngle,
       solar_panel_info: {
-        panel_capacity: response.bundle.pv_analysis_input.solar_panel_info.panel_capacity,
-        panel_count: response.bundle.pv_analysis_input.solar_panel_info.panel_count,
-        panel_type: response.bundle.pv_analysis_input.solar_panel_info.panel_type,
+        panel_capacity: legacyLiveResponse.bundle.pv_analysis_input.solar_panel_info.panel_capacity,
+        panel_count: legacyLiveResponse.bundle.pv_analysis_input.solar_panel_info.panel_count,
+        panel_type: legacyLiveResponse.bundle.pv_analysis_input.solar_panel_info.panel_type,
       },
     };
     const interimScenarioResponse: PvAnalysisProxyResponse = {
@@ -2239,15 +2556,15 @@ function RiskMapPage() {
     setLiveClimateStep(liveCompletionMessage);
     setLiveClimateError('');
     setLiveClimateDiagnostics(response.diagnostics);
-    setLiveClimateBundle(response.bundle);
-    setLiveClimatePanelGeojson(response.panelsGeojson);
+    setLiveClimateBundle(legacyLiveResponse.bundle);
+    setLiveClimatePanelGeojson(legacyLiveResponse.panelsGeojson);
     setIsSolarPanelLayerVisible(true);
     setPvAnalysisStatus('calculating');
     setPvAnalysisMessage('발전량 계산 중...');
     setPvAnalysisResponse(interimScenarioResponse);
     setAnalysisStatus(`${liveCompletionMessage} · 발전량은 별도 계산 중`);
 
-    const pvResponse = await requestPvAnalysis(pvInput);
+    const pvResponse = interimScenarioResponse;
     const isPvStaleResponse =
       mapSelectionRequestIdRef.current !== requestSelectionId ||
       responseBuildingId !== selectedBuildingIdRef.current ||
@@ -2294,7 +2611,7 @@ function RiskMapPage() {
     setPvAnalysisMessage(
       nextPvResponse.ok
         ? '발전량 계산 완료 · 경기 기후 플랫폼 응답을 예상/추정 값으로 표시합니다.'
-        : nextPvResponse.message,
+        : ((nextPvResponse as { message?: string }).message ?? ''),
     );
 
     const storedResult = buildStoredSimulationResult({
@@ -2304,7 +2621,7 @@ function RiskMapPage() {
         jibunAddress: selectedBuildingFootprint ? '지번 정보 확인 필요' : selectedBuilding.address,
         buildingId: selectedBuildingFootprint?.buildingId ?? 'demo-building',
       },
-      liveClimateBundle: response.bundle.pv_analysis_output ? response.bundle : null,
+      liveClimateBundle: legacyLiveResponse.bundle.pv_analysis_output ? legacyLiveResponse.bundle : null,
       pvAnalysisResult: nextPvResponse.result,
       selectedEstimate: {
         panelCount: selectedBuilding.estimatedPanelCount,
@@ -2322,8 +2639,10 @@ function RiskMapPage() {
         : '음영 분석은 완료되었고, 발전량은 API 응답 지연으로 시나리오 산식을 사용했습니다.',
     );
   }, [
+    configuredClimateBackendBaseUrl,
     hasSelectedBuilding,
     isClimateLiveBackendEnabled,
+    liveBackendBaseUrl,
     selectedAnalysisSessionId,
     selectedBuilding.address,
     selectedBuilding.apartmentName,
@@ -3400,15 +3719,11 @@ function RiskMapPage() {
                 </div>
                 <div>
                   <span>pvAnalysisSource</span>
-                  <strong>
-                    {pvAnalysisResponse?.ok
-                      ? pvAnalysisResponse.source
-                      : pvAnalysisStatus === 'fallback'
-                        ? 'local-scenario-fallback'
-                        : pvAnalysisStatus === 'calculating'
-                          ? 'separate-request-pending'
-                          : '-'}
-                  </strong>
+                  <strong>{pvAnalysisSource}</strong>
+                </div>
+                <div>
+                  <span>usedVercelPvAnalysis</span>
+                  <strong>{usedVercelPvAnalysis ? 'true' : 'false'}</strong>
                 </div>
                 <div>
                   <span>liveHybridMode</span>
@@ -3948,7 +4263,8 @@ function RiskMapPage() {
                   aria-label="발전량 분석 결과"
                 >
                   <div className="pvAnalysisPanelHeader">
-                    <span>
+                    <span>{pvAnalysisPanelSourceLabel}</span>
+                    <span hidden>
                       {pvAnalysisResponse?.ok
                         ? '경기 기후 플랫폼 응답 · 시나리오 기준'
                         : '대체 데모 산식 · 시나리오 기준'}

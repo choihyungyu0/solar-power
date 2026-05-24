@@ -19,18 +19,30 @@ function roundDecimal(value: number, digits = 1) {
   return Math.round(value * multiplier) / multiplier;
 }
 
+function pickNumber(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return 0;
+}
+
 export function normalizeClimateBundlePvOutput(output: ClimateBundlePvOutputRaw): PvAnalysisResult {
   const expectedRevenue = output.expected_revenue;
   const environmentalContribution = output.environmental_contribution;
-  const firstYearRevenue = readNumber(expectedRevenue.first_year_revenue);
-  const firstYearSaveCost = readNumber(expectedRevenue.first_year_save_cost);
+  const firstYearSaveCost = pickNumber(output.annual_saving_krw, expectedRevenue.first_year_save_cost);
+  const firstYearRevenue = pickNumber(expectedRevenue.first_year_revenue, firstYearSaveCost);
+  const expectedInvestment = pickNumber(output.expected_investment_krw, expectedRevenue.expected_investment);
+  const annualGeneration = pickNumber(output.annual_generation_kwh, output.annual_generation);
 
   return {
-    annualGenerationKwh: roundDecimal(Math.max(0, readNumber(output.annual_generation)), 1),
+    annualGenerationKwh: roundDecimal(Math.max(0, annualGeneration), 1),
     installKw: roundDecimal(Math.max(0, readNumber(expectedRevenue.install_kw)), 1),
     firstYearTotalEconomicEffectKrw: roundNumber(Math.max(0, firstYearRevenue)),
     firstYearSelfConsumptionSavingKrw: roundNumber(Math.max(0, firstYearSaveCost)),
-    estimatedInvestmentKrw: roundNumber(Math.max(0, readNumber(expectedRevenue.expected_investment))),
+    estimatedInvestmentKrw: roundNumber(Math.max(0, expectedInvestment)),
     estimatedSurplusSalesKrw: roundNumber(firstYearRevenue - firstYearSaveCost),
     carbonReductionKg: roundDecimal(Math.max(0, readNumber(environmentalContribution.carbon_reduction)), 1),
     pineTreeEffect: roundDecimal(Math.max(0, readNumber(environmentalContribution.pine_tree_effect)), 1),

@@ -14,15 +14,26 @@ export type PvAnalysisIdentityDiagnostics = {
   requestSelectedBuildingId?: string | null;
   requestSessionId?: string | null;
   ignoredStaleLiveResponse?: boolean;
+  pvAnalysisSource?: string;
+  pvAnalysisStatus?: string;
+  usedVercelPvAnalysis?: boolean;
+  backendBaseUrl?: string;
 };
 
 export type PvAnalysisResponseIdentity = {
+  source?: PvAnalysisSource;
   selectedBuildingId?: string | null;
   selectedAnalysisSessionId?: string | null;
   roofSource?: string | null;
   selectedFeatureBuildingId?: string | null;
   diagnostics?: PvAnalysisIdentityDiagnostics;
 };
+
+export type PvAnalysisSource =
+  | 'gyeonggi-climate-platform'
+  | 'backend-pv-analysis'
+  | 'local-fallback-formula'
+  | 'local-scenario-fallback';
 
 export type ClimateRooftopAnalysisInput = PvAnalysisInput & {
   selectedBuildingId: string;
@@ -72,7 +83,7 @@ export type PvAnalysisResult = {
 
 export type PvAnalysisSuccessResponse = {
   ok: true;
-  source: 'gyeonggi-climate-platform';
+  source: PvAnalysisSource;
   input: PvAnalysisSafeInputSummary;
   result: PvAnalysisResult;
 } & PvAnalysisResponseIdentity;

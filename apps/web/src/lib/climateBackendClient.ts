@@ -16,6 +16,14 @@ function getClimateBackendBaseUrl() {
   return (import.meta.env.VITE_CLIMATE_BACKEND_BASE_URL ?? '').trim().replace(/\/+$/, '');
 }
 
+export function getConfiguredClimateBackendBaseUrl() {
+  return getClimateBackendBaseUrl();
+}
+
+export function isExternalClimateBackendConfigured() {
+  return import.meta.env.VITE_ENABLE_CLIMATE_LIVE_BACKEND === 'true' && getClimateBackendBaseUrl().length > 0;
+}
+
 function createFailureResponse(
   input: ClimateLiveAnalysisRequest,
   message: string,
@@ -209,6 +217,7 @@ export async function runExternalClimateBackendAnalysis(
     backendBaseUrl: baseUrl,
     requestUrl,
     backendResponseOk: false,
+    usedVercelPvAnalysis: false,
   };
   let backendHealthStatus: number | null = null;
 

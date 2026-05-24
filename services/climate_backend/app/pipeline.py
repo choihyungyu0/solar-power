@@ -131,6 +131,9 @@ def create_fallback_pv_output(panel_capacity_w: int, panel_count: int, shading_a
     return {
         "source": "local-fallback-formula",
         "annual_generation": round(annual_generation_kwh),
+        "annual_generation_kwh": round(annual_generation_kwh),
+        "annual_saving_krw": round(annual_saving_krw),
+        "expected_investment_krw": round(expected_investment_krw),
         "expected_revenue": {
             "install_kw": round(install_kw, 1),
             "first_year_revenue": round(annual_saving_krw),
@@ -157,6 +160,46 @@ def create_fallback_pv_output(panel_capacity_w: int, panel_count: int, shading_a
             for index, weight in enumerate(MONTHLY_GENERATION_WEIGHTS)
         ],
     }
+
+
+def _coerce_float(value: Any, fallback: float):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def normalize_backend_pv_output(raw: Any, panel_capacity_w: int, panel_count: int, shading_average: float):
+    fallback = create_fallback_pv_output(panel_capacity_w, panel_count, shading_average)
+
+    if not isinstance(raw, dict):
+        return fallback
+
+    data = raw.get("data") if isinstance(raw.get("data"), dict) else raw
+
+    if not isinstance(data, dict) or not isinstance(data.get("expected_revenue"), dict):
+        return fallback
+
+    expected_revenue = data["expected_revenue"]
+    annual_generation = data.get("annual_generation", data.get("annual_generation_kwh"))
+    first_year_save_cost = expected_revenue.get("first_year_save_cost", data.get("annual_saving_krw"))
+    expected_investment = expected_revenue.get("expected_investment", data.get("expected_investment_krw"))
+
+    data["source"] = "backend-pv-analysis"
+    data["annual_generation"] = round(_coerce_float(annual_generation, fallback["annual_generation"]))
+    data["annual_generation_kwh"] = data["annual_generation"]
+    data["annual_saving_krw"] = round(_coerce_float(first_year_save_cost, fallback["annual_saving_krw"]))
+    data["expected_investment_krw"] = round(_coerce_float(expected_investment, fallback["expected_investment_krw"]))
+    expected_revenue.setdefault("install_kw", fallback["expected_revenue"]["install_kw"])
+    expected_revenue.setdefault("first_year_revenue", data["annual_saving_krw"])
+    expected_revenue["first_year_save_cost"] = data["annual_saving_krw"]
+    expected_revenue["expected_investment"] = data["expected_investment_krw"]
+    data.setdefault("environmental_contribution", fallback["environmental_contribution"])
+    data.setdefault("annual_revenue", fallback["annual_revenue"])
+    data.setdefault("annual_saveCost", fallback["annual_saveCost"])
+    data.setdefault("monthly_generation", fallback["monthly_generation"])
+
+    return data
 
 
 async def run_hybrid_pipeline(request):
@@ -238,7 +281,12 @@ async def run_hybrid_pipeline(request):
 
         if request.mode == "full":
             try:
-                pv_output = await call_pv_analysis(pv_input, timeout_seconds=15)
+                pv_output = normalize_backend_pv_output(
+                    await call_pv_analysis(pv_input, timeout_seconds=15),
+                    request.panelCapacityW,
+                    panel_count,
+                    sun["score_mean"],
+                )
                 pv_status = "success"
             except Exception as error:
                 pv_output = create_fallback_pv_output(
@@ -299,6 +347,10 @@ async def run_hybrid_pipeline(request):
         }
 
         diagnostics["pvAnalysisStatus"] = pv_status
+        diagnostics["pvAnalysisSource"] = (
+            pv_output.get("source") if isinstance(pv_output, dict) else None
+        )
+        diagnostics["usedVercelPvAnalysis"] = False
         diagnostics["elapsedMs"] = _elapsed_ms(started)
 
         return {

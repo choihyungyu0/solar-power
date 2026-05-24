@@ -1086,9 +1086,15 @@
 }
 
 .pvAnalysisStatusText.is-fallback,
+.pvAnalysisStatusText.is-local-fallback,
 .pvAnalysisStatusText.is-error {
   background: #fff7ed;
   color: #9a3412;
+}
+
+.pvAnalysisStatusText.is-backend-result {
+  background: #ecfdf5;
+  color: #166534;
 }
 
 .pvAnalysisPanel {

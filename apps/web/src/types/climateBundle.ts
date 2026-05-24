@@ -39,7 +39,11 @@ export type ClimateBundlePvInput = {
 };
 
 export type ClimateBundlePvOutputRaw = {
+  source?: 'local-fallback-formula' | 'backend-pv-analysis' | string;
   annual_generation: number;
+  annual_generation_kwh?: number;
+  annual_saving_krw?: number;
+  expected_investment_krw?: number;
   expected_revenue: {
     install_kw: number;
     first_year_revenue: number;
@@ -153,7 +157,10 @@ export type ClimateLiveAnalysisDiagnostics = {
   timedOutStep?: string | null;
   selectBuldStatus?: ClimateLiveSelectBuldStatus;
   selectSunListStatus?: 'success' | 'timeout' | 'failed' | 'skipped' | 'fallback';
-  pvAnalysisStatus?: 'success' | 'timeout' | 'failed' | 'skipped' | 'fallback';
+  pvAnalysisStatus?: 'success' | 'timeout' | 'failed' | 'skipped' | 'fallback' | string;
+  pvAnalysisSource?: string;
+  usedVercelPvAnalysis?: boolean;
+  backendBaseUrl?: string;
   fallbackReason?: string;
   selectBuldRoofMatchesSelectedBuilding?: boolean | null;
   selectBuldCentroidInsideSelectedBuilding?: boolean;
