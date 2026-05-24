@@ -1,63 +1,113 @@
-### Health
-GET http://localhost:8000/api/health
-
-### Simulate
-POST http://localhost:8000/api/solar/simulate
+### Climate backend analysis test
+POST http://localhost:8001/api/climate-rooftop-analysis
 Content-Type: application/json
 
 {
-  "address": "경기도 성남시 분당구 샘플아파트",
-  "buildingType": "apartment",
-  "householdCount": 420,
-  "roofAreaM2": 2400,
-  "monthlyElectricBillKrw": 7200000,
-  "shadeScore": 82,
-  "roofUsableRatio": 0.42,
-  "averageDailySunHours": 3.7,
-  "electricityPriceKrwPerKwh": 165
-}
-
-### Policies
-GET http://localhost:8000/api/policies
-
-### Subscribe alert
-POST http://localhost:8000/api/alerts/subscribe
-Content-Type: application/json
-
-{
-  "name": "최현규",
-  "phoneOrEmail": "010-0000-0000",
-  "channel": "kakao",
-  "address": "경기도 성남시 분당구 샘플아파트",
-  "topic": "all"
-}
-### climate.gg live rooftop analysis test - known POC coordinate
-POST http://localhost:5173/api/climate-rooftop-analysis
-Content-Type: application/json
-
-{
-  "longitude": 127.02948714,
-  "latitude": 37.26726989,
+  "longitude": 127.070985,
+  "latitude": 37.193420,
+  "selectedBuildingId": "test-building",
   "panelCapacityW": 640,
   "panelAngle": 35,
   "panelType": 1,
   "cellsPerPanel": 2
 }
 
-### debug selectBuld known coordinate
-POST http://localhost:5173/api/debug-select-buld
+### Climate backend health
+GET http://localhost:8001/health
+
+### Climate backend analysis test minimal
+POST http://localhost:8001/api/climate-rooftop-analysis
 Content-Type: application/json
 
 {
-  "longitude": 127.02948714,
-  "latitude": 37.26726989
+  "longitude": 127.072254,
+  "latitude": 37.202501,
+  "selectedBuildingId": "manual-test",
+  "selectedBuildingFeature": {
+    "type": "Feature",
+    "properties": {
+      "bld_id": "manual-test"
+    },
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [[
+        [127.07220, 37.20245],
+        [127.07235, 37.20245],
+        [127.07235, 37.20260],
+        [127.07220, 37.20260],
+        [127.07220, 37.20245]
+      ]]
+    }
+  },
+  "panelCapacityW": 640,
+  "panelAngle": 35,
+  "panelType": 1,
+  "cellsPerPanel": 2,
+  "mode": "fast"
 }
 
-### debug selectBuld known coordinate
-POST http://localhost:5173/api/debug-select-buld
+### Climate backend geometry debug test
+POST http://localhost:8001/api/debug-geometry
 Content-Type: application/json
 
 {
-  "longitude": 127.02948714,
-  "latitude": 37.26726989
+  "selectedBuildingId": "manual-test",
+  "selectedBuildingFeature": {
+    "type": "Feature",
+    "properties": {
+      "bld_id": "manual-test"
+    },
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [[
+        [127.07220, 37.20245],
+        [127.07235, 37.20245],
+        [127.07235, 37.20260],
+        [127.07220, 37.20260],
+        [127.07220, 37.20245]
+      ]]
+    }
+  }
+}
+
+### FastAPI CORS debug
+GET http://localhost:8001/debug/cors
+
+### FastAPI echo test
+POST http://localhost:8001/api/debug-echo
+Content-Type: application/json
+
+{
+  "hello": "world"
+}
+
+### FastAPI analysis manual polygon test
+POST http://localhost:8001/api/climate-rooftop-analysis
+Content-Type: application/json
+
+{
+  "longitude": 127.072254,
+  "latitude": 37.202501,
+  "selectedBuildingId": "manual-test",
+  "selectedBuildingFeature": {
+    "type": "Feature",
+    "properties": {
+      "bld_id": "manual-test"
+    },
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [[
+        [127.07220, 37.20245],
+        [127.07235, 37.20245],
+        [127.07235, 37.20260],
+        [127.07220, 37.20260],
+        [127.07220, 37.20245]
+      ]]
+    }
+  },
+  "panelCapacityW": 640,
+  "panelAngle": 35,
+  "panelType": 1,
+  "cellsPerPanel": 2,
+  "mode": "fast"
 }

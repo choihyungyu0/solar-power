@@ -1189,6 +1189,17 @@ function RiskMapPage() {
   const liveSelectSunListTimeoutMs = liveClimateDiagnostics?.selectSunListTimeoutMs ?? null;
   const liveFrontendAbortMs = liveClimateDiagnostics?.frontendAbortMs ?? null;
   const liveFallbackReason = typeof liveClimateDiagnostics?.fallbackReason === 'string' ? liveClimateDiagnostics.fallbackReason : '-';
+  const liveBackendBaseUrl = typeof liveClimateDiagnostics?.backendBaseUrl === 'string' ? liveClimateDiagnostics.backendBaseUrl : '-';
+  const liveBackendHealthStatus = toFiniteNumber(liveClimateDiagnostics?.backendHealthStatus);
+  const liveBackendPostStatus = toFiniteNumber(liveClimateDiagnostics?.backendPostStatus);
+  const liveBackendFetchErrorName =
+    typeof liveClimateDiagnostics?.backendFetchErrorName === 'string' ? liveClimateDiagnostics.backendFetchErrorName : '-';
+  const liveBackendFetchErrorMessage =
+    typeof liveClimateDiagnostics?.backendFetchErrorMessage === 'string' ? liveClimateDiagnostics.backendFetchErrorMessage : '-';
+  const liveBackendResponseOk =
+    typeof liveClimateDiagnostics?.backendResponseOk === 'boolean' ? liveClimateDiagnostics.backendResponseOk : null;
+  const liveBackendResponseMessage =
+    typeof liveClimateDiagnostics?.backendResponseMessage === 'string' ? liveClimateDiagnostics.backendResponseMessage : '-';
   const liveIncludePvAnalysis = liveClimateDiagnostics?.includePvAnalysis ?? false;
   const liveInstallCapacityKw = liveClimateDiagnostics?.installCapacityKw ?? null;
   const liveApiSource = liveClimateStatus === 'success' ? 'climate.gg-live-hybrid' : '-';
@@ -2119,20 +2130,33 @@ function RiskMapPage() {
     }
 
     if (!response.ok) {
-      const fallbackMessage = response.fallbackRecommended
-        ? 'climate.gg 응답이 지연되어 기본 패널 배치를 표시합니다.'
-        : response.message;
+      const fallbackReason = response.diagnostics.fallbackReason;
+      const isNetworkFetchFailure =
+        fallbackReason === 'climate-backend-fetch-error' ||
+        fallbackReason === 'climate-backend-health-aborted' ||
+        fallbackReason === 'climate-backend-post-aborted' ||
+        fallbackReason === 'climate-backend-health-error' ||
+        fallbackReason === 'climate-backend-unavailable';
+      const fallbackMessage = response.disabled
+        ? '백엔드 서버 연결은 성공했습니다. climate.gg 파이프라인은 다음 단계에서 연결됩니다.'
+        : response.message || 'climate.gg 응답이 지연되어 기본 패널 배치를 표시합니다.';
 
       setLiveShadingStatus(
         response.analysisStage === 'shading-timeout' || response.diagnostics.timedOutStep ? 'timeout' : 'fallback',
       );
-      setLiveClimateStatus('idle');
-      setLiveClimateStep('기본 배치 표시 중');
+      setLiveClimateStatus(isNetworkFetchFailure ? 'error' : 'idle');
+      setLiveClimateStep(
+        response.disabled
+          ? '백엔드 서버 연결 성공 · climate.gg 파이프라인 대기'
+          : isNetworkFetchFailure
+            ? '백엔드 서버 요청 실패'
+            : '기본 배치 표시 중',
+      );
       setLiveClimateError(fallbackMessage);
       setLiveClimateDiagnostics(response.diagnostics);
       setPvAnalysisStatus('idle');
-      setPvAnalysisMessage('음영 API 지연 · 기본 배치 표시 중');
-      setAnalysisStatus('음영 API 지연 · 기본 배치 표시 중');
+      setPvAnalysisMessage(fallbackMessage);
+      setAnalysisStatus(fallbackMessage);
       setIsSolarPanelLayerVisible(true);
       return;
     }
@@ -2978,13 +3002,17 @@ function RiskMapPage() {
                     }
                   >
                     {liveShadingStatus === 'trying'
-                      ? '기본 분석 완료 · 음영 분석 시도 중'
-                      : liveShadingStatus === 'success'
-                        ? 'AI 음영 분석 완료'
-                        : liveShadingStatus === 'timeout' || liveShadingStatus === 'fallback'
-                          ? '기본 배치 표시 중'
-                        : '선택 건물 climate.gg 라이브 분석 실행'}
+                      ? '백엔드 분석 요청 중...'
+                      : '선택 건물 climate.gg 백엔드 분석 실행'}
                   </button>
+                )}
+                {isClimateLiveBackendEnabled && liveClimateError && (
+                  <p
+                    className={`climateLiveStatusText is-${liveClimateStatus === 'error' ? 'error' : liveShadingStatus}`}
+                    role={liveClimateStatus === 'error' ? 'alert' : 'status'}
+                  >
+                    {liveClimateError}
+                  </p>
                 )}
                 <p>
                   climate.gg 샘플 음영 분석은 현재 선택 건물과 별개의 1개 사전계산 샘플입니다.
@@ -3145,6 +3173,34 @@ function RiskMapPage() {
                 <div>
                   <span>fallbackReason</span>
                   <strong>{liveFallbackReason}</strong>
+                </div>
+                <div>
+                  <span>backendBaseUrl</span>
+                  <strong>{liveBackendBaseUrl}</strong>
+                </div>
+                <div>
+                  <span>backendHealthStatus</span>
+                  <strong>{formatDiagnosticCount(liveBackendHealthStatus)}</strong>
+                </div>
+                <div>
+                  <span>backendPostStatus</span>
+                  <strong>{formatDiagnosticCount(liveBackendPostStatus)}</strong>
+                </div>
+                <div>
+                  <span>backendFetchErrorName</span>
+                  <strong>{liveBackendFetchErrorName}</strong>
+                </div>
+                <div>
+                  <span>backendFetchErrorMessage</span>
+                  <strong>{liveBackendFetchErrorMessage}</strong>
+                </div>
+                <div>
+                  <span>backendResponseOk</span>
+                  <strong>{formatDiagnosticBoolean(liveBackendResponseOk)}</strong>
+                </div>
+                <div>
+                  <span>backendResponseMessage</span>
+                  <strong>{liveBackendResponseMessage}</strong>
                 </div>
                 <div>
                   <span>pvAnalysisSource</span>
