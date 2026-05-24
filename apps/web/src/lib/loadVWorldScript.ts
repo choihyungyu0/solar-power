@@ -30,6 +30,10 @@ const HWASEONG_INITIAL_LATITUDE = 37.203936096777305;
 const HWASEONG_INITIAL_HEIGHT = 720;
 const HWASEONG_INITIAL_PITCH = -82;
 const ENABLE_VWORLD_CAMERA_FALLBACK = import.meta.env.VITE_ENABLE_VWORLD_CAMERA_FALLBACK === 'true';
+const MAP_LEFT_CLICK_SELECT_ONLY = import.meta.env.VITE_MAP_LEFT_CLICK_SELECT_ONLY !== 'false';
+const MAP_CAMERA_CONTROL_MODE = MAP_LEFT_CLICK_SELECT_ONLY ? 'left-click-select-right-drag-map' : 'default';
+const LEFT_CLICK_SELECT_MAX_MOVE_PX = 5;
+const POINTER_DRAG_SUPPRESS_CLICK_MS = 700;
 
 let vworldScriptPromise: Promise<void> | null = null;
 const scriptLoadPromises = new Map<string, Promise<void>>();
@@ -45,6 +49,11 @@ export type VWorldSelection = {
   pickPositionSupported?: boolean;
   cameraHeightM?: number | null;
   pickAttempts?: string[];
+  cameraControlMode?: string;
+  leftDragNavigationDisabled?: boolean;
+  rightDragNavigationEnabled?: boolean;
+  lastPointerMovePx?: number;
+  lastSelectionIgnoredBecauseDrag?: boolean;
 };
 
 export type VWorldMapFocusResult = {
@@ -106,6 +115,14 @@ type ClickPickResult = {
   diagnostics: ClickPickDiagnostics;
 };
 
+type CameraControlDiagnostics = {
+  cameraControlMode: string;
+  leftDragNavigationDisabled: boolean;
+  rightDragNavigationEnabled: boolean;
+  lastPointerMovePx: number;
+  lastSelectionIgnoredBecauseDrag: boolean;
+};
+
 type ScreenPoint = {
   x: number;
   y: number;
@@ -138,6 +155,7 @@ type CesiumViewerLike = {
   entities?: CesiumEntityCollectionLike;
   scene?: {
     canvas?: CanvasLike;
+    screenSpaceCameraController?: Record<string, unknown>;
     camera?: {
       setView?: (options: unknown) => void;
       flyTo?: (options: unknown) => void;
@@ -253,9 +271,42 @@ function createVWorldDiagnostics(status: VWorldLoadStatus): VWorldLoadDiagnostic
 
 function updateVWorldDiagnostics(status: VWorldLoadStatus) {
   const diagnostics = createVWorldDiagnostics(status);
-  window.__solarMateMapDiagnostics = diagnostics;
+  window.__solarMateMapDiagnostics = {
+    ...(window.__solarMateMapDiagnostics ?? {}),
+    ...diagnostics,
+  };
 
   return diagnostics;
+}
+
+function readCameraControlDiagnostics(): CameraControlDiagnostics {
+  const diagnostics = window.__solarMateMapDiagnostics?.selectionInputControls ?? {};
+
+  return {
+    cameraControlMode:
+      typeof diagnostics.cameraControlMode === 'string' ? diagnostics.cameraControlMode : MAP_CAMERA_CONTROL_MODE,
+    leftDragNavigationDisabled: Boolean(diagnostics.leftDragNavigationDisabled),
+    rightDragNavigationEnabled: Boolean(diagnostics.rightDragNavigationEnabled),
+    lastPointerMovePx:
+      typeof diagnostics.lastPointerMovePx === 'number' && Number.isFinite(diagnostics.lastPointerMovePx)
+        ? diagnostics.lastPointerMovePx
+        : 0,
+    lastSelectionIgnoredBecauseDrag: Boolean(diagnostics.lastSelectionIgnoredBecauseDrag),
+  };
+}
+
+function updateCameraControlDiagnostics(diagnostics: Partial<CameraControlDiagnostics>) {
+  window.__solarMateMapDiagnostics = {
+    ...(window.__solarMateMapDiagnostics ?? {}),
+    selectionInputControls: {
+      ...readCameraControlDiagnostics(),
+      ...diagnostics,
+    },
+  };
+}
+
+function getCurrentSelectionControlDiagnostics(): CameraControlDiagnostics {
+  return readCameraControlDiagnostics();
 }
 
 function findExistingScript(id: string, src: string) {
@@ -713,6 +764,114 @@ function findCesiumViewer(map: VWorldMapInstance | null): CesiumViewerLike | nul
   })[0];
 }
 
+function assignCameraEventTypes(controller: Record<string, unknown>, key: string, value: unknown) {
+  try {
+    if (!(key in controller)) {
+      return false;
+    }
+
+    controller[key] = value;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function configureCesiumCameraControls(map: VWorldMapInstance | null) {
+  if (!MAP_LEFT_CLICK_SELECT_ONLY) {
+    updateCameraControlDiagnostics({
+      cameraControlMode: MAP_CAMERA_CONTROL_MODE,
+      leftDragNavigationDisabled: false,
+      rightDragNavigationEnabled: false,
+    });
+    return { configured: false, viewerFound: false };
+  }
+
+  const cesium = getCesiumSdk();
+  const viewer = findCesiumViewer(map);
+  let controller: Record<string, unknown> | undefined;
+
+  try {
+    controller = viewer?.scene?.screenSpaceCameraController;
+  } catch {
+    controller = undefined;
+  }
+
+  const cameraEventType = cesium?.CameraEventType;
+  const keyboardModifier = cesium?.KeyboardEventModifier;
+
+  if (!viewer || !controller || !cameraEventType) {
+    updateCameraControlDiagnostics({
+      cameraControlMode: MAP_CAMERA_CONTROL_MODE,
+      leftDragNavigationDisabled: false,
+      rightDragNavigationEnabled: false,
+    });
+    return { configured: false, viewerFound: Boolean(viewer) };
+  }
+
+  const rightDrag = cameraEventType.RIGHT_DRAG;
+  const middleDrag = cameraEventType.MIDDLE_DRAG;
+  const leftDrag = cameraEventType.LEFT_DRAG;
+  const wheel = cameraEventType.WHEEL;
+  const pinch = cameraEventType.PINCH;
+  const ctrl = keyboardModifier?.CTRL;
+  const zoomEventTypes = [wheel, pinch].filter((eventType) => eventType !== undefined);
+  const tiltEventTypes = [
+    middleDrag,
+    leftDrag !== undefined && ctrl !== undefined ? { eventType: leftDrag, modifier: ctrl } : null,
+    rightDrag !== undefined && ctrl !== undefined ? { eventType: rightDrag, modifier: ctrl } : null,
+  ].filter(Boolean);
+
+  const rotateSet = rightDrag !== undefined && assignCameraEventTypes(controller, 'rotateEventTypes', rightDrag);
+  const translateSet = rightDrag !== undefined && assignCameraEventTypes(controller, 'translateEventTypes', rightDrag);
+  const zoomSet = zoomEventTypes.length > 0 && assignCameraEventTypes(controller, 'zoomEventTypes', zoomEventTypes);
+  const tiltSet = tiltEventTypes.length > 0 && assignCameraEventTypes(controller, 'tiltEventTypes', tiltEventTypes);
+  const configured = Boolean(rotateSet || translateSet || zoomSet || tiltSet);
+
+  updateCameraControlDiagnostics({
+    cameraControlMode: MAP_CAMERA_CONTROL_MODE,
+    leftDragNavigationDisabled: Boolean(rotateSet),
+    rightDragNavigationEnabled: Boolean(rotateSet || translateSet),
+  });
+
+  return { configured, viewerFound: true };
+}
+
+function scheduleCesiumCameraControlConfiguration(map: VWorldMapInstance | null) {
+  let timeoutId: number | null = null;
+  let attempts = 0;
+  const maxAttempts = 12;
+
+  const run = () => {
+    attempts += 1;
+    const result = configureCesiumCameraControls(map);
+
+    if (result.configured || attempts >= maxAttempts || !MAP_LEFT_CLICK_SELECT_ONLY) {
+      if (
+        MAP_LEFT_CLICK_SELECT_ONLY &&
+        !result.viewerFound &&
+        attempts >= maxAttempts &&
+        import.meta.env.DEV
+      ) {
+        console.warn(
+          '[SolarMate] Cesium viewer was not available, so VWorld map mouse controls kept the existing behavior.',
+        );
+      }
+      return;
+    }
+
+    timeoutId = window.setTimeout(run, 250);
+  };
+
+  run();
+
+  return () => {
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId);
+    }
+  };
+}
+
 function getScreenPointFromMouseEvent(event: MouseEvent, viewer: CesiumViewerLike): ScreenPoint | null {
   const canvas = getViewerCanvas(viewer);
   const rect = canvas?.getBoundingClientRect?.();
@@ -935,6 +1094,7 @@ function extractSelectionFromVWorldClick(
     pickPositionSupported: pickResult.diagnostics.pickPositionSupported,
     cameraHeightM: pickResult.diagnostics.cameraHeightM,
     pickAttempts: pickResult.diagnostics.pickAttempts,
+    ...getCurrentSelectionControlDiagnostics(),
   };
 }
 
@@ -957,6 +1117,7 @@ export function createVWorldSelectionFromMouseEvent(
     pickPositionSupported: pickResult.diagnostics.pickPositionSupported,
     cameraHeightM: pickResult.diagnostics.cameraHeightM,
     pickAttempts: pickResult.diagnostics.pickAttempts,
+    ...getCurrentSelectionControlDiagnostics(),
   };
 }
 
@@ -1260,6 +1421,15 @@ export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWo
     | null = null;
   let suppressClickUntil = 0;
   let wasMultiTouchGesture = false;
+  let activeLeftPointer:
+    | {
+        pointerId: number;
+        startX: number;
+        startY: number;
+        startedAt: number;
+        maxMovePx: number;
+      }
+    | null = null;
   const activeTouchPointers = new Map<number, { startX: number; startY: number; maxMovePx: number }>();
 
   if (!ensureJQueryGlobal()) {
@@ -1299,10 +1469,14 @@ export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWo
     height: HWASEONG_INITIAL_HEIGHT,
     pitch: HWASEONG_INITIAL_PITCH,
   });
+  const cleanupCameraControlConfiguration = scheduleCesiumCameraControlConfiguration(map);
 
   function updateClickDiagnostics(selection: VWorldSelection, status: 'selected' | 'ignored') {
+    const selectionInputControls = getCurrentSelectionControlDiagnostics();
+
     window.__solarMateMapDiagnostics = {
       ...(window.__solarMateMapDiagnostics ?? {}),
+      selectionInputControls,
       lastClickSelection: {
         status,
         source: selection.source ?? '-',
@@ -1313,6 +1487,11 @@ export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWo
         cameraHeightM: selection.cameraHeightM ?? null,
         longitude: selection.longitude ?? null,
         latitude: selection.latitude ?? null,
+        cameraControlMode: selectionInputControls.cameraControlMode,
+        leftDragNavigationDisabled: selectionInputControls.leftDragNavigationDisabled,
+        rightDragNavigationEnabled: selectionInputControls.rightDragNavigationEnabled,
+        lastPointerMovePx: selectionInputControls.lastPointerMovePx,
+        lastSelectionIgnoredBecauseDrag: selectionInputControls.lastSelectionIgnoredBecauseDrag,
         selectedAt: new Date().toISOString(),
       },
     };
@@ -1355,6 +1534,10 @@ export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWo
       latitude: selection.latitude,
       selectedAt: Date.now(),
     };
+    updateCameraControlDiagnostics({
+      lastPointerMovePx: selection.lastPointerMovePx ?? readCameraControlDiagnostics().lastPointerMovePx,
+      lastSelectionIgnoredBecauseDrag: false,
+    });
     updateClickDiagnostics(selection, 'selected');
     onSelect?.(selection);
   }
@@ -1372,7 +1555,34 @@ export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWo
     suppressClickUntil = Date.now() + TOUCH_GESTURE_SUPPRESS_CLICK_MS;
   };
 
+  const markLeftDragForSuppression = (movePx: number) => {
+    if (!MAP_LEFT_CLICK_SELECT_ONLY) {
+      return;
+    }
+
+    suppressClickUntil = Date.now() + POINTER_DRAG_SUPPRESS_CLICK_MS;
+    updateCameraControlDiagnostics({
+      lastPointerMovePx: Math.round(movePx * 10) / 10,
+      lastSelectionIgnoredBecauseDrag: true,
+    });
+  };
+
   const pointerDownHandler = (event: PointerEvent) => {
+    if (MAP_LEFT_CLICK_SELECT_ONLY && event.pointerType === 'mouse' && event.button === 0) {
+      activeLeftPointer = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        startedAt: Date.now(),
+        maxMovePx: 0,
+      };
+      updateCameraControlDiagnostics({
+        lastPointerMovePx: 0,
+        lastSelectionIgnoredBecauseDrag: false,
+      });
+      return;
+    }
+
     if (event.pointerType !== 'touch' && event.pointerType !== 'pen') {
       return;
     }
@@ -1386,6 +1596,16 @@ export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWo
   };
 
   const pointerMoveHandler = (event: PointerEvent) => {
+    if (activeLeftPointer?.pointerId === event.pointerId) {
+      const movePx = Math.hypot(event.clientX - activeLeftPointer.startX, event.clientY - activeLeftPointer.startY);
+      activeLeftPointer.maxMovePx = Math.max(activeLeftPointer.maxMovePx, movePx);
+
+      if (activeLeftPointer.maxMovePx > LEFT_CLICK_SELECT_MAX_MOVE_PX) {
+        markLeftDragForSuppression(activeLeftPointer.maxMovePx);
+      }
+      return;
+    }
+
     const pointer = activeTouchPointers.get(event.pointerId);
 
     if (!pointer) {
@@ -1401,6 +1621,23 @@ export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWo
   };
 
   const pointerUpHandler = (event: PointerEvent) => {
+    if (activeLeftPointer?.pointerId === event.pointerId) {
+      const movePx = Math.hypot(event.clientX - activeLeftPointer.startX, event.clientY - activeLeftPointer.startY);
+      activeLeftPointer.maxMovePx = Math.max(activeLeftPointer.maxMovePx, movePx);
+
+      if (activeLeftPointer.maxMovePx > LEFT_CLICK_SELECT_MAX_MOVE_PX) {
+        markLeftDragForSuppression(activeLeftPointer.maxMovePx);
+      } else {
+        updateCameraControlDiagnostics({
+          lastPointerMovePx: Math.round(activeLeftPointer.maxMovePx * 10) / 10,
+          lastSelectionIgnoredBecauseDrag: false,
+        });
+      }
+
+      activeLeftPointer = null;
+      return;
+    }
+
     const pointer = activeTouchPointers.get(event.pointerId);
 
     if (pointer && (pointer.maxMovePx > TOUCH_TAP_MAX_MOVE_PX || wasMultiTouchGesture)) {
@@ -1420,21 +1657,30 @@ export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWo
     }
   };
 
+  const contextMenuHandler = (event: MouseEvent) => {
+    if (MAP_LEFT_CLICK_SELECT_ONLY) {
+      event.preventDefault();
+    }
+  };
+
   mapElement?.addEventListener('pointerdown', pointerDownHandler, { passive: true });
   mapElement?.addEventListener('pointermove', pointerMoveHandler, { passive: true });
   mapElement?.addEventListener('pointerup', pointerUpHandler, { passive: true });
   mapElement?.addEventListener('pointercancel', pointerUpHandler, { passive: true });
   mapElement?.addEventListener('touchmove', touchMoveHandler, { passive: true });
+  mapElement?.addEventListener('contextmenu', contextMenuHandler);
 
   return {
     map,
     dispose: () => {
+      cleanupCameraControlConfiguration();
       map?.onClick?.removeEventListener?.(clickHandler);
       mapElement?.removeEventListener('pointerdown', pointerDownHandler);
       mapElement?.removeEventListener('pointermove', pointerMoveHandler);
       mapElement?.removeEventListener('pointerup', pointerUpHandler);
       mapElement?.removeEventListener('pointercancel', pointerUpHandler);
       mapElement?.removeEventListener('touchmove', touchMoveHandler);
+      mapElement?.removeEventListener('contextmenu', contextMenuHandler);
       map?.destroy?.();
       document.getElementById(mapId)?.replaceChildren();
     },

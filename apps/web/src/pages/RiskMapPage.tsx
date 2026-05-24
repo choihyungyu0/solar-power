@@ -108,6 +108,9 @@ const NEARBY_BUILDING_OUTLINE_RADIUS_M = 130;
 const MAX_NEARBY_BUILDING_OUTLINES = 220;
 const TOUCH_TAP_MAX_MOVE_PX = 12;
 const TOUCH_GESTURE_SUPPRESS_CLICK_MS = 700;
+const MAP_LEFT_CLICK_SELECT_ONLY = import.meta.env.VITE_MAP_LEFT_CLICK_SELECT_ONLY !== 'false';
+const MAP_CAMERA_CONTROL_MODE = MAP_LEFT_CLICK_SELECT_ONLY ? 'left-click-select-right-drag-map' : 'default';
+const LEFT_CLICK_SELECT_MAX_MOVE_PX = 5;
 const ROOF_FOCUS_MIN_HEIGHT_M = 520;
 const ROOF_FOCUS_MAX_HEIGHT_M = 1800;
 const ROOF_FOCUS_SPAN_MULTIPLIER = 3.2;
@@ -208,6 +211,11 @@ type SelectionClickDiagnostics = {
   selectedLon: number | null;
   pickPositionSupported: boolean;
   cameraHeightM: number | null;
+  cameraControlMode: string;
+  leftDragNavigationDisabled: boolean;
+  rightDragNavigationEnabled: boolean;
+  lastPointerMovePx: number;
+  lastSelectionIgnoredBecauseDrag: boolean;
 };
 
 type SelectableBuildingFeature = {
@@ -860,7 +868,26 @@ function createInitialBuildingDataHealthDiagnostics(): BuildingDataHealthDiagnos
   };
 }
 
+function readMapInputDiagnostics() {
+  const diagnostics =
+    typeof window === 'undefined' ? null : window.__solarMateMapDiagnostics?.selectionInputControls ?? null;
+
+  return {
+    cameraControlMode:
+      typeof diagnostics?.cameraControlMode === 'string' ? diagnostics.cameraControlMode : MAP_CAMERA_CONTROL_MODE,
+    leftDragNavigationDisabled: Boolean(diagnostics?.leftDragNavigationDisabled),
+    rightDragNavigationEnabled: Boolean(diagnostics?.rightDragNavigationEnabled),
+    lastPointerMovePx:
+      typeof diagnostics?.lastPointerMovePx === 'number' && Number.isFinite(diagnostics.lastPointerMovePx)
+        ? diagnostics.lastPointerMovePx
+        : 0,
+    lastSelectionIgnoredBecauseDrag: Boolean(diagnostics?.lastSelectionIgnoredBecauseDrag),
+  };
+}
+
 function createSelectionClickDiagnostics(selection?: VWorldSelection, coordinate?: Coordinate | null): SelectionClickDiagnostics {
+  const inputDiagnostics = readMapInputDiagnostics();
+
   return {
     clickPickMethod: selection?.clickPickMethod ?? selection?.method ?? '-',
     clickPickStatus:
@@ -870,6 +897,14 @@ function createSelectionClickDiagnostics(selection?: VWorldSelection, coordinate
     selectedLon: coordinate?.[0] ?? null,
     pickPositionSupported: selection?.pickPositionSupported ?? false,
     cameraHeightM: selection?.cameraHeightM ?? null,
+    cameraControlMode: selection?.cameraControlMode ?? inputDiagnostics.cameraControlMode,
+    leftDragNavigationDisabled:
+      selection?.leftDragNavigationDisabled ?? inputDiagnostics.leftDragNavigationDisabled,
+    rightDragNavigationEnabled:
+      selection?.rightDragNavigationEnabled ?? inputDiagnostics.rightDragNavigationEnabled,
+    lastPointerMovePx: selection?.lastPointerMovePx ?? inputDiagnostics.lastPointerMovePx,
+    lastSelectionIgnoredBecauseDrag:
+      selection?.lastSelectionIgnoredBecauseDrag ?? inputDiagnostics.lastSelectionIgnoredBecauseDrag,
   };
 }
 
@@ -986,6 +1021,15 @@ function RiskMapPage() {
     suppressClickUntil: 0,
     wasMultiTouchGesture: false,
     activePointers: new Map<number, { startX: number; startY: number; maxMovePx: number }>(),
+    activeLeftPointer: null as {
+      pointerId: number;
+      startX: number;
+      startY: number;
+      startedAt: number;
+      maxMovePx: number;
+    } | null,
+    lastPointerMovePx: 0,
+    lastSelectionIgnoredBecauseDrag: false,
   });
   const [selectedCoordinate, setSelectedCoordinate] = useState<Coordinate | null>(null);
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('screen-fallback');
@@ -2294,9 +2338,72 @@ function RiskMapPage() {
     selectedCoordinate,
   ]);
 
+  const updateSelectionInputDiagnostics = useCallback(
+    (
+      diagnostics: Partial<
+        Pick<SelectionClickDiagnostics, 'lastPointerMovePx' | 'lastSelectionIgnoredBecauseDrag'>
+      >,
+    ) => {
+      const currentInputDiagnostics = readMapInputDiagnostics();
+      const nextInputDiagnostics = {
+        ...currentInputDiagnostics,
+        ...diagnostics,
+        cameraControlMode: MAP_CAMERA_CONTROL_MODE,
+      };
+
+      window.__solarMateMapDiagnostics = {
+        ...(window.__solarMateMapDiagnostics ?? {}),
+        selectionInputControls: nextInputDiagnostics,
+      };
+
+      setSelectionClickDiagnostics((current) => ({
+        ...current,
+        ...nextInputDiagnostics,
+      }));
+    },
+    [],
+  );
+
+  const suppressMapLeftDragClick = useCallback(
+    (movePx: number) => {
+      if (!MAP_LEFT_CLICK_SELECT_ONLY) {
+        return;
+      }
+
+      const roundedMovePx = Math.round(movePx * 10) / 10;
+
+      mapTouchGestureRef.current.suppressClickUntil = Date.now() + TOUCH_GESTURE_SUPPRESS_CLICK_MS;
+      mapTouchGestureRef.current.lastPointerMovePx = roundedMovePx;
+      mapTouchGestureRef.current.lastSelectionIgnoredBecauseDrag = true;
+      updateSelectionInputDiagnostics({
+        lastPointerMovePx: roundedMovePx,
+        lastSelectionIgnoredBecauseDrag: true,
+      });
+    },
+    [updateSelectionInputDiagnostics],
+  );
+
+  const isMapShellClickSuppressed = useCallback(() => {
+    const gesture = mapTouchGestureRef.current;
+    const isSuppressed = Date.now() < gesture.suppressClickUntil;
+
+    if (isSuppressed && gesture.lastSelectionIgnoredBecauseDrag) {
+      updateSelectionInputDiagnostics({
+        lastPointerMovePx: gesture.lastPointerMovePx,
+        lastSelectionIgnoredBecauseDrag: true,
+      });
+    }
+
+    return isSuppressed;
+  }, [updateSelectionInputDiagnostics]);
+
   const handleMapShellClickCapture = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
-      if (Date.now() < mapTouchGestureRef.current.suppressClickUntil) {
+      if (isMapShellClickSuppressed()) {
+        return;
+      }
+
+      if (MAP_LEFT_CLICK_SELECT_ONLY && event.button !== 0) {
         return;
       }
 
@@ -2331,7 +2438,7 @@ function RiskMapPage() {
         void handleMapSelection(selection);
       }, 120);
     },
-    [handleMapSelection],
+    [handleMapSelection, isMapShellClickSuppressed],
   );
 
   const suppressMapTouchClick = useCallback(() => {
@@ -2339,6 +2446,23 @@ function RiskMapPage() {
   }, []);
 
   const handleMapPointerDownCapture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (MAP_LEFT_CLICK_SELECT_ONLY && event.pointerType === 'mouse' && event.button === 0) {
+      mapTouchGestureRef.current.activeLeftPointer = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        startedAt: Date.now(),
+        maxMovePx: 0,
+      };
+      mapTouchGestureRef.current.lastPointerMovePx = 0;
+      mapTouchGestureRef.current.lastSelectionIgnoredBecauseDrag = false;
+      updateSelectionInputDiagnostics({
+        lastPointerMovePx: 0,
+        lastSelectionIgnoredBecauseDrag: false,
+      });
+      return;
+    }
+
     if (event.pointerType !== 'touch' && event.pointerType !== 'pen') {
       return;
     }
@@ -2350,11 +2474,25 @@ function RiskMapPage() {
       maxMovePx: 0,
     });
     gesture.wasMultiTouchGesture = gesture.wasMultiTouchGesture || gesture.activePointers.size > 1;
-  }, []);
+  }, [updateSelectionInputDiagnostics]);
 
   const handleMapPointerMoveCapture = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       const gesture = mapTouchGestureRef.current;
+      const leftPointer = gesture.activeLeftPointer;
+
+      if (leftPointer?.pointerId === event.pointerId) {
+        const movePx = Math.hypot(event.clientX - leftPointer.startX, event.clientY - leftPointer.startY);
+        leftPointer.maxMovePx = Math.max(leftPointer.maxMovePx, movePx);
+        gesture.lastPointerMovePx = Math.round(leftPointer.maxMovePx * 10) / 10;
+
+        if (leftPointer.maxMovePx > LEFT_CLICK_SELECT_MAX_MOVE_PX) {
+          suppressMapLeftDragClick(leftPointer.maxMovePx);
+        }
+
+        return;
+      }
+
       const pointer = gesture.activePointers.get(event.pointerId);
 
       if (!pointer) {
@@ -2368,12 +2506,33 @@ function RiskMapPage() {
         suppressMapTouchClick();
       }
     },
-    [suppressMapTouchClick],
+    [suppressMapLeftDragClick, suppressMapTouchClick],
   );
 
   const handleMapPointerUpCapture = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       const gesture = mapTouchGestureRef.current;
+      const leftPointer = gesture.activeLeftPointer;
+
+      if (leftPointer?.pointerId === event.pointerId) {
+        const movePx = Math.hypot(event.clientX - leftPointer.startX, event.clientY - leftPointer.startY);
+        leftPointer.maxMovePx = Math.max(leftPointer.maxMovePx, movePx);
+        gesture.lastPointerMovePx = Math.round(leftPointer.maxMovePx * 10) / 10;
+
+        if (leftPointer.maxMovePx > LEFT_CLICK_SELECT_MAX_MOVE_PX) {
+          suppressMapLeftDragClick(leftPointer.maxMovePx);
+        } else {
+          gesture.lastSelectionIgnoredBecauseDrag = false;
+          updateSelectionInputDiagnostics({
+            lastPointerMovePx: gesture.lastPointerMovePx,
+            lastSelectionIgnoredBecauseDrag: false,
+          });
+        }
+
+        gesture.activeLeftPointer = null;
+        return;
+      }
+
       const pointer = gesture.activePointers.get(event.pointerId);
 
       if (pointer && (pointer.maxMovePx > TOUCH_TAP_MAX_MOVE_PX || gesture.wasMultiTouchGesture)) {
@@ -2386,7 +2545,7 @@ function RiskMapPage() {
         gesture.wasMultiTouchGesture = false;
       }
     },
-    [suppressMapTouchClick],
+    [suppressMapLeftDragClick, suppressMapTouchClick, updateSelectionInputDiagnostics],
   );
 
   useEffect(() => {
@@ -2721,8 +2880,19 @@ function RiskMapPage() {
             onPointerCancelCapture={handleMapPointerUpCapture}
             onClickCapture={handleMapShellClickCapture}
             onClick={(event) => {
+              if (isMapShellClickSuppressed()) {
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+              }
+
               if (event.target === event.currentTarget) {
                 void handleMapSelection();
+              }
+            }}
+            onContextMenu={(event) => {
+              if (MAP_LEFT_CLICK_SELECT_ONLY) {
+                event.preventDefault();
               }
             }}
             role="presentation"
@@ -2757,6 +2927,12 @@ function RiskMapPage() {
                   <option value="critical">위험 높음</option>
                 </select>
               </label>
+
+              {MAP_LEFT_CLICK_SELECT_ONLY && (
+                <div className="mapMouseHint" role="note">
+                  왼쪽 클릭: 건물 선택 · 오른쪽 드래그: 지도 이동 · 휠: 확대/축소
+                </div>
+              )}
             </div>
 
             <div id={MAP_CONTAINER_ID} className="vworldMapCanvas" aria-label="브이월드 3D 지도" />
@@ -2844,6 +3020,26 @@ function RiskMapPage() {
                   <div>
                     <dt>clickPickStatus</dt>
                     <dd>{selectionClickDiagnostics.clickPickStatus}</dd>
+                  </div>
+                  <div>
+                    <dt>cameraControlMode</dt>
+                    <dd>{selectionClickDiagnostics.cameraControlMode}</dd>
+                  </div>
+                  <div>
+                    <dt>leftDragDisabled</dt>
+                    <dd>{selectionClickDiagnostics.leftDragNavigationDisabled ? 'true' : 'false'}</dd>
+                  </div>
+                  <div>
+                    <dt>rightDragEnabled</dt>
+                    <dd>{selectionClickDiagnostics.rightDragNavigationEnabled ? 'true' : 'false'}</dd>
+                  </div>
+                  <div>
+                    <dt>lastPointerMovePx</dt>
+                    <dd>{selectionClickDiagnostics.lastPointerMovePx.toFixed(1)}</dd>
+                  </div>
+                  <div>
+                    <dt>ignoredByDrag</dt>
+                    <dd>{selectionClickDiagnostics.lastSelectionIgnoredBecauseDrag ? 'true' : 'false'}</dd>
                   </div>
                   <div>
                     <dt>selectedLat/Lon</dt>
@@ -3604,6 +3800,26 @@ function RiskMapPage() {
                     <div>
                       <dt>click pick status</dt>
                       <dd>{selectionClickDiagnostics.clickPickStatus}</dd>
+                    </div>
+                    <div>
+                      <dt>cameraControlMode</dt>
+                      <dd>{selectionClickDiagnostics.cameraControlMode}</dd>
+                    </div>
+                    <div>
+                      <dt>leftDragNavigationDisabled</dt>
+                      <dd>{selectionClickDiagnostics.leftDragNavigationDisabled ? 'true' : 'false'}</dd>
+                    </div>
+                    <div>
+                      <dt>rightDragNavigationEnabled</dt>
+                      <dd>{selectionClickDiagnostics.rightDragNavigationEnabled ? 'true' : 'false'}</dd>
+                    </div>
+                    <div>
+                      <dt>lastPointerMovePx</dt>
+                      <dd>{selectionClickDiagnostics.lastPointerMovePx.toFixed(1)}</dd>
+                    </div>
+                    <div>
+                      <dt>lastSelectionIgnoredBecauseDrag</dt>
+                      <dd>{selectionClickDiagnostics.lastSelectionIgnoredBecauseDrag ? 'true' : 'false'}</dd>
                     </div>
                     <div>
                       <dt>pickPositionSupported</dt>
