@@ -3879,6 +3879,37 @@ img {
   }
 }
 
+.serviceIntro.reviewOnlyIntro {
+  min-height: auto;
+  padding: 34px clamp(48px, 4.4vw, 84px) 58px;
+  background: #f6f9fc;
+}
+
+.reviewOnlyIntro .introReviewHeader {
+  margin: 0 0 14px;
+}
+
+@media (min-width: 1600px) and (max-height: 1100px) {
+  .serviceIntro.reviewOnlyIntro {
+    min-height: auto;
+    padding-block: 28px 40px;
+  }
+
+  .reviewOnlyIntro .introReviewCard {
+    min-height: 162px;
+    grid-template-columns: 1fr 160px;
+    gap: 16px;
+    padding: 16px;
+  }
+}
+
+@media (max-width: 820px) {
+  .serviceIntro.reviewOnlyIntro {
+    margin-top: 0;
+    padding: 30px 18px 42px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .solarFeedCards {
     animation: none;

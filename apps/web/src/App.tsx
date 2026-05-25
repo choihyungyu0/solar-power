@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import SafeLocalImage from './components/SafeLocalImage';
-import SolarFeedSection from './components/SolarFeedSection';
 import ServiceIntroSection from './components/ServiceIntroSection';
 import ConsultationCompletePage from './pages/ConsultationCompletePage';
 import ConsultationPage from './pages/ConsultationPage';
@@ -32,27 +31,6 @@ const heroMetrics = [
     value: '4.6년',
     image: '/assets/landing/payback-clock-icon.png',
     alt: '회수기간 시계 아이콘',
-  },
-];
-
-const featureCards = [
-  {
-    title: '전기세 위험 3D 지도',
-    description: '브이월드 3D 지도에서 건물을 선택하고 전기세 상승 위험과 태양광 대응 여지를 먼저 확인하세요.',
-    image: '/assets/landing/apartment-isometric.png',
-    alt: '태양광 패널이 설치된 아파트 아이콘',
-  },
-  {
-    title: '보조금·정책자금 안내',
-    description: '최신 보조금과 정책자금 정보를 한눈에 확인하고, 신청 조건과 절차까지 안내해 드립니다.',
-    image: '/assets/landing/policy-document-coin.png',
-    alt: '정책 문서와 동전 아이콘',
-  },
-  {
-    title: '알림 센터',
-    description: '정책 변경, 공고 오픈, 마감 임박까지 중요한 정보를 놓치지 않도록 알림으로 알려드립니다.',
-    image: '/assets/landing/notification-bell.png',
-    alt: '알림 종 아이콘',
   },
 ];
 
@@ -200,37 +178,7 @@ function App() {
           </div>
         </section>
 
-        <section className="featureCards" aria-label="주요 서비스">
-          {featureCards.map((card) => (
-            <article className="featureCard" key={card.title}>
-              <SafeLocalImage src={card.image} alt={card.alt} className="featureImage" />
-              <div>
-                <h2>{card.title}</h2>
-                <p>{card.description}</p>
-              </div>
-              <span className="roundLink" aria-hidden="true">
-                ›
-              </span>
-            </article>
-          ))}
-        </section>
-
         <ServiceIntroSection />
-
-        <SolarFeedSection />
-
-        <section className="ctaPanel" id="contact">
-          <div>
-            <h2>신청 지원과 알림은 데모 단계로 준비 중입니다</h2>
-            <p>
-              실제 KakaoTalk, SMS 발송이나 실시간 보조금 데이터 연동은 아직 구현하지 않았습니다.
-              현재 화면은 MVP 서비스 흐름을 보여주는 프론트엔드 예시입니다.
-            </p>
-          </div>
-          <a className="primaryButton" href="/simulation/setup">
-            우리 아파트 태양광 설치하기
-          </a>
-        </section>
       </div>
     </main>
   );
