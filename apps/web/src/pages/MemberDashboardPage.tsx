@@ -325,27 +325,176 @@ function GenerationDashboard({
   );
 }
 
+function RealtimeGenerationPanel({
+  dashboardData,
+  scenarioCards,
+}: {
+  dashboardData: NormalizedDashboardData;
+  scenarioCards: ScenarioDayCard[];
+}) {
+  const representativeCard = scenarioCards[1] ?? scenarioCards[0];
+  const currentEstimatedCharge = representativeCard ? representativeCard.dailyBillKrw * 30 : 0;
+  const generationOffsetKwh = representativeCard ? representativeCard.dailyGenerationKwh * 30 : dashboardData.solar.annualGenerationKwh / 12;
+  const generationOffsetKrw = generationOffsetKwh * dashboardData.solar.electricityPriceKrwPerKwh;
+
+  return (
+    <section className="member-dashboard-generation-panel" aria-label="실시간 요금 데모 대시보드">
+      <div className="member-dashboard-realtime-summary">
+        <article>
+          <span>현재 예상 요금</span>
+          <strong>{formatKrw(currentEstimatedCharge)}</strong>
+          <p>선택 건물 분석값 기반 월 환산 시나리오</p>
+        </article>
+        <article>
+          <span>발전 상쇄량</span>
+          <strong>{formatKwh(generationOffsetKwh)}</strong>
+          <p>예상 태양광 발전으로 상쇄 가능한 월 사용량</p>
+        </article>
+        <article>
+          <span>예상 절감 효과</span>
+          <strong>{formatKrw(generationOffsetKrw)}</strong>
+          <p>실제 계량기 데이터가 아닌 데모 대시보드 데이터</p>
+        </article>
+      </div>
+
+      <div className="member-dashboard-meter-grid">
+        {scenarioCards.map((card) => (
+          <ScenarioMeterCard key={`${card.id}-${card.month}`} card={card} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function HourlyUsagePanel({ scenarioCards }: { scenarioCards: ScenarioDayCard[] }) {
+  const representativeCard = scenarioCards[1] ?? scenarioCards[0];
+  const usageTotal = representativeCard?.segments.reduce((sum, segment) => sum + segment.usagePercent, 0) ?? 1;
+  const generationTotal = representativeCard?.segments.reduce((sum, segment) => sum + segment.generationPercent, 0) ?? 1;
+  const rows =
+    representativeCard?.segments.map((segment) => ({
+      hour: segment.hour,
+      usageKwh: (representativeCard.dailyUsageKwh * segment.usagePercent) / usageTotal,
+      generationKwh:
+        generationTotal > 0 ? (representativeCard.dailyGenerationKwh * segment.generationPercent) / generationTotal : 0,
+      usagePercent: segment.usagePercent,
+      generationPercent: segment.generationPercent,
+    })) ?? [];
+
+  return (
+    <section className="member-dashboard-generation-panel" aria-label="시간별 사용량">
+      <div className="member-dashboard-panel-heading">
+        <h2>시간별 사용량</h2>
+        <p>24시간 예상 사용량과 태양광 발전량을 단순 시나리오로 비교합니다.</p>
+      </div>
+
+      <div className="member-dashboard-hourly-list">
+        {rows.map((row) => (
+          <div className="member-dashboard-hourly-row" key={row.hour}>
+            <strong>{String(row.hour).padStart(2, '0')}시</strong>
+            <div className="member-dashboard-hourly-bars">
+              <span className="is-usage" style={{ width: `${Math.max(8, row.usagePercent)}%` }}>
+                {formatKwh(row.usageKwh)}
+              </span>
+              <span className="is-generation" style={{ width: `${Math.max(0, row.generationPercent)}%` }}>
+                {row.generationKwh > 0 ? formatKwh(row.generationKwh) : ''}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function MonthlyUsagePanel({ dashboardData }: { dashboardData: NormalizedDashboardData }) {
+  const maxGeneration = Math.max(...dashboardData.solar.monthlyGenerationKwh, 1);
+
+  return (
+    <section className="member-dashboard-generation-panel" aria-label="월별 사용량">
+      <div className="member-dashboard-panel-heading">
+        <h2>월별 사용량</h2>
+        <p>선택 건물 분석값 또는 데모 산식 기반 월별 발전량/사용량 예상입니다.</p>
+      </div>
+
+      <div className="member-dashboard-monthly-list">
+        {dashboardData.solar.monthlyGenerationKwh.map((generationKwh, index) => {
+          const month = index + 1;
+          const usageKwh = getMonthlyUsageEstimate(dashboardData, index, generationKwh);
+          const maxValue = Math.max(maxGeneration, usageKwh, 1);
+
+          return (
+            <div className="member-dashboard-monthly-row" key={month}>
+              <strong>{month}월</strong>
+              <div className="member-dashboard-monthly-bars">
+                <span className="is-generation" style={{ width: `${Math.max(8, (generationKwh / maxValue) * 100)}%` }}>
+                  발전 {formatKwh(generationKwh)}
+                </span>
+                <span className="is-usage" style={{ width: `${Math.max(8, (usageKwh / maxValue) * 100)}%` }}>
+                  사용 {formatKwh(usageKwh)}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function PatternAnalysisPanel({ dashboardData }: { dashboardData: NormalizedDashboardData }) {
+  const annualGeneration = dashboardData.solar.annualGenerationKwh;
+  const monthlyAverage = annualGeneration / 12;
+  const bestMonthIndex = dashboardData.solar.monthlyGenerationKwh.indexOf(Math.max(...dashboardData.solar.monthlyGenerationKwh));
+
+  return (
+    <section className="member-dashboard-generation-panel" aria-label="패턴분석">
+      <div className="member-dashboard-panel-heading">
+        <h2>패턴분석</h2>
+        <p>AI처럼 보이는 실시간 분석이 아니라, 저장된 분석값과 고정 규칙으로 만든 설명 가능한 데모 요약입니다.</p>
+      </div>
+
+      <div className="member-dashboard-pattern-grid">
+        <article>
+          <strong>오전/오후 사용량이 높습니다.</strong>
+          <p>공동주택 공용부 사용 패턴을 가정한 데모 시나리오에서 출근 전후와 저녁 시간대 사용량이 높게 표시됩니다.</p>
+        </article>
+        <article>
+          <strong>태양광 발전 시간대와 자가소비 시간이 일부 일치합니다.</strong>
+          <p>10시부터 15시까지 발전량이 높아 공용부 부하 일부를 상쇄할 가능성이 있습니다.</p>
+        </article>
+        <article>
+          <strong>{bestMonthIndex + 1}월 발전량이 가장 높게 추정됩니다.</strong>
+          <p>월평균 예상 발전량은 {formatKwh(monthlyAverage)}이며, 계절과 음영 조건에 따라 실제 값은 달라질 수 있습니다.</p>
+        </article>
+      </div>
+    </section>
+  );
+}
+
 function MemberAsPanel() {
   const [openFaqIndex, setOpenFaqIndex] = useState(0);
+  const [isAsFormOpen, setIsAsFormOpen] = useState(false);
+  const [asSymptom, setAsSymptom] = useState('');
 
   const handleToggleFaq = (index: number) => {
     setOpenFaqIndex((prevIndex) => (prevIndex === index ? -1 : index));
   };
 
-  const handleSubmitAsRequest = () => {
+  const handleSaveAsRequest = () => {
     const selectedIssue = faqItems[openFaqIndex]?.question ?? '선택 안 함';
     const draft = {
       type: 'A/S',
       selectedIssue,
+      symptom: asSymptom.trim(),
       createdAt: new Date().toISOString(),
     };
 
     sessionStorage.setItem('solarmate:asRequestDraft', JSON.stringify(draft));
-    window.alert('A/S 접수 화면은 추후 연동 예정입니다.');
+    window.alert('A/S 접수가 저장되었습니다. 실제 접수 연동은 추후 구현 예정입니다.');
   };
 
   const handleChatbotClick = () => {
-    window.alert('챗봇 상담은 추후 연동 예정입니다.');
+    window.alert('챗봇 상담은 추후 구현 예정입니다.');
   };
 
   return (
@@ -391,7 +540,7 @@ function MemberAsPanel() {
       </section>
 
       <section className="member-dashboard-as-action-row" aria-label="A/S 상담 액션">
-        <button className="member-dashboard-as-primary-action" type="button" onClick={handleSubmitAsRequest}>
+        <button className="member-dashboard-as-primary-action" type="button" onClick={() => setIsAsFormOpen((isOpen) => !isOpen)}>
           <LuCirclePlus aria-hidden="true" />
           A/S 접수하기
         </button>
@@ -401,6 +550,29 @@ function MemberAsPanel() {
           챗봇
         </button>
       </section>
+
+      {isAsFormOpen && (
+        <section className="member-dashboard-as-request-form" aria-label="A/S 접수 입력">
+          <div>
+            <strong>회원정보 확인</strong>
+            <p>데모 회원 정보와 선택 건물 기준으로 임시 접수합니다.</p>
+          </div>
+
+          <label htmlFor="member-dashboard-as-symptom">
+            증상 입력
+            <textarea
+              id="member-dashboard-as-symptom"
+              value={asSymptom}
+              placeholder="예: 최근 발전량이 평소보다 줄었어요."
+              onChange={(event) => setAsSymptom(event.target.value)}
+            />
+          </label>
+
+          <button type="button" onClick={handleSaveAsRequest}>
+            접수하기
+          </button>
+        </section>
+      )}
     </section>
   );
 }
@@ -538,46 +710,6 @@ function ProfileRow({
         )}
       </div>
     </div>
-  );
-}
-
-function MemberDashboardHeader() {
-  const isLoggedIn = readDemoAuthState()?.isLoggedIn === true;
-
-  return (
-    <header className="member-dashboard-header">
-      <a className="member-dashboard-logo" href="/" aria-label="솔라메이트 홈">
-        <span className="member-dashboard-logo-mark" aria-hidden="true">
-          <span className="member-dashboard-logo-sun" />
-          <span className="member-dashboard-logo-panel">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <span key={index} />
-            ))}
-          </span>
-        </span>
-
-        <span className="member-dashboard-logo-text">
-          <strong>솔라메이트</strong>
-          <small>SolarMate</small>
-        </span>
-      </a>
-
-      <nav className="member-dashboard-nav" aria-label="주요 메뉴">
-        <a href="/solar-adoption">태양광 도입</a>
-        <a href="/#service-intro">서비스 소개</a>
-        <a href="/notice">공지사항</a>
-        <a href="/consultation">상담하기</a>
-      </nav>
-
-      <button
-        className="member-dashboard-login-button"
-        type="button"
-        onClick={isLoggedIn ? handleMemberLogout : () => window.location.assign('/login')}
-      >
-        <LuUserRound aria-hidden="true" />
-        {isLoggedIn ? '로그아웃' : '로그인'}
-      </button>
-    </header>
   );
 }
 
@@ -813,18 +945,26 @@ function getDashboardSourceLabel(data: NormalizedDashboardData) {
   return data.isFallbackDemo ? '데모 대시보드 데이터' : '선택 건물 추정 시나리오';
 }
 
-function getDashboardTabFromUrl(): DashboardTab | null {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  const tab = new URLSearchParams(window.location.search).get('tab');
-
+function parseDashboardTab(tab: string | null): DashboardTab | null {
   if (tab === 'as' || tab === 'profile' || tab === 'generation') {
     return tab;
   }
 
   return null;
+}
+
+function getMonthlyUsageEstimate(data: NormalizedDashboardData, monthIndex: number, generationKwh: number) {
+  const monthlyElectricityKwh = data.solar.monthlyElectricityKwh;
+
+  if (Array.isArray(monthlyElectricityKwh)) {
+    return Math.max(0, monthlyElectricityKwh[monthIndex] ?? generationKwh * 1.35);
+  }
+
+  if (typeof monthlyElectricityKwh === 'number' && Number.isFinite(monthlyElectricityKwh)) {
+    return Math.max(0, monthlyElectricityKwh);
+  }
+
+  return Math.max(0, generationKwh * 1.35 + 420);
 }
 
 function hasSelectedSimulationResultInSession() {
@@ -874,11 +1014,6 @@ function getInitialProfileValues(): ProfileValues {
 
 function showDemoChangeAlert() {
   window.alert('데모 화면에서는 실제 정보 변경이 저장되지 않습니다.');
-}
-
-function handleMemberLogout() {
-  clearDemoAuthState();
-  window.location.assign('/login');
 }
 
 function polarToCartesian(cx: number, cy: number, r: number, angle: number) {
