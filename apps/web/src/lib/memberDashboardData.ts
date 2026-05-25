@@ -75,6 +75,7 @@ type DashboardStoragePayload = {
 };
 
 const CONSULTATION_INQUIRY_STORAGE_KEY = 'solarmate:consultationInquiry';
+const SERVICE_CONSULTATION_INQUIRY_STORAGE_KEY = 'solarmate:serviceConsultationInquiry';
 const DEFAULT_ELECTRICITY_PRICE_KRW_PER_KWH = 165;
 const SCENARIO_YEAR = 2026;
 
@@ -154,6 +155,16 @@ export function loadSelectedSimulationResult(): DashboardStoragePayload | null {
         addressOnly: false,
       };
     }
+  }
+
+  const serviceConsultationInquiry = readSessionJson(SERVICE_CONSULTATION_INQUIRY_STORAGE_KEY);
+
+  if (serviceConsultationInquiry) {
+    return {
+      raw: serviceConsultationInquiry,
+      storageKey: SERVICE_CONSULTATION_INQUIRY_STORAGE_KEY,
+      addressOnly: true,
+    };
   }
 
   const consultationInquiry = readSessionJson(CONSULTATION_INQUIRY_STORAGE_KEY);

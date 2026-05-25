@@ -3,14 +3,18 @@ import { readSimulationResultFromSession } from '../lib/simulationResultStorage'
 import './ConsultationCompletePage.css';
 
 const CONSULTATION_INQUIRY_STORAGE_KEY = 'solarmate:consultationInquiry';
+const SERVICE_CONSULTATION_INQUIRY_STORAGE_KEY = 'solarmate:serviceConsultationInquiry';
 
 type StoredConsultationInquiry = {
-  name: string;
-  phone: string;
-  email: string;
+  name?: string;
+  contact?: string;
+  consultationType?: string;
+  content?: string;
+  phone?: string;
+  email?: string;
   roadAddress: string;
   jibunAddress: string;
-  monthlyPaymentKrw: number;
+  monthlyPaymentKrw?: number;
   createdAt: string;
 };
 
@@ -26,7 +30,9 @@ const fallbackAddress: CompletionAddress = {
 
 function readConsultationInquiryFromSession() {
   try {
-    const rawValue = window.sessionStorage.getItem(CONSULTATION_INQUIRY_STORAGE_KEY);
+    const rawValue =
+      window.sessionStorage.getItem(SERVICE_CONSULTATION_INQUIRY_STORAGE_KEY) ??
+      window.sessionStorage.getItem(CONSULTATION_INQUIRY_STORAGE_KEY);
 
     if (!rawValue) {
       return null;
@@ -117,11 +123,12 @@ function CompletionHeader() {
       </a>
 
       <nav className="consultation-complete-nav" aria-label="주요 메뉴">
-        <a href="/#service-intro">제품소개</a>
-        <a href="/#service-intro-status">설치사례</a>
-        <a href="/simulation/setup">이용안내</a>
+        <a href="/solar-adoption">태양광 도입</a>
+        <a href="/#service-intro">서비스 소개</a>
         <a href="/notice">공지사항</a>
-        <a href="/">회사소개</a>
+        <a className="is-active" href="/consultation" aria-current="page">
+          상담하기
+        </a>
       </nav>
 
       <button

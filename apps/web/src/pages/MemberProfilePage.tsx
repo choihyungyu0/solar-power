@@ -9,6 +9,7 @@ import { readSimulationResultFromSession } from '../lib/simulationResultStorage'
 import './MemberProfilePage.css';
 
 const CONSULTATION_INQUIRY_STORAGE_KEY = 'solarmate:consultationInquiry';
+const SERVICE_CONSULTATION_INQUIRY_STORAGE_KEY = 'solarmate:serviceConsultationInquiry';
 
 type ProfileValues = {
   name: string;
@@ -24,6 +25,7 @@ type AddressSummary = {
 
 type StoredConsultationInquiry = {
   name?: unknown;
+  contact?: unknown;
   phone?: unknown;
   email?: unknown;
 };
@@ -83,7 +85,9 @@ function pickText(value: unknown) {
 
 function readConsultationInquiryFromSession() {
   try {
-    const rawValue = window.sessionStorage.getItem(CONSULTATION_INQUIRY_STORAGE_KEY);
+    const rawValue =
+      window.sessionStorage.getItem(SERVICE_CONSULTATION_INQUIRY_STORAGE_KEY) ??
+      window.sessionStorage.getItem(CONSULTATION_INQUIRY_STORAGE_KEY);
 
     if (!rawValue) {
       return null;
@@ -103,7 +107,7 @@ function getInitialProfileValues(): ProfileValues {
   return {
     name: pickText(inquiry?.name) ?? fallbackProfileValues.name,
     birthDate: fallbackProfileValues.birthDate,
-    phone: pickText(inquiry?.phone) ?? fallbackProfileValues.phone,
+    phone: pickText(inquiry?.contact) ?? pickText(inquiry?.phone) ?? fallbackProfileValues.phone,
     email: pickText(inquiry?.email) ?? fallbackProfileValues.email,
   };
 }
@@ -216,9 +220,7 @@ function MemberProfileHeader() {
         <a href="/solar-adoption">태양광 도입</a>
         <a href="/#service-intro">서비스 소개</a>
         <a href="/notice">공지사항</a>
-        <a className="is-active" href="/member/as" aria-current="page">
-          고객센터
-        </a>
+        <a href="/consultation">상담하기</a>
       </nav>
 
       <button className="member-profile-logout-button" type="button" onClick={handleMemberLogout}>

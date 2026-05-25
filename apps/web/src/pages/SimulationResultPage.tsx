@@ -382,11 +382,10 @@ function ResultHeader({ selectedResult }: { selectedResult: StoredSimulationResu
       </a>
 
       <nav className="resultNav" aria-label="주요 메뉴">
+        <a href="/solar-adoption">태양광 도입</a>
         <a href="/#service-intro">서비스 소개</a>
-        <a href="/risk-map">우리 아파트 가상설치</a>
-        <a href="/#solar-feed">보조금·정책자금</a>
-        <a href="/#service-intro-status">도입 사례</a>
-        <a href="/member/as">고객센터</a>
+        <a href="/notice">공지사항</a>
+        <a href="/consultation">상담하기</a>
       </nav>
 
       <div className="resultHeaderActions">

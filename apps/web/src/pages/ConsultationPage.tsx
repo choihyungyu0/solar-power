@@ -1,146 +1,193 @@
-import { FormEvent, useMemo, useState } from 'react';
-import { LuChevronLeft, LuChevronRight, LuCircleAlert, LuUserRound } from 'react-icons/lu';
-import { readSimulationResultFromSession, type StoredSimulationResult } from '../lib/simulationResultStorage';
+import { ChangeEvent, FormEvent, useMemo, useState } from 'react';
+import { LuChevronDown, LuHouse, LuMapPin, LuMessageCircle, LuUserRound } from 'react-icons/lu';
+import { SELECTED_SIMULATION_RESULT_STORAGE_KEY } from '../lib/simulationResultStorage';
 import './ConsultationPage.css';
 
-const CONSULTATION_INQUIRY_STORAGE_KEY = 'solarmate:consultationInquiry';
-const DEFAULT_MONTHLY_PAYMENT_KRW = 60_000;
-const DEFAULT_PAYMENT_MONTHS = 36;
+const LEGACY_CONSULTATION_INQUIRY_STORAGE_KEY = 'solarmate:consultationInquiry';
+const SERVICE_CONSULTATION_INQUIRY_STORAGE_KEY = 'solarmate:serviceConsultationInquiry';
+
+const consultationTypes = [
+  '설치 가능 여부 상담',
+  '이전 설치 문의',
+  '보조금 및 지원 정책 안내',
+  '절차 및 예상 비용 문의',
+  '기타 문의',
+];
+
+const serviceItems = [
+  '설치 가능 여부 상담',
+  '이전 설치 문의',
+  '보조금 및 지원 정책 안내',
+  '절차 및 예상 비용 문의',
+];
+
+type ConsultationAddress = {
+  roadAddress: string;
+  jibunAddress: string;
+};
 
 type ConsultationFormValues = {
   name: string;
-  phone: string;
-  email: string;
+  contact: string;
+  consultationType: string;
+  content: string;
 };
 
-type AgreementValues = {
-  privacy: boolean;
-  thirdParty: boolean;
-};
+type ServiceConsultationInquiry = ConsultationFormValues &
+  ConsultationAddress & {
+    createdAt: string;
+  };
 
-type ConsultationSimulationSolar = StoredSimulationResult['solar'] & {
-  monthlyPaymentKrw?: unknown;
-};
+type UnknownRecord = Record<string, unknown>;
 
-type ConsultationData = {
-  roadAddress: string;
-  jibunAddress: string;
-  monthlyPaymentKrw: number;
-  paymentMonths: number;
-  investmentKrw: number | null;
-  subsidyMaxKrw: number | null;
-  selfPaymentKrw: number | null;
-  loanLimitKrw: number | null;
-};
-
-const fallbackConsultationData: ConsultationData = {
+const fallbackAddress: ConsultationAddress = {
   roadAddress: '경기도 수원시 팔달구 경수대로 464',
-  jibunAddress: '경기 수원시 팔달구 인계동 1017',
-  monthlyPaymentKrw: DEFAULT_MONTHLY_PAYMENT_KRW,
-  paymentMonths: DEFAULT_PAYMENT_MONTHS,
-  investmentKrw: null,
-  subsidyMaxKrw: null,
-  selfPaymentKrw: null,
-  loanLimitKrw: null,
+  jibunAddress: '경기도 수원시 팔달구 인계동 1017',
 };
 
-function toFiniteNumber(value: unknown) {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function pickNumber(value: unknown, fallback: number) {
-  return toFiniteNumber(value) ?? fallback;
-}
-
-function getConsultationData(): ConsultationData {
-  const storedResult = readSimulationResultFromSession();
-
-  if (!storedResult) {
-    return fallbackConsultationData;
+function readSessionJson(storageKey: string) {
+  if (typeof window === 'undefined') {
+    return null;
   }
 
-  const solar = storedResult.solar as ConsultationSimulationSolar;
+  try {
+    const rawValue = window.sessionStorage.getItem(storageKey);
+
+    return rawValue ? (JSON.parse(rawValue) as unknown) : null;
+  } catch {
+    return null;
+  }
+}
+
+function getPathValue(value: unknown, path: string[]) {
+  return path.reduce<unknown>((current, key) => (isRecord(current) ? current[key] : undefined), value);
+}
+
+function pickText(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function extractAddress(value: unknown): ConsultationAddress | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const roadAddress = pickText(
+    getPathValue(value, ['building', 'roadAddress']),
+    getPathValue(value, ['building', 'address']),
+    getPathValue(value, ['selectedBuilding', 'roadAddress']),
+    getPathValue(value, ['selectedBuilding', 'address']),
+    value.roadAddress,
+    value.address,
+  );
+  const jibunAddress = pickText(
+    getPathValue(value, ['building', 'jibunAddress']),
+    getPathValue(value, ['selectedBuilding', 'jibunAddress']),
+    value.jibunAddress,
+  );
+
+  if (!roadAddress && !jibunAddress) {
+    return null;
+  }
 
   return {
-    roadAddress: storedResult.building.roadAddress || fallbackConsultationData.roadAddress,
-    jibunAddress: storedResult.building.jibunAddress || fallbackConsultationData.jibunAddress,
-    monthlyPaymentKrw: pickNumber(solar.monthlyPaymentKrw, DEFAULT_MONTHLY_PAYMENT_KRW),
-    paymentMonths: DEFAULT_PAYMENT_MONTHS,
-    investmentKrw: toFiniteNumber(solar.investmentKrw),
-    subsidyMaxKrw: toFiniteNumber(solar.subsidyMaxKrw),
-    selfPaymentKrw: toFiniteNumber(solar.selfPaymentKrw),
-    loanLimitKrw: toFiniteNumber(solar.loanLimitKrw),
+    roadAddress: roadAddress ?? fallbackAddress.roadAddress,
+    jibunAddress: jibunAddress ?? fallbackAddress.jibunAddress,
   };
 }
 
-function formatPaymentText(monthlyPaymentKrw: number) {
-  if (monthlyPaymentKrw === DEFAULT_MONTHLY_PAYMENT_KRW) {
-    return '월 6만원으로';
+function getConsultationAddress(): ConsultationAddress {
+  const selectedSimulationAddress = extractAddress(readSessionJson(SELECTED_SIMULATION_RESULT_STORAGE_KEY));
+
+  if (selectedSimulationAddress) {
+    return selectedSimulationAddress;
   }
 
-  return `월 ${Math.round(monthlyPaymentKrw).toLocaleString('ko-KR')}원으로`;
+  const legacyInquiryAddress = extractAddress(readSessionJson(LEGACY_CONSULTATION_INQUIRY_STORAGE_KEY));
+
+  if (legacyInquiryAddress) {
+    return legacyInquiryAddress;
+  }
+
+  const serviceInquiryAddress = extractAddress(readSessionJson(SERVICE_CONSULTATION_INQUIRY_STORAGE_KEY));
+
+  return serviceInquiryAddress ?? fallbackAddress;
 }
 
-function ConsultationPage() {
-  const consultationData = useMemo(() => getConsultationData(), []);
+function saveConsultationInquiry(inquiry: ServiceConsultationInquiry) {
+  window.sessionStorage.setItem(SERVICE_CONSULTATION_INQUIRY_STORAGE_KEY, JSON.stringify(inquiry));
+
+  // Keep older dashboard/complete-page readers working while the new service key is adopted.
+  window.sessionStorage.setItem(
+    LEGACY_CONSULTATION_INQUIRY_STORAGE_KEY,
+    JSON.stringify({
+      ...inquiry,
+      phone: inquiry.contact,
+      email: '',
+      type: inquiry.consultationType,
+      message: inquiry.content,
+    }),
+  );
+}
+
+export default function ConsultationPage() {
+  const address = useMemo(() => getConsultationAddress(), []);
   const [formValues, setFormValues] = useState<ConsultationFormValues>({
     name: '',
-    phone: '',
-    email: '',
+    contact: '',
+    consultationType: '',
+    content: '',
   });
-  const [agreements, setAgreements] = useState<AgreementValues>({
-    privacy: false,
-    thirdParty: false,
-  });
-  const [errorMessage, setErrorMessage] = useState('');
 
-  const updateFormValue = (key: keyof ConsultationFormValues, value: string) => {
-    setFormValues((prev) => ({
-      ...prev,
-      [key]: value,
+  const handleChange = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = event.target;
+
+    setFormValues((prevValues) => ({
+      ...prevValues,
+      [name]: value,
     }));
   };
 
-  const toggleAgreement = (key: keyof AgreementValues) => {
-    setAgreements((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
-  };
-
-  const handleBackClick = () => {
-    if (window.history.length > 1) {
-      window.history.back();
-      return;
-    }
-
-    window.location.assign('/simulation/result');
+  const handleHomeClick = () => {
+    window.location.assign('/');
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const hasMissingFormValue = !formValues.name.trim() || !formValues.phone.trim() || !formValues.email.trim();
-    const hasMissingAgreement = !agreements.privacy || !agreements.thirdParty;
+    const trimmedFormValues = {
+      name: formValues.name.trim(),
+      contact: formValues.contact.trim(),
+      consultationType: formValues.consultationType.trim(),
+      content: formValues.content.trim(),
+    };
+    const hasMissingValue =
+      !trimmedFormValues.name ||
+      !trimmedFormValues.contact ||
+      !trimmedFormValues.consultationType ||
+      !trimmedFormValues.content;
 
-    if (hasMissingFormValue || hasMissingAgreement) {
-      setErrorMessage('필수 항목을 입력하고 개인정보 동의에 체크해주세요.');
-      window.alert('필수 항목을 입력하고 개인정보 동의에 체크해주세요.');
+    if (hasMissingValue) {
+      window.alert('필수 항목을 입력해주세요.');
       return;
     }
 
-    const inquiry = {
-      name: formValues.name.trim(),
-      phone: formValues.phone.trim(),
-      email: formValues.email.trim(),
-      roadAddress: consultationData.roadAddress,
-      jibunAddress: consultationData.jibunAddress,
-      monthlyPaymentKrw: consultationData.monthlyPaymentKrw,
+    saveConsultationInquiry({
+      ...trimmedFormValues,
+      roadAddress: address.roadAddress,
+      jibunAddress: address.jibunAddress,
       createdAt: new Date().toISOString(),
-    };
-
-    window.sessionStorage.setItem(CONSULTATION_INQUIRY_STORAGE_KEY, JSON.stringify(inquiry));
-    setErrorMessage('');
+    });
     window.location.assign('/consultation/complete');
   };
 
@@ -150,103 +197,108 @@ function ConsultationPage() {
 
       <main className="consultation-main">
         <section className="consultation-card" aria-labelledby="consultation-title">
-          <h1 id="consultation-title" className="consultation-title">
-            태양광 문의접수
-          </h1>
+          <div className="consultation-form-area">
+            <h1 id="consultation-title" className="consultation-title">
+              서비스 문의하기
+            </h1>
 
-          <div className="consultation-address-box" aria-label="상담 신청 주소">
-            <div className="consultation-address-row">
-              <span>도로명주소</span>
-              <strong>{consultationData.roadAddress}</strong>
-            </div>
-            <div className="consultation-address-row">
-              <span>지번</span>
-              <strong>{consultationData.jibunAddress}</strong>
-            </div>
+            <AddressSummary address={address} />
+
+            <form className="consultation-form" onSubmit={handleSubmit}>
+              <label className="consultation-form-row" htmlFor="consultation-name">
+                <span>이름</span>
+                <input
+                  id="consultation-name"
+                  name="name"
+                  type="text"
+                  value={formValues.name}
+                  placeholder="텍스트 입력"
+                  onChange={handleChange}
+                />
+              </label>
+
+              <label className="consultation-form-row" htmlFor="consultation-contact">
+                <span>연락처</span>
+                <input
+                  id="consultation-contact"
+                  name="contact"
+                  type="text"
+                  value={formValues.contact}
+                  placeholder="텍스트 입력"
+                  onChange={handleChange}
+                />
+              </label>
+
+              <label className="consultation-form-row" htmlFor="consultation-type">
+                <span>상담유형</span>
+                <span className="consultation-select-wrap">
+                  <select
+                    id="consultation-type"
+                    name="consultationType"
+                    className={formValues.consultationType ? '' : 'is-placeholder'}
+                    value={formValues.consultationType}
+                    onChange={handleChange}
+                  >
+                    <option value="" disabled>
+                      리스트 바
+                    </option>
+                    {consultationTypes.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                  <LuChevronDown aria-hidden="true" />
+                </span>
+              </label>
+
+              <label className="consultation-form-row consultation-textarea-row" htmlFor="consultation-content">
+                <span>상담내용</span>
+                <textarea
+                  id="consultation-content"
+                  name="content"
+                  value={formValues.content}
+                  placeholder="상담내용을 입력해주세요."
+                  onChange={handleChange}
+                />
+              </label>
+
+              <div className="consultation-button-row">
+                <button className="consultation-home-button" type="button" onClick={handleHomeClick}>
+                  <LuHouse aria-hidden="true" />
+                  홈
+                </button>
+
+                <button className="consultation-submit-button" type="submit">
+                  <LuMessageCircle aria-hidden="true" />
+                  상담신청
+                </button>
+              </div>
+            </form>
           </div>
 
-          <div className="consultation-notice-bar">
-            <LuCircleAlert aria-hidden="true" />
-            <span>주소 확인 경고 문구</span>
-          </div>
-
-          <form className="consultation-form" onSubmit={handleSubmit}>
-            <ConsultationFormRow
-              id="consultation-name"
-              label="이름"
-              value={formValues.name}
-              placeholder="이름을 입력해주세요"
-              onChange={(value) => updateFormValue('name', value)}
-            />
-            <ConsultationFormRow
-              id="consultation-phone"
-              label="전화번호"
-              value={formValues.phone}
-              placeholder="전화번호를 입력해주세요"
-              onChange={(value) => updateFormValue('phone', value)}
-            />
-            <ConsultationFormRow
-              id="consultation-email"
-              label="이메일"
-              value={formValues.email}
-              placeholder="이메일을 입력해주세요"
-              onChange={(value) => updateFormValue('email', value)}
+          <aside className="consultation-info-card" aria-label="상담 가능 항목">
+            <img
+              className="consultation-info-image"
+              src="/assets/consultation/consultation-solar-house.png"
+              alt="태양광 패널이 설치된 주택 일러스트"
             />
 
-            <div className="consultation-form-row consultation-consent-row">
-              <span className="consultation-label">
-                개인정보
-                <br />
-                이용동의
-              </span>
+            <h2>
+              태양광 설치/이전
+              <br />
+              보조금 문의
+            </h2>
 
-              <div className="consultation-consent-list">
-                <label className="consultation-check-line">
-                  <input
-                    type="checkbox"
-                    checked={agreements.privacy}
-                    onChange={() => toggleAgreement('privacy')}
-                  />
-                  <span className="consultation-custom-check" aria-hidden="true" />
-                  <span>개인정보 수집 및 이용에 동의합니다. (필수)</span>
-                </label>
+            <div className="consultation-info-divider" />
 
-                <label className="consultation-check-line">
-                  <input
-                    type="checkbox"
-                    checked={agreements.thirdParty}
-                    onChange={() => toggleAgreement('thirdParty')}
-                  />
-                  <span className="consultation-custom-check" aria-hidden="true" />
-                  <span>개인정보 제3자 제공에 동의합니다. (필수)</span>
-                </label>
-              </div>
-            </div>
-
-            {errorMessage && (
-              <p className="consultation-message is-error" role="alert">
-                {errorMessage}
-              </p>
-            )}
-
-            <div className="consultation-bottom-bar">
-              <div className="consultation-price">
-                <strong>{formatPaymentText(consultationData.monthlyPaymentKrw)}</strong>
-                <span>({consultationData.paymentMonths}개월 납입)</span>
-              </div>
-
-              <button className="consultation-submit-button" type="submit">
-                태양광 문의접수
-                <LuChevronRight aria-hidden="true" />
-              </button>
-            </div>
-          </form>
+            <ul>
+              {serviceItems.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </aside>
         </section>
-
-        <button className="consultation-back-button" type="button" onClick={handleBackClick}>
-          <LuChevronLeft aria-hidden="true" />
-          이전
-        </button>
       </main>
     </div>
   );
@@ -255,28 +307,21 @@ function ConsultationPage() {
 function ConsultationHeader() {
   return (
     <header className="consultation-header">
-      <a className="consultation-logo" href="/" aria-label="솔라메이트 홈">
-        <span className="consultation-logo-mark" aria-hidden="true">
-          <span className="consultation-logo-sun" />
-          <span className="consultation-logo-panel">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <span key={index} />
-            ))}
-          </span>
-        </span>
-
-        <span className="consultation-logo-text">
-          <strong>솔라메이트</strong>
-          <small>SolarMate</small>
+      <a className="consultation-logo" href="/" aria-label="SolarMate 홈">
+        <span className="consultation-logo-sun" aria-hidden="true" />
+        <span className="consultation-logo-word">
+          <strong>Solar</strong>
+          <span>Mate</span>
         </span>
       </a>
 
       <nav className="consultation-nav" aria-label="주요 메뉴">
-        <a href="/#service-intro">제품소개</a>
-        <a href="/#service-intro-status">설치사례</a>
-        <a href="/simulation/setup">이용안내</a>
+        <a href="/solar-adoption">태양광 도입</a>
+        <a href="/#service-intro">서비스 소개</a>
         <a href="/notice">공지사항</a>
-        <a href="/">회사소개</a>
+        <a className="is-active" href="/consultation" aria-current="page">
+          상담하기
+        </a>
       </nav>
 
       <button
@@ -291,34 +336,20 @@ function ConsultationHeader() {
   );
 }
 
-function ConsultationFormRow({
-  id,
-  label,
-  value,
-  placeholder,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  placeholder: string;
-  onChange: (value: string) => void;
-}) {
+function AddressSummary({ address }: { address: ConsultationAddress }) {
   return (
-    <div className="consultation-form-row">
-      <label className="consultation-label" htmlFor={id}>
-        {label}
-      </label>
-      <input
-        id={id}
-        className="consultation-input"
-        type="text"
-        value={value}
-        placeholder={placeholder}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </div>
+    <section className="consultation-address-box" aria-label="상담 주소 요약">
+      <div className="consultation-address-row">
+        <LuMapPin aria-hidden="true" />
+        <strong>도로명주소</strong>
+        <p>{address.roadAddress}</p>
+      </div>
+
+      <div className="consultation-address-row">
+        <span className="consultation-land-icon" aria-hidden="true" />
+        <strong>지번</strong>
+        <p>{address.jibunAddress}</p>
+      </div>
+    </section>
   );
 }
-
-export default ConsultationPage;

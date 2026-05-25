@@ -50,6 +50,7 @@ type ProfileField = {
 
 type StoredConsultationInquiry = {
   name?: unknown;
+  contact?: unknown;
   phone?: unknown;
   email?: unknown;
 };
@@ -94,6 +95,7 @@ const faqItems: FaqItem[] = [
 ];
 
 const CONSULTATION_INQUIRY_STORAGE_KEY = 'solarmate:consultationInquiry';
+const SERVICE_CONSULTATION_INQUIRY_STORAGE_KEY = 'solarmate:serviceConsultationInquiry';
 
 const fallbackProfileValues: ProfileValues = {
   name: '김솔라',
@@ -490,7 +492,6 @@ function ProfileRow({
 }
 
 function MemberDashboardHeader({ activeTab }: { activeTab: DashboardTab }) {
-  const isCustomerCenterActive = activeTab !== 'generation';
   const isMemberSupportTab = activeTab === 'as' || activeTab === 'profile';
 
   return (
@@ -512,14 +513,10 @@ function MemberDashboardHeader({ activeTab }: { activeTab: DashboardTab }) {
       </a>
 
       <nav className="member-dashboard-nav" aria-label="주요 메뉴">
-        <a className={isCustomerCenterActive ? '' : 'is-active'} href="/solar-adoption" aria-current={isCustomerCenterActive ? undefined : 'page'}>
-          태양광 도입
-        </a>
+        <a href="/solar-adoption">태양광 도입</a>
         <a href="/#service-intro">서비스 소개</a>
         <a href="/notice">공지사항</a>
-        <a className={isCustomerCenterActive ? 'is-active' : ''} href="/member/dashboard?tab=as" aria-current={isCustomerCenterActive ? 'page' : undefined}>
-          고객센터
-        </a>
+        <a href="/consultation">상담하기</a>
       </nav>
 
       <button
@@ -798,7 +795,9 @@ function readConsultationInquiryFromSession() {
   }
 
   try {
-    const rawValue = window.sessionStorage.getItem(CONSULTATION_INQUIRY_STORAGE_KEY);
+    const rawValue =
+      window.sessionStorage.getItem(SERVICE_CONSULTATION_INQUIRY_STORAGE_KEY) ??
+      window.sessionStorage.getItem(CONSULTATION_INQUIRY_STORAGE_KEY);
 
     if (!rawValue) {
       return null;
@@ -818,7 +817,7 @@ function getInitialProfileValues(): ProfileValues {
   return {
     name: pickText(inquiry?.name) ?? fallbackProfileValues.name,
     birthDate: fallbackProfileValues.birthDate,
-    phone: pickText(inquiry?.phone) ?? fallbackProfileValues.phone,
+    phone: pickText(inquiry?.contact) ?? pickText(inquiry?.phone) ?? fallbackProfileValues.phone,
     email: pickText(inquiry?.email) ?? fallbackProfileValues.email,
   };
 }
