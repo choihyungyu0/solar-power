@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { LuArrowLeft, LuChevronRight, LuUserRound } from 'react-icons/lu';
+import { useNavigate } from 'react-router-dom';
+import { LuArrowLeft, LuChevronRight } from 'react-icons/lu';
+import SolarMateHeader from '../components/SolarMateHeader';
 import './NoticePage.css';
 
 type NewsItem = {
@@ -55,6 +57,7 @@ const faqItems: FaqItem[] = [
 ];
 
 export default function NoticePage() {
+  const navigate = useNavigate();
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
 
   const handleToggleFaq = (index: number) => {
@@ -67,12 +70,12 @@ export default function NoticePage() {
       return;
     }
 
-    window.location.assign('/');
+    navigate('/');
   };
 
   return (
     <div className="notice-page">
-      <NoticeHeader />
+      <SolarMateHeader />
 
       <main className="notice-main">
         <section className="notice-card" aria-label="공지사항과 자주 묻는 질문">
@@ -146,41 +149,5 @@ export default function NoticePage() {
         </section>
       </main>
     </div>
-  );
-}
-
-function NoticeHeader() {
-  return (
-    <header className="notice-header">
-      <a className="notice-logo" href="/" aria-label="솔라메이트 홈">
-        <span className="notice-logo-mark" aria-hidden="true">
-          <span className="notice-logo-sun" />
-          <span className="notice-logo-panel">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <span key={index} />
-            ))}
-          </span>
-        </span>
-
-        <span className="notice-logo-text">
-          <strong>솔라메이트</strong>
-          <small>SolarMate</small>
-        </span>
-      </a>
-
-      <nav className="notice-nav" aria-label="주요 메뉴">
-        <a href="/solar-adoption">태양광 도입</a>
-        <a href="/#service-intro">서비스 소개</a>
-        <a className="active" href="/notice" aria-current="page">
-          공지사항
-        </a>
-        <a href="/consultation">상담하기</a>
-      </nav>
-
-      <button className="notice-login-button" type="button" onClick={() => window.location.assign('/login')}>
-        <LuUserRound aria-hidden="true" />
-        로그인
-      </button>
-    </header>
   );
 }

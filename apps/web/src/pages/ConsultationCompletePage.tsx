@@ -1,4 +1,5 @@
-import { LuUserRound } from 'react-icons/lu';
+import { useNavigate } from 'react-router-dom';
+import SolarMateHeader from '../components/SolarMateHeader';
 import { readSimulationResultFromSession } from '../lib/simulationResultStorage';
 import './ConsultationCompletePage.css';
 
@@ -66,16 +67,13 @@ function getCompletionAddress(): CompletionAddress {
   };
 }
 
-function handlePreviousClick() {
-  window.location.assign('/solar-adoption');
-}
-
 export default function ConsultationCompletePage() {
+  const navigate = useNavigate();
   const address = getCompletionAddress();
 
   return (
     <div className="consultation-complete-page">
-      <CompletionHeader />
+      <SolarMateHeader />
 
       <main className="consultation-complete-main">
         <section className="consultation-complete-card" aria-labelledby="consultation-complete-title">
@@ -94,52 +92,12 @@ export default function ConsultationCompletePage() {
           </section>
         </section>
 
-        <button className="consultation-complete-prev-button" type="button" onClick={handlePreviousClick}>
+        <button className="consultation-complete-prev-button" type="button" onClick={() => navigate('/consultation')}>
           <span aria-hidden="true">‹</span>
           이전
         </button>
       </main>
     </div>
-  );
-}
-
-function CompletionHeader() {
-  return (
-    <header className="consultation-complete-header">
-      <a className="consultation-complete-logo" href="/" aria-label="솔라메이트 홈">
-        <span className="consultation-complete-logo-mark" aria-hidden="true">
-          <span className="consultation-complete-logo-sun" />
-          <span className="consultation-complete-logo-panel">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <span key={index} />
-            ))}
-          </span>
-        </span>
-
-        <span className="consultation-complete-logo-text">
-          <strong>솔라메이트</strong>
-          <small>SolarMate</small>
-        </span>
-      </a>
-
-      <nav className="consultation-complete-nav" aria-label="주요 메뉴">
-        <a href="/solar-adoption">태양광 도입</a>
-        <a href="/#service-intro">서비스 소개</a>
-        <a href="/notice">공지사항</a>
-        <a className="is-active" href="/consultation" aria-current="page">
-          상담하기
-        </a>
-      </nav>
-
-      <button
-        className="consultation-complete-login-button"
-        type="button"
-        onClick={() => window.location.assign('/login')}
-      >
-        <LuUserRound aria-hidden="true" />
-        로그인
-      </button>
-    </header>
   );
 }
 

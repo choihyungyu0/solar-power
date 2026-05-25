@@ -1,5 +1,7 @@
 import { ChangeEvent, FormEvent, useMemo, useState } from 'react';
-import { LuChevronDown, LuHouse, LuMapPin, LuMessageCircle, LuUserRound } from 'react-icons/lu';
+import { useNavigate } from 'react-router-dom';
+import { LuChevronDown, LuHouse, LuMapPin, LuMessageCircle } from 'react-icons/lu';
+import SolarMateHeader from '../components/SolarMateHeader';
 import { SELECTED_SIMULATION_RESULT_STORAGE_KEY } from '../lib/simulationResultStorage';
 import './ConsultationPage.css';
 
@@ -141,6 +143,7 @@ function saveConsultationInquiry(inquiry: ServiceConsultationInquiry) {
 }
 
 export default function ConsultationPage() {
+  const navigate = useNavigate();
   const address = useMemo(() => getConsultationAddress(), []);
   const [formValues, setFormValues] = useState<ConsultationFormValues>({
     name: '',
@@ -159,7 +162,7 @@ export default function ConsultationPage() {
   };
 
   const handleHomeClick = () => {
-    window.location.assign('/');
+    navigate('/');
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -188,12 +191,12 @@ export default function ConsultationPage() {
       jibunAddress: address.jibunAddress,
       createdAt: new Date().toISOString(),
     });
-    window.location.assign('/consultation/complete');
+    navigate('/consultation/complete');
   };
 
   return (
     <div className="consultation-page">
-      <ConsultationHeader />
+      <SolarMateHeader />
 
       <main className="consultation-main">
         <section className="consultation-card" aria-labelledby="consultation-title">
@@ -212,7 +215,7 @@ export default function ConsultationPage() {
                   name="name"
                   type="text"
                   value={formValues.name}
-                  placeholder="텍스트 입력"
+                  placeholder="이름을 입력해주세요."
                   onChange={handleChange}
                 />
               </label>
@@ -224,7 +227,7 @@ export default function ConsultationPage() {
                   name="contact"
                   type="text"
                   value={formValues.contact}
-                  placeholder="텍스트 입력"
+                  placeholder="연락처를 입력해주세요."
                   onChange={handleChange}
                 />
               </label>
@@ -240,7 +243,7 @@ export default function ConsultationPage() {
                     onChange={handleChange}
                   >
                     <option value="" disabled>
-                      리스트 바
+                      상담유형을 선택해주세요.
                     </option>
                     {consultationTypes.map((type) => (
                       <option key={type} value={type}>
@@ -301,38 +304,6 @@ export default function ConsultationPage() {
         </section>
       </main>
     </div>
-  );
-}
-
-function ConsultationHeader() {
-  return (
-    <header className="consultation-header">
-      <a className="consultation-logo" href="/" aria-label="SolarMate 홈">
-        <span className="consultation-logo-sun" aria-hidden="true" />
-        <span className="consultation-logo-word">
-          <strong>Solar</strong>
-          <span>Mate</span>
-        </span>
-      </a>
-
-      <nav className="consultation-nav" aria-label="주요 메뉴">
-        <a href="/solar-adoption">태양광 도입</a>
-        <a href="/#service-intro">서비스 소개</a>
-        <a href="/notice">공지사항</a>
-        <a className="is-active" href="/consultation" aria-current="page">
-          상담하기
-        </a>
-      </nav>
-
-      <button
-        className="consultation-login-button"
-        type="button"
-        onClick={() => window.location.assign('/login')}
-      >
-        <LuUserRound aria-hidden="true" />
-        로그인
-      </button>
-    </header>
   );
 }
 

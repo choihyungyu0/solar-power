@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   LuBotMessageSquare,
   LuChartNoAxesColumnIncreasing,
@@ -7,8 +8,8 @@ import {
   LuCirclePlus,
   LuCircleUserRound,
   LuHeadphones,
-  LuUserRound,
 } from 'react-icons/lu';
+import SolarMateHeader from '../components/SolarMateHeader';
 import {
   buildScenarioDayCards,
   formatKrw,
@@ -20,11 +21,12 @@ import {
   type ScenarioComparisonBar,
   type ScenarioDayCard,
 } from '../lib/memberDashboardData';
-import { clearDemoAuthState, readDemoAuthState } from '../lib/demoAuth';
+import { isDemoLoggedIn } from '../lib/demoAuth';
 import { SELECTED_SIMULATION_RESULT_STORAGE_KEY } from '../lib/simulationResultStorage';
 import './MemberDashboardPage.css';
 
 export type DashboardTab = 'generation' | 'as' | 'profile';
+type GenerationTab = 'realtime' | 'hourly' | 'monthly' | 'pattern';
 
 type MemberDashboardPageProps = {
   initialTab?: DashboardTab;
@@ -71,6 +73,25 @@ const dashboardTabs: { id: DashboardTab; label: string; icon: typeof LuChartNoAx
     id: 'profile',
     label: '회원관리',
     icon: LuCircleUserRound,
+  },
+];
+
+const generationTabs: { id: GenerationTab; label: string }[] = [
+  {
+    id: 'realtime',
+    label: '실시간 요금',
+  },
+  {
+    id: 'hourly',
+    label: '시간별 사용량',
+  },
+  {
+    id: 'monthly',
+    label: '월별 사용량',
+  },
+  {
+    id: 'pattern',
+    label: '패턴분석',
   },
 ];
 
@@ -136,11 +157,15 @@ const profileFields: ProfileField[] = [
 ];
 
 export default function MemberDashboardPage({ initialTab }: MemberDashboardPageProps) {
-  const [activeTab, setActiveTab] = useState<DashboardTab>(() => initialTab ?? getDashboardTabFromUrl() ?? 'generation');
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const tabFromUrl = parseDashboardTab(searchParams.get('tab'));
+  const [activeTab, setActiveTab] = useState<DashboardTab>(() => initialTab ?? tabFromUrl ?? 'generation');
   const selectedSimulationPayload = useMemo(() => loadSelectedSimulationResult(), []);
   const hasSelectedSimulationResult = useMemo(() => hasSelectedSimulationResultInSession(), []);
   const dashboardData = useMemo(() => normalizeDashboardData(selectedSimulationPayload), [selectedSimulationPayload]);
   const scenarioCards = useMemo(() => buildScenarioDayCards(dashboardData), [dashboardData]);
+  const showDemoNotice = !isDemoLoggedIn();
 
   useEffect(() => {
     if (initialTab) {
@@ -148,12 +173,10 @@ export default function MemberDashboardPage({ initialTab }: MemberDashboardPageP
       return;
     }
 
-    const tabFromUrl = getDashboardTabFromUrl();
-
     if (tabFromUrl) {
       setActiveTab(tabFromUrl);
     }
-  }, [initialTab]);
+  }, [initialTab, tabFromUrl]);
 
   useEffect(() => {
     if (!import.meta.env.DEV) {
@@ -178,12 +201,18 @@ export default function MemberDashboardPage({ initialTab }: MemberDashboardPageP
   const noticeText = isDemoSource
     ? '데모 산식 기반 예상 시나리오입니다. 실제 계량기 사용량이나 실측 발전량으로 표시하지 않습니다.'
     : '선택 건물 분석값 기반 시나리오입니다.';
+  const handleDashboardTabClick = (tab: DashboardTab) => {
+    setActiveTab(tab);
+    navigate(`/member/dashboard?tab=${tab}`);
+  };
 
   return (
     <div className="member-dashboard-page">
-      <MemberDashboardHeader />
+      <SolarMateHeader variant="member" />
 
       <main className="member-dashboard-main">
+        {showDemoNotice && <p className="member-dashboard-soft-notice">데모 화면입니다. 로그인 후 이용하는 화면입니다.</p>}
+
         <section
           className="member-dashboard-shell"
           aria-label="회원 대시보드"
@@ -219,7 +248,7 @@ export default function MemberDashboardPage({ initialTab }: MemberDashboardPageP
                   }`}
                   type="button"
                   aria-current={isActive ? 'page' : undefined}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => handleDashboardTabClick(tab.id)}
                 >
                   <TabIcon aria-hidden="true" />
                   {tab.label}
@@ -246,6 +275,8 @@ function GenerationDashboard({
   noticeText: string;
   isDemoSource: boolean;
 }) {
+  const [activeGenerationTab, setActiveGenerationTab] = useState<GenerationTab>('realtime');
+
   return (
     <>
       <div className="member-dashboard-warranty-row">
@@ -266,11 +297,29 @@ function GenerationDashboard({
 
         <p className="member-dashboard-scenario-note">{noticeText}</p>
 
-        <div className="member-dashboard-meter-grid">
-          {scenarioCards.map((card) => (
-            <ScenarioMeterCard key={`${card.id}-${card.month}`} card={card} />
+        <nav className="member-dashboard-generation-tab-row" aria-label="발전량 세부 메뉴">
+          {generationTabs.map((tab) => (
+            <button
+              key={tab.id}
+              className={activeGenerationTab === tab.id ? 'is-active' : ''}
+              type="button"
+              aria-current={activeGenerationTab === tab.id ? 'page' : undefined}
+              onClick={() => setActiveGenerationTab(tab.id)}
+            >
+              {tab.label}
+            </button>
           ))}
-        </div>
+        </nav>
+
+        {activeGenerationTab === 'realtime' && (
+          <RealtimeGenerationPanel dashboardData={dashboardData} scenarioCards={scenarioCards} />
+        )}
+
+        {activeGenerationTab === 'hourly' && <HourlyUsagePanel scenarioCards={scenarioCards} />}
+
+        {activeGenerationTab === 'monthly' && <MonthlyUsagePanel dashboardData={dashboardData} />}
+
+        {activeGenerationTab === 'pattern' && <PatternAnalysisPanel dashboardData={dashboardData} />}
       </section>
     </>
   );
