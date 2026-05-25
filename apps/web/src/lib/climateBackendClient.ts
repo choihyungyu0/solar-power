@@ -5,12 +5,12 @@ import type {
   ClimateLiveAnalysisResponse,
 } from '../types/climateBundle';
 
-const CLIMATE_BACKEND_HEALTH_TIMEOUT_MS = 3000;
-const CLIMATE_BACKEND_ANALYSIS_TIMEOUT_MS = 30000;
+const CLIMATE_BACKEND_HEALTH_TIMEOUT_MS = 15000;
+const CLIMATE_BACKEND_ANALYSIS_TIMEOUT_MS = 45000;
 const CLIMATE_BACKEND_DISABLED_MESSAGE =
   '백엔드 서버 연결은 성공했습니다. climate.gg 파이프라인은 다음 단계에서 연결됩니다.';
 const CLIMATE_BACKEND_UNAVAILABLE_MESSAGE =
-  '백엔드 서버에 연결할 수 없습니다. http://localhost:8001/health를 확인해주세요.';
+  '백엔드 서버에 연결할 수 없습니다. VITE_CLIMATE_BACKEND_BASE_URL과 /health 응답을 확인해주세요.';
 
 function getClimateBackendBaseUrl() {
   return (import.meta.env.VITE_CLIMATE_BACKEND_BASE_URL ?? '').trim().replace(/\/+$/, '');
@@ -178,9 +178,27 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function isAbortLikeError(errorName: string) {
+  return errorName === 'AbortError' || errorName === 'TimeoutError';
+}
+
+function formatTimeoutSeconds(timeoutMs: number) {
+  return Math.round(timeoutMs / 1000).toLocaleString('ko-KR');
+}
+
+function createBackendTimeoutMessage(stepLabel: string, timeoutMs: number) {
+  return `${stepLabel} 응답이 ${formatTimeoutSeconds(
+    timeoutMs,
+  )}초 안에 오지 않아 중단했습니다. Render cold start 또는 일시적인 네트워크 지연일 수 있습니다. 잠시 후 다시 시도해주세요.`;
+}
+
 async function fetchJsonWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  let didTimeout = false;
+  const timeoutId = window.setTimeout(() => {
+    didTimeout = true;
+    controller.abort();
+  }, timeoutMs);
 
   try {
     const response = await fetch(url, {
@@ -194,6 +212,14 @@ async function fetchJsonWithTimeout(url: string, init: RequestInit, timeoutMs: n
       payload,
       status: response.status,
     };
+  } catch (error) {
+    if (didTimeout) {
+      const timeoutError = new Error(`요청 제한 시간 ${formatTimeoutSeconds(timeoutMs)}초를 초과했습니다.`);
+      timeoutError.name = 'TimeoutError';
+      throw timeoutError;
+    }
+
+    throw error;
   } finally {
     window.clearTimeout(timeoutId);
   }
@@ -254,18 +280,26 @@ export async function runExternalClimateBackendAnalysis(
     }
   } catch (error) {
     const errorName = getErrorName(error);
-    const errorMessage = getErrorMessage(error);
+    const errorMessage = isAbortLikeError(errorName)
+      ? createBackendTimeoutMessage('백엔드 health 확인', CLIMATE_BACKEND_HEALTH_TIMEOUT_MS)
+      : getErrorMessage(error);
 
     return createFailureResponse(
       input,
-      `백엔드 서버 요청 실패: ${errorMessage}`,
-      errorName === 'AbortError' ? 'climate-backend-health-aborted' : 'climate-backend-fetch-error',
+      isAbortLikeError(errorName) ? errorMessage : `백엔드 서버 요청 실패: ${errorMessage}`,
+      isAbortLikeError(errorName) ? 'climate-backend-health-aborted' : 'climate-backend-fetch-error',
       false,
       {
         ...baseDiagnostics,
         backendFetchErrorName: errorName,
         backendFetchErrorMessage: errorMessage,
         backendHealthStatus,
+        ...(isAbortLikeError(errorName)
+          ? {
+              frontendAbortMs: CLIMATE_BACKEND_HEALTH_TIMEOUT_MS,
+              timedOutStep: 'backend-health',
+            }
+          : {}),
       },
     );
   }
@@ -313,18 +347,26 @@ export async function runExternalClimateBackendAnalysis(
     );
   } catch (error) {
     const errorName = getErrorName(error);
-    const errorMessage = getErrorMessage(error);
+    const errorMessage = isAbortLikeError(errorName)
+      ? createBackendTimeoutMessage('백엔드 분석 요청', CLIMATE_BACKEND_ANALYSIS_TIMEOUT_MS)
+      : getErrorMessage(error);
 
     return createFailureResponse(
       input,
-      `백엔드 서버 요청 실패: ${errorMessage}`,
-      errorName === 'AbortError' ? 'climate-backend-post-aborted' : 'climate-backend-fetch-error',
+      isAbortLikeError(errorName) ? errorMessage : `백엔드 서버 요청 실패: ${errorMessage}`,
+      isAbortLikeError(errorName) ? 'climate-backend-post-aborted' : 'climate-backend-fetch-error',
       false,
       {
         ...baseDiagnostics,
         backendHealthStatus,
         backendFetchErrorName: errorName,
         backendFetchErrorMessage: errorMessage,
+        ...(isAbortLikeError(errorName)
+          ? {
+              frontendAbortMs: CLIMATE_BACKEND_ANALYSIS_TIMEOUT_MS,
+              timedOutStep: 'backend-analysis',
+            }
+          : {}),
       },
     );
   }
