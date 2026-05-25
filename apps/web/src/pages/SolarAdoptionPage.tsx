@@ -1,6 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { LuArrowRight, LuMap } from 'react-icons/lu';
 import SolarMateHeader from '../components/SolarMateHeader';
 import './SolarAdoptionPage.css';
 
@@ -8,7 +6,6 @@ const processImagePath = '/assets/process/business-process-flow.png';
 
 export default function SolarAdoptionPage() {
   const [hasImageError, setHasImageError] = useState(false);
-  const navigate = useNavigate();
 
   return (
     <div className="solar-adoption-page">
@@ -19,16 +16,6 @@ export default function SolarAdoptionPage() {
           <section className="solar-adoption-hero" aria-labelledby="solar-adoption-title">
             <p>(대충) 태양광 어려우셨죠?</p>
             <h1 id="solar-adoption-title">태양광 쉽게 설치할 수 있게 도와드려요</h1>
-            <div className="solar-adoption-cta-row">
-              <button className="solar-adoption-primary-cta" type="button" onClick={() => navigate('/risk-map')}>
-                <LuMap aria-hidden="true" />
-                우리 아파트 가능성 확인하기
-              </button>
-              <button className="solar-adoption-secondary-cta" type="button" onClick={() => navigate('/solar-adoption/step-1')}>
-                주소 입력하기
-                <LuArrowRight aria-hidden="true" />
-              </button>
-            </div>
           </section>
 
           <section className="solar-adoption-process" aria-labelledby="solar-adoption-process-title">

@@ -12,7 +12,6 @@ import MemberDashboardPage from './pages/MemberDashboardPage';
 import MemberNoInstallationPage from './pages/MemberNoInstallationPage';
 import NoticePage from './pages/NoticePage';
 import RiskMapPage from './pages/RiskMapPage';
-import ServicePage from './pages/ServicePage';
 import SolarAdoptionPage from './pages/SolarAdoptionPage';
 import {
   SolarAdoptionCompletePage,
@@ -37,7 +36,7 @@ function App() {
       <Route path="/solar-adoption/step-3" element={<SolarAdoptionStep3Page />} />
       <Route path="/solar-adoption/step-4" element={<SolarAdoptionStep4Page />} />
       <Route path="/solar-adoption/complete" element={<SolarAdoptionCompletePage />} />
-      <Route path="/service" element={<ServicePage />} />
+      <Route path="/service" element={<SolarAdoptionPage />} />
       <Route path="/notice" element={<NoticePage />} />
       <Route path="/consultation" element={<ConsultationPage />} />
       <Route path="/consultation/complete" element={<ConsultationCompletePage />} />

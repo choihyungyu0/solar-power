@@ -222,47 +222,6 @@
   font-weight: 950;
 }
 
-.solar-adoption-cta-row {
-  position: relative;
-  z-index: 2;
-  margin-top: 30px;
-  display: flex;
-  justify-content: center;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
-.solar-adoption-primary-cta,
-.solar-adoption-secondary-cta {
-  min-height: 58px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  border-radius: 8px;
-  padding: 0 24px;
-  font-size: 18px;
-  font-weight: 900;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
-}
-
-.solar-adoption-primary-cta {
-  background: #ffffff;
-  color: #0757bd;
-}
-
-.solar-adoption-secondary-cta {
-  border: 1.5px solid rgba(255, 255, 255, 0.7);
-  background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-}
-
-.solar-adoption-primary-cta svg,
-.solar-adoption-secondary-cta svg {
-  width: 21px;
-  height: 21px;
-}
-
 .solar-adoption-process {
   margin-top: 28px;
 }
@@ -329,10 +288,6 @@
 
   .solar-adoption-hero h1 {
     font-size: 46px;
-  }
-
-  .solar-adoption-cta-row {
-    margin-top: 20px;
   }
 
   .solar-adoption-process {
@@ -445,13 +400,6 @@
 
   .solar-adoption-hero h1 {
     font-size: 28px;
-  }
-
-  .solar-adoption-primary-cta,
-  .solar-adoption-secondary-cta {
-    width: 100%;
-    min-height: 54px;
-    font-size: 16px;
   }
 
   .solar-adoption-image-scroll {
