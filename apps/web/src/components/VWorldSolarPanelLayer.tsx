@@ -98,8 +98,6 @@ const CONSTRUCTOR_ERROR_MESSAGE =
   '태양광 패널을 지도 좌표 객체로 표시하려면 VWorld 또는 Cesium polygon 객체 연결이 필요합니다.';
 const DEFAULT_HEIGHT_MESSAGE = '건물 높이 정보가 없어 기본 높이로 패널을 표시합니다.';
 const PANEL_ENTITY_PREFIXES = [
-  'solarmate-climate-panel-',
-  'solarmate-poc-panel-',
   'solarmate-self-panel-',
   'solarmate-panel-',
   'solarmate-panel-debug-',
@@ -107,7 +105,7 @@ const PANEL_ENTITY_PREFIXES = [
 
 function getPanelEntityPrefix(panelSource: VWorldSolarPanelSource) {
   if (panelSource === 'climate-live') {
-    return 'solarmate-climate-panel';
+    return 'solarmate-backend-panel';
   }
 
   if (panelSource === 'static-poc') {

@@ -11,7 +11,7 @@ import {
   type CesiumViewerLike,
 } from '../lib/vworldCesiumViewer';
 import { getPolygonCentroid, type Coordinate, type PolygonCoordinates } from '../lib/roofGeometry';
-import type { ClimatePanelsGeoJson } from '../types/climateBundle';
+import type { ClimatePanelsGeoJson, ClimateRoofPolygon4326 } from '../types/climateBundle';
 
 type ClimatePanelTone = 'good' | 'medium' | 'high';
 
@@ -40,6 +40,7 @@ type ClimatePanelLayerSource = 'climate-live' | 'static-poc';
 type ClimatePanelLayerProps = {
   map: VWorldMapInstance | null;
   panelsGeojson: ClimatePanelsGeoJson | null;
+  roofPolygon4326?: ClimateRoofPolygon4326 | null;
   pocId: string;
   panelSource: ClimatePanelLayerSource;
   selectedBuildingId?: string | null;
@@ -54,9 +55,11 @@ type AddedVWorldObject = {
   object: unknown;
 };
 
-const CLIMATE_PANEL_ENTITY_PREFIX = 'solarmate-climate-panel-';
+const BACKEND_PANEL_ENTITY_PREFIX = 'solarmate-backend-panel-';
+const LEGACY_CLIMATE_PANEL_ENTITY_PREFIX = 'solarmate-climate-panel-';
 const STATIC_POC_PANEL_ENTITY_PREFIX = 'solarmate-poc-panel-';
-const CLIMATE_PANEL_ENTITY_PREFIXES = [CLIMATE_PANEL_ENTITY_PREFIX, STATIC_POC_PANEL_ENTITY_PREFIX];
+const SELF_PANEL_ENTITY_PREFIX = 'solarmate-self-panel-';
+const BACKEND_ROOF_ENTITY_PREFIX = 'solarmate-backend-roof-';
 const DEFAULT_ROOF_HEIGHT_M = 40;
 const PANEL_CLEARANCE_M = 2;
 const FALLBACK_PANEL_HEIGHT_M = 120;
@@ -109,7 +112,20 @@ function sanitizeEntityIdPart(value: string | null | undefined, fallback: string
 }
 
 function getClimatePanelEntityPrefix(panelSource: ClimatePanelLayerSource) {
-  return panelSource === 'climate-live' ? CLIMATE_PANEL_ENTITY_PREFIX : STATIC_POC_PANEL_ENTITY_PREFIX;
+  return panelSource === 'climate-live' ? BACKEND_PANEL_ENTITY_PREFIX : STATIC_POC_PANEL_ENTITY_PREFIX;
+}
+
+function getClimateCleanupPrefixes(panelSource: ClimatePanelLayerSource, removeSelfPanels: boolean) {
+  if (panelSource === 'climate-live') {
+    return [
+      BACKEND_PANEL_ENTITY_PREFIX,
+      LEGACY_CLIMATE_PANEL_ENTITY_PREFIX,
+      BACKEND_ROOF_ENTITY_PREFIX,
+      ...(removeSelfPanels ? [SELF_PANEL_ENTITY_PREFIX] : []),
+    ];
+  }
+
+  return [STATIC_POC_PANEL_ENTITY_PREFIX];
 }
 
 function createClimatePanelEntityId({
@@ -126,13 +142,28 @@ function createClimatePanelEntityId({
   index: number;
 }) {
   if (panelSource === 'climate-live') {
-    return `${CLIMATE_PANEL_ENTITY_PREFIX}${sanitizeEntityIdPart(
+    return `${BACKEND_PANEL_ENTITY_PREFIX}${sanitizeEntityIdPart(
       selectedBuildingId,
       'selected',
     )}-${sanitizeEntityIdPart(selectedAnalysisSessionId, 'session')}-${index}`;
   }
 
   return `${STATIC_POC_PANEL_ENTITY_PREFIX}${sanitizeEntityIdPart(pocId, 'sample')}-${index}`;
+}
+
+function createBackendRoofEntityId({
+  selectedBuildingId,
+  selectedAnalysisSessionId,
+  part,
+}: {
+  selectedBuildingId?: string | null;
+  selectedAnalysisSessionId?: string | null;
+  part: 'fill' | 'outline' | 'label' | 'layer';
+}) {
+  return `${BACKEND_ROOF_ENTITY_PREFIX}${sanitizeEntityIdPart(selectedBuildingId, 'selected')}-${sanitizeEntityIdPart(
+    selectedAnalysisSessionId,
+    'session',
+  )}-${part}`;
 }
 
 function isCoordinate(value: unknown): value is Coordinate {
@@ -184,10 +215,22 @@ function normalizeClimatePanels(panelsGeojson: ClimatePanelsGeoJson | null): Cli
   );
 }
 
-function getPanelHeightM(viewer: CesiumViewerLike | null, panelPolygons: ClimatePanelPolygon[], roofHeightM?: number | null) {
+function normalizeBackendRoofPolygon(roofPolygon4326: ClimateRoofPolygon4326 | null | undefined): PolygonCoordinates | null {
+  const ring = roofPolygon4326?.coordinates?.[0];
+  const polygon = Array.isArray(ring) ? ring.filter(isCoordinate).map(([lon, lat]) => [lon, lat] as Coordinate) : [];
+
+  return polygon.length >= 4 ? closePolygon(polygon) : null;
+}
+
+function getPanelHeightM(
+  viewer: CesiumViewerLike | null,
+  panelPolygons: ClimatePanelPolygon[],
+  roofHeightM?: number | null,
+  fallbackPolygon?: PolygonCoordinates | null,
+) {
   const resolvedRoofHeight =
     typeof roofHeightM === 'number' && Number.isFinite(roofHeightM) && roofHeightM > 0 ? roofHeightM : DEFAULT_ROOF_HEIGHT_M;
-  const firstPolygon = panelPolygons[0]?.polygon ?? null;
+  const firstPolygon = panelPolygons[0]?.polygon ?? fallbackPolygon ?? null;
   const centroid = firstPolygon ? getPolygonCentroid(firstPolygon) : null;
   const terrainHeightM = getTerrainHeightM(viewer, centroid);
 
@@ -235,8 +278,6 @@ function addClimatePanelsWithCesium({
   if (!cesium?.Cartesian3?.fromDegreesArrayHeights || !entities?.add) {
     return null;
   }
-
-  removeCesiumEntitiesByIdPrefix(viewer, CLIMATE_PANEL_ENTITY_PREFIXES);
 
   const addEntity = entities.add.bind(entities);
   const addedEntities: unknown[] = [];
@@ -307,7 +348,123 @@ function addClimatePanelsWithCesium({
           // Cleanup is best-effort across VWorld/Cesium builds.
         }
       });
-      removeCesiumEntitiesByIdPrefix(viewer, CLIMATE_PANEL_ENTITY_PREFIXES);
+      removeCesiumEntitiesByIdPrefix(viewer, [getClimatePanelEntityPrefix(panelSource), LEGACY_CLIMATE_PANEL_ENTITY_PREFIX]);
+      viewer.scene?.requestRender?.();
+    },
+  };
+}
+
+function addBackendRoofPolygonWithCesium({
+  viewer,
+  roofPolygon,
+  heightM,
+  selectedBuildingId,
+  selectedAnalysisSessionId,
+}: {
+  viewer: CesiumViewerLike;
+  roofPolygon: PolygonCoordinates;
+  heightM: number;
+  selectedBuildingId?: string | null;
+  selectedAnalysisSessionId?: string | null;
+}) {
+  const cesium = getCesiumSdk();
+  const entities = viewer.entities;
+
+  if (!cesium?.Cartesian3?.fromDegreesArrayHeights || !entities?.add) {
+    return null;
+  }
+
+  const closedPolygon = closePolygon(roofPolygon);
+  const fillId = createBackendRoofEntityId({ selectedBuildingId, selectedAnalysisSessionId, part: 'fill' });
+  const outlineId = createBackendRoofEntityId({ selectedBuildingId, selectedAnalysisSessionId, part: 'outline' });
+  const labelId = createBackendRoofEntityId({ selectedBuildingId, selectedAnalysisSessionId, part: 'label' });
+  const positions = cesium.Cartesian3.fromDegreesArrayHeights(createLonLatHeightArray(closedPolygon, heightM + 1.2));
+  const hierarchy = cesium.PolygonHierarchy ? new cesium.PolygonHierarchy(positions) : positions;
+  const outlineColor = createCesiumColor('#d946ef', 1);
+  const dashedOutlineMaterial = cesium.PolylineDashMaterialProperty
+    ? new cesium.PolylineDashMaterialProperty({
+        color: outlineColor,
+        dashLength: 18,
+      })
+    : outlineColor;
+  const addEntity = entities.add.bind(entities);
+  const addedEntities: unknown[] = [];
+  const heightReferenceNone = cesium.HeightReference?.NONE;
+
+  entities.removeById?.(fillId);
+  entities.removeById?.(outlineId);
+  entities.removeById?.(labelId);
+
+  const fillEntity = addEntity({
+    id: fillId,
+    polygon: {
+      hierarchy,
+      perPositionHeight: true,
+      material: createCesiumColor('#d946ef', 0.08),
+      outline: false,
+      ...(heightReferenceNone !== undefined ? { heightReference: heightReferenceNone } : {}),
+    },
+  });
+  const outlineEntity = addEntity({
+    id: outlineId,
+    polyline: {
+      positions,
+      width: 4,
+      material: dashedOutlineMaterial,
+      clampToGround: false,
+      depthFailMaterial: dashedOutlineMaterial,
+      ...(heightReferenceNone !== undefined ? { heightReference: heightReferenceNone } : {}),
+    },
+  });
+
+  if (fillEntity) {
+    addedEntities.push(fillEntity);
+  }
+
+  if (outlineEntity) {
+    addedEntities.push(outlineEntity);
+  }
+
+  if (cesium.Cartesian3?.fromDegrees) {
+    const centroid = getPolygonCentroid(closedPolygon);
+    const labelEntity = addEntity({
+      id: labelId,
+      position: cesium.Cartesian3.fromDegrees(centroid[0], centroid[1], heightM + 16),
+      label: {
+        text: '백엔드 분석 roof polygon',
+        fillColor: cesium.Color?.WHITE,
+        showBackground: true,
+        backgroundColor: createCesiumColor('#86198f', 0.86),
+        font: '700 13px sans-serif',
+        pixelOffset: cesium.Cartesian2 ? new cesium.Cartesian2(0, -18) : undefined,
+        horizontalOrigin: cesium.HorizontalOrigin?.CENTER,
+        verticalOrigin: cesium.VerticalOrigin?.BOTTOM,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        ...(heightReferenceNone !== undefined ? { heightReference: heightReferenceNone } : {}),
+      },
+    });
+
+    if (labelEntity) {
+      addedEntities.push(labelEntity);
+    }
+  }
+
+  viewer.scene?.requestRender?.();
+
+  return {
+    addedCount: addedEntities.length,
+    renderMethod: 'Cesium entities',
+    viewerDebugId: getViewerDebugId(viewer),
+    viewerEntityCount: getCesiumEntityCount(viewer),
+    cleanup: () => {
+      addedEntities.forEach((entity) => {
+        try {
+          entities.remove?.(entity);
+        } catch {
+          // Cleanup is best-effort across VWorld/Cesium builds.
+        }
+      });
+      removeCesiumEntitiesByIdPrefix(viewer, [BACKEND_ROOF_ENTITY_PREFIX]);
       viewer.scene?.requestRender?.();
     },
   };
@@ -484,9 +641,89 @@ function addClimatePanelsWithVWorld({
   };
 }
 
+function createVWorldBackendRoofStyle() {
+  const vw = window.vw;
+
+  if (!vw?.style?.Style || !vw.style.Fill || !vw.style.Stroke) {
+    return undefined;
+  }
+
+  const style = new vw.style.Style();
+  const fill = new vw.style.Fill('rgba(217, 70, 239, 0.06)');
+  const stroke = new vw.style.Stroke('#d946ef');
+
+  stroke.setWidth?.(4);
+  fill.setStroke?.(stroke);
+  style.fill = fill;
+  style.stroke = stroke;
+
+  return style;
+}
+
+function addBackendRoofPolygonWithVWorld({
+  map,
+  roofPolygon,
+  heightM,
+  selectedBuildingId,
+  selectedAnalysisSessionId,
+}: {
+  map: VWorldMapInstance;
+  roofPolygon: PolygonCoordinates;
+  heightM: number;
+  selectedBuildingId?: string | null;
+  selectedAnalysisSessionId?: string | null;
+}) {
+  const id = createBackendRoofEntityId({ selectedBuildingId, selectedAnalysisSessionId, part: 'fill' });
+  const layerId = createBackendRoofEntityId({ selectedBuildingId, selectedAnalysisSessionId, part: 'layer' });
+  const labelId = createBackendRoofEntityId({ selectedBuildingId, selectedAnalysisSessionId, part: 'label' });
+
+  try {
+    map.removeObjectById?.(id);
+    map.removeObjectById?.(layerId);
+    map.removeObjectById?.(labelId);
+    map.removeLayerElement?.(layerId);
+  } catch {
+    // Duplicate prevention is best-effort across SDK builds.
+  }
+
+  const style = createVWorldBackendRoofStyle();
+  const feature = createVWorldFeature(id, { polygon: roofPolygon, shadingScore: 0, tone: 'medium' }, heightM);
+  feature.feature.setStyle?.(style);
+  const addedObject = addFeatureToMap(map, layerId, feature.feature, style);
+  const centroid = getPolygonCentroid(roofPolygon);
+
+  try {
+    map.createMarker?.(labelId, new window.vw.CoordZ(centroid[0], centroid[1], heightM + 12), '백엔드 분석 roof polygon');
+  } catch {
+    // Label support differs across VWorld builds; the polygon outline remains available.
+  }
+
+  return {
+    addedCount: addedObject ? 1 : 0,
+    renderMethod: 'VWorld Feature layer',
+    viewerDebugId: null,
+    viewerEntityCount: null,
+    cleanup: () => {
+      if (addedObject) {
+        removeVWorldObject(map, addedObject);
+      }
+
+      try {
+        map.removeObjectById?.(id);
+        map.removeObjectById?.(layerId);
+        map.removeObjectById?.(labelId);
+        map.removeLayerElement?.(layerId);
+      } catch {
+        // Cleanup should not break React rendering.
+      }
+    },
+  };
+}
+
 function ClimatePanelLayer({
   map,
   panelsGeojson,
+  roofPolygon4326,
   pocId,
   panelSource,
   selectedBuildingId,
@@ -497,15 +734,18 @@ function ClimatePanelLayer({
 }: ClimatePanelLayerProps) {
   const cleanupRef = useRef<(() => void) | null>(null);
   const panelPolygons = useMemo(() => normalizeClimatePanels(panelsGeojson), [panelsGeojson]);
+  const backendRoofPolygon = useMemo(() => normalizeBackendRoofPolygon(roofPolygon4326), [roofPolygon4326]);
 
   useEffect(() => {
     cleanupRef.current?.();
     cleanupRef.current = null;
     const identity = { selectedBuildingId: selectedBuildingId ?? null, selectedAnalysisSessionId: selectedAnalysisSessionId ?? null };
     const cleanupViewer = map ? findVisibleCesiumViewer(map) : null;
+    const cleanupPrefixes = getClimateCleanupPrefixes(panelSource, panelPolygons.length > 0);
+    const shouldRenderBackendRoofPolygon = panelSource === 'climate-live' && Boolean(backendRoofPolygon);
 
     if (cleanupViewer) {
-      removeCesiumEntitiesByIdPrefix(cleanupViewer, CLIMATE_PANEL_ENTITY_PREFIXES);
+      removeCesiumEntitiesByIdPrefix(cleanupViewer, cleanupPrefixes);
     }
 
     if (!visible) {
@@ -513,7 +753,7 @@ function ClimatePanelLayer({
       return undefined;
     }
 
-    if (panelPolygons.length === 0) {
+    if (panelPolygons.length === 0 && !shouldRenderBackendRoofPolygon) {
       onStatusChange(
         createStatus('fallback', 'climate.gg POC 패널 GeoJSON에서 표시 가능한 Polygon feature가 없습니다.', [], {}, identity),
       );
@@ -537,8 +777,8 @@ function ClimatePanelLayer({
 
     try {
       const cesiumViewer = findVisibleCesiumViewer(map);
-      const heightM = getPanelHeightM(cesiumViewer, panelPolygons, roofHeightM);
-      const cesiumResult = cesiumViewer
+      const heightM = getPanelHeightM(cesiumViewer, panelPolygons, roofHeightM, backendRoofPolygon);
+      const cesiumResult = cesiumViewer && panelPolygons.length > 0
         ? addClimatePanelsWithCesium({
             viewer: cesiumViewer,
             panelPolygons,
@@ -549,8 +789,18 @@ function ClimatePanelLayer({
             selectedAnalysisSessionId,
           })
         : null;
+      const cesiumRoofResult = cesiumViewer && shouldRenderBackendRoofPolygon && backendRoofPolygon
+        ? addBackendRoofPolygonWithCesium({
+            viewer: cesiumViewer,
+            roofPolygon: backendRoofPolygon,
+            heightM,
+            selectedBuildingId,
+            selectedAnalysisSessionId,
+          })
+        : null;
+      const hasCesiumVisuals = Boolean((cesiumResult?.addedCount ?? 0) + (cesiumRoofResult?.addedCount ?? 0));
       const vworldResult =
-        cesiumResult && cesiumResult.addedCount > 0
+        hasCesiumVisuals || panelPolygons.length === 0
           ? null
           : addClimatePanelsWithVWorld({
               map,
@@ -561,25 +811,44 @@ function ClimatePanelLayer({
               selectedBuildingId,
               selectedAnalysisSessionId,
             });
-      const renderResult = cesiumResult && cesiumResult.addedCount > 0 ? cesiumResult : vworldResult;
+      const vworldRoofResult =
+        hasCesiumVisuals || !shouldRenderBackendRoofPolygon || !backendRoofPolygon
+          ? null
+          : addBackendRoofPolygonWithVWorld({
+              map,
+              roofPolygon: backendRoofPolygon,
+              heightM,
+              selectedBuildingId,
+              selectedAnalysisSessionId,
+            });
+      const panelRenderResult = cesiumResult && cesiumResult.addedCount > 0 ? cesiumResult : vworldResult;
+      const roofRenderResult = cesiumRoofResult && cesiumRoofResult.addedCount > 0 ? cesiumRoofResult : vworldRoofResult;
+      const renderedPanelCount = panelRenderResult?.addedCount ?? 0;
+      const renderedRoofCount = roofRenderResult?.addedCount ?? 0;
 
-      if (!renderResult || renderResult.addedCount === 0) {
+      if (renderedPanelCount + renderedRoofCount === 0) {
         onStatusChange(createStatus('fallback', CONSTRUCTOR_ERROR_MESSAGE, panelPolygons, {}, identity));
         return undefined;
       }
 
-      const cleanup = renderResult.cleanup;
+      const cleanup = () => {
+        panelRenderResult?.cleanup();
+        roofRenderResult?.cleanup();
+      };
+      const renderMethod = Array.from(
+        new Set([panelRenderResult?.renderMethod, roofRenderResult?.renderMethod].filter(Boolean)),
+      ).join(' + ');
       cleanupRef.current = cleanup;
       onStatusChange({
         state: 'rendered',
-        message: `climate.gg POC 패널 ${renderResult.addedCount.toLocaleString('ko-KR')}개를 ${renderResult.renderMethod} 방식으로 표시했습니다.`,
+        message: `climate.gg 패널 ${renderedPanelCount.toLocaleString('ko-KR')}개와 백엔드 roof polygon 검증 레이어를 ${renderMethod} 방식으로 표시했습니다.`,
         climatePanelFeatureCount: panelPolygons.length,
-        climatePanelEntityCount: renderResult.addedCount,
+        climatePanelEntityCount: renderedPanelCount,
         firstPanelCoordinates: panelPolygons[0]?.polygon ?? null,
         climatePanelRenderStatus: 'rendered',
-        renderMethod: renderResult.renderMethod,
-        viewerDebugId: renderResult.viewerDebugId,
-        viewerEntityCount: renderResult.viewerEntityCount,
+        renderMethod,
+        viewerDebugId: panelRenderResult?.viewerDebugId ?? roofRenderResult?.viewerDebugId ?? null,
+        viewerEntityCount: panelRenderResult?.viewerEntityCount ?? roofRenderResult?.viewerEntityCount ?? null,
         ...identity,
       });
 
@@ -595,6 +864,7 @@ function ClimatePanelLayer({
     }
   }, [
     map,
+    backendRoofPolygon,
     onStatusChange,
     panelPolygons,
     panelSource,

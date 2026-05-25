@@ -7,6 +7,7 @@ class ClimateAnalysisRequest(BaseModel):
     longitude: float
     latitude: float
     selectedBuildingId: Optional[str] = None
+    selectedAnalysisSessionId: Optional[str] = None
     selectedBuildingFeature: Optional[dict[str, Any]] = None
     panelCapacityW: int = 640
     panelAngle: int = 35
@@ -18,8 +19,12 @@ class ClimateAnalysisRequest(BaseModel):
 class ClimateAnalysisResponse(BaseModel):
     ok: bool
     source: str = "external-fastapi-climate-backend"
+    selectedBuildingId: Optional[str] = None
+    selectedAnalysisSessionId: Optional[str] = None
     message: Optional[str] = None
     roofSource: Optional[str] = None
+    roofPolygon4326: Optional[dict[str, Any]] = None
+    roofAreaM2: Optional[float] = None
     bundle: Optional[dict[str, Any]] = None
     panelsGeojson: Optional[dict[str, Any]] = None
     fallbackRecommended: bool = False

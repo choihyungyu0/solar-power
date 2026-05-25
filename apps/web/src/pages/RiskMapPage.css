@@ -351,6 +351,19 @@
   background: #ef4444;
 }
 
+.legendDot-selectedFootprint {
+  background: #ef4444;
+}
+
+.legendDot-backendRoof {
+  border: 2px dashed #d946ef;
+  background: transparent;
+}
+
+.legendDot-climateCells {
+  background: linear-gradient(90deg, #16a34a 0 33%, #facc15 33% 66%, #ef4444 66% 100%);
+}
+
 .mapStateOverlay {
   position: absolute;
   inset: 50%;

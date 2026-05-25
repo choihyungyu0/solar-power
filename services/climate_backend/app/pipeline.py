@@ -90,6 +90,7 @@ def create_request_diagnostics(request) -> dict[str, Any]:
     return {
         "hasSelectedBuildingFeature": bool(selected_building_feature),
         "selectedBuildingId": getattr(request, "selectedBuildingId", None),
+        "selectedAnalysisSessionId": getattr(request, "selectedAnalysisSessionId", None),
         "geometryType": geometry.get("type") if geometry else None,
         "coordinateSample": _coordinate_sample_from_geometry(geometry),
         "mode": getattr(request, "mode", None),
@@ -111,6 +112,8 @@ def _pipeline_error_response(step: str, started: float, diagnostics: dict[str, A
     return {
         "ok": False,
         "source": PIPELINE_SOURCE,
+        "selectedBuildingId": diagnostics.get("selectedBuildingId"),
+        "selectedAnalysisSessionId": diagnostics.get("selectedAnalysisSessionId"),
         "fallbackRecommended": True,
         "message": f"백엔드 climate 분석 중 {step} 단계에서 오류가 발생했습니다.",
         "errorType": type(error).__name__,
@@ -205,10 +208,14 @@ def normalize_backend_pv_output(raw: Any, panel_capacity_w: int, panel_count: in
 async def run_hybrid_pipeline(request):
     started = time.time()
     step = "validate-request"
+    selected_building_id = getattr(request, "selectedBuildingId", None)
+    selected_analysis_session_id = getattr(request, "selectedAnalysisSessionId", None)
+    roof_source = "vworld-building-footprint-fallback"
     diagnostics = {
         **create_request_diagnostics(request),
         "step": step,
         "elapsedMs": 0,
+        "roofSource": roof_source,
     }
 
     try:
@@ -227,6 +234,7 @@ async def run_hybrid_pipeline(request):
         diagnostics["geometryTypeBefore"] = geometry.get("type")
         roof_4326 = normalize_geojson_polygon_4326(geometry)
         diagnostics["geometryTypeAfter"] = roof_4326.geom_type
+        diagnostics["roofGeometryType"] = roof_4326.geom_type
 
         step = "project-geometry"
         diagnostics["step"] = step
@@ -307,12 +315,25 @@ async def run_hybrid_pipeline(request):
         diagnostics["step"] = step
         roof_4326_result = geom_5186_to_4326(roof_5186)
         panels_geojson = cells_to_geojson_4326(cells, shading)
+        roof_polygon_4326 = mapping(roof_4326_result)
+        first_panel_coordinates = None
+
+        if panels_geojson["features"]:
+            first_panel_coordinates = panels_geojson["features"][0]["geometry"]["coordinates"]
+
+        diagnostics["selectedBuildingId"] = selected_building_id
+        diagnostics["selectedAnalysisSessionId"] = selected_analysis_session_id
+        diagnostics["roofSource"] = roof_source
+        diagnostics["roofAreaM2"] = round(roof_area, 2)
+        diagnostics["firstPanelCoordinates"] = first_panel_coordinates
+        diagnostics["panelCount"] = panel_count
+        diagnostics["shadingAverage"] = sun["score_mean"]
 
         step = "build-bundle"
         diagnostics["step"] = step
         bundle = {
             "meta": {
-                "unq_id": request.selectedBuildingId,
+                "unq_id": selected_building_id,
                 "bldg_nm": None,
                 "bldg_hgt": None,
                 "bdar": None,
@@ -325,7 +346,7 @@ async def run_hybrid_pipeline(request):
                     "latitude": request.latitude,
                 },
             },
-            "roof_polygon_4326": mapping(roof_4326_result),
+            "roof_polygon_4326": roof_polygon_4326,
             "roof_area_sqm_5186": round(roof_area, 2),
             "shading": {
                 "cell_w_m": 1,
@@ -356,7 +377,11 @@ async def run_hybrid_pipeline(request):
         return {
             "ok": True,
             "source": PIPELINE_SOURCE,
-            "roofSource": "vworld-building-footprint-fallback",
+            "selectedBuildingId": selected_building_id,
+            "selectedAnalysisSessionId": selected_analysis_session_id,
+            "roofSource": roof_source,
+            "roofPolygon4326": roof_polygon_4326,
+            "roofAreaM2": round(roof_area, 2),
             "bundle": bundle,
             "panelsGeojson": panels_geojson,
             "diagnostics": diagnostics,
