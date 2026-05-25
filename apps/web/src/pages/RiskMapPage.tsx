@@ -100,6 +100,7 @@ import {
   buildStoredSimulationResult,
   saveSimulationResultToSession,
 } from '../lib/simulationResultStorage';
+import { isSimulationAiResult, type SimulationAiResult } from '../lib/simulationAiResult';
 import type {
   ClimateBundle,
   ClimateLiveAnalysisDiagnostics,
@@ -1328,6 +1329,7 @@ function RiskMapPage() {
   const [liveClimatePanelGeojson, setLiveClimatePanelGeojson] = useState<ClimatePanelsGeoJson | null>(null);
   const [liveBackendRoofPolygon4326, setLiveBackendRoofPolygon4326] = useState<ClimateRoofPolygon4326 | null>(null);
   const [liveClimateDiagnostics, setLiveClimateDiagnostics] = useState<ClimateLiveAnalysisDiagnostics | null>(null);
+  const [aiSimulationResult, setAiSimulationResult] = useState<SimulationAiResult | null>(null);
   const [cameraMoveStatus, setCameraMoveStatus] = useState('climate.gg POC 패널 위치 계산 대기');
   const panelVisibilityUserOverrideRef = useRef(false);
   const climateFocusPocRef = useRef<string | null>(null);
@@ -1549,6 +1551,12 @@ function RiskMapPage() {
     liveClimatePanelFeatureCount > 0 &&
     Boolean(liveClimateBundle);
   const activeClimateBundle = hasLiveClimatePanelLayout ? liveClimateBundle : null;
+  const activeBundleAiResult = isSimulationAiResult(activeClimateBundle?.ai_simulation_result)
+    ? activeClimateBundle.ai_simulation_result
+    : null;
+  const activeAiSimulationResult = aiSimulationResult ?? activeBundleAiResult;
+  const aiSuitabilityReasons = activeAiSimulationResult?.suitability.reasons.slice(0, 3) ?? [];
+  const aiSuitabilityWarnings = activeAiSimulationResult?.suitability.warnings ?? [];
   const activeClimatePanelGeojson = hasLiveClimatePanelLayout
     ? liveClimatePanelGeojson
     : hasStaticClimatePanelLayout
@@ -1827,6 +1835,7 @@ function RiskMapPage() {
     setLiveClimateBundle(null);
     setLiveClimatePanelGeojson(null);
     setLiveBackendRoofPolygon4326(null);
+    setAiSimulationResult(null);
     setPvAnalysisStatus('idle');
     setPvAnalysisMessage('');
     setPvAnalysisResponse(null);
@@ -2047,6 +2056,7 @@ function RiskMapPage() {
       setLiveClimateBundle(null);
       setLiveClimatePanelGeojson(null);
       setLiveBackendRoofPolygon4326(null);
+      setAiSimulationResult(null);
       panelVisibilityUserOverrideRef.current = false;
       setIsSolarPanelLayerVisible(activeTabRef.current === 'solar' && panelPolygons.length > 0);
       setMapFocusStatus({
@@ -2329,6 +2339,7 @@ function RiskMapPage() {
     setLiveClimateBundle(null);
     setLiveClimatePanelGeojson(null);
     setLiveBackendRoofPolygon4326(null);
+    setAiSimulationResult(null);
 
     const dataId = getConfiguredVWorldBuildingDataId();
     const buffer = 10;
@@ -2682,6 +2693,7 @@ function RiskMapPage() {
       },
       liveClimateBundle:
         liveClimateStatus === 'success' && liveClimateBundle?.pv_analysis_output ? liveClimateBundle : null,
+      aiSimulationResult: activeAiSimulationResult,
       pvAnalysisResult,
       selectedEstimate: {
         panelCount: selectedBuilding.estimatedPanelCount,
@@ -2701,6 +2713,7 @@ function RiskMapPage() {
     );
     window.location.assign('/simulation/setup');
   }, [
+    activeAiSimulationResult,
     liveClimateBundle,
     liveClimateStatus,
     overviewInvestmentKrw,
@@ -2815,6 +2828,7 @@ function RiskMapPage() {
     setLiveClimateBundle(null);
     setLiveClimatePanelGeojson(null);
     setLiveBackendRoofPolygon4326(null);
+    setAiSimulationResult(null);
     setPvAnalysisStatus('idle');
     setPvAnalysisMessage('');
     setPvAnalysisResponse(null);
@@ -2941,6 +2955,7 @@ function RiskMapPage() {
       setLiveClimateDiagnostics(backendAcceptanceDiagnostics);
       setLiveClimateBundle(null);
       setLiveClimatePanelGeojson(null);
+      setAiSimulationResult(null);
       setPvAnalysisStatus('idle');
       setPvAnalysisMessage(fallbackMessage);
       setAnalysisStatus(fallbackMessage);
@@ -2964,6 +2979,11 @@ function RiskMapPage() {
       fallbackPanelType: livePanelType,
     });
     const nextPvResponse = backendPvResult.response;
+    const nextAiSimulationResult: SimulationAiResult | null = isSimulationAiResult(response.aiSimulationResult)
+      ? response.aiSimulationResult ?? null
+      : isSimulationAiResult(response.bundle.ai_simulation_result)
+        ? response.bundle.ai_simulation_result ?? null
+        : null;
 
     setLiveShadingStatus('success');
     setLiveClimateStatus('success');
@@ -2984,6 +3004,7 @@ function RiskMapPage() {
     });
     setLiveClimateBundle(response.bundle);
     setLiveClimatePanelGeojson(clippedPanelResult.panelsGeojson);
+    setAiSimulationResult(nextAiSimulationResult);
     setIsSolarPanelLayerVisible(true);
     setPvAnalysisResponse(nextPvResponse);
     setPvAnalysisStatus(backendPvResult.status);
@@ -2997,6 +3018,7 @@ function RiskMapPage() {
         buildingId: selectedBuildingFootprint?.buildingId ?? 'demo-building',
       },
       liveClimateBundle: response.bundle.pv_analysis_output ? response.bundle : null,
+      aiSimulationResult: nextAiSimulationResult,
       pvAnalysisResult: nextPvResponse.result,
       selectedEstimate: {
         panelCount: selectedBuilding.estimatedPanelCount,
@@ -3016,6 +3038,11 @@ function RiskMapPage() {
       bundle: ClimateBundle;
       panelsGeojson: ClimatePanelsGeoJson;
     };
+    const legacyAiSimulationResult: SimulationAiResult | null = isSimulationAiResult(response.aiSimulationResult)
+      ? response.aiSimulationResult ?? null
+      : isSimulationAiResult(legacyLiveResponse.bundle.ai_simulation_result)
+        ? legacyLiveResponse.bundle.ai_simulation_result ?? null
+        : null;
 
     const liveCompletionMessage = 'AI 음영 분석 완료';
     const pvInput: PvAnalysisInput = {
@@ -3053,6 +3080,7 @@ function RiskMapPage() {
     setLiveClimateDiagnostics(response.diagnostics);
     setLiveClimateBundle(legacyLiveResponse.bundle);
     setLiveClimatePanelGeojson(legacyLiveResponse.panelsGeojson);
+    setAiSimulationResult(legacyAiSimulationResult);
     setIsSolarPanelLayerVisible(true);
     setPvAnalysisStatus('calculating');
     setPvAnalysisMessage('발전량 계산 중...');
@@ -3117,6 +3145,7 @@ function RiskMapPage() {
         buildingId: selectedBuildingFootprint?.buildingId ?? 'demo-building',
       },
       liveClimateBundle: legacyLiveResponse.bundle.pv_analysis_output ? legacyLiveResponse.bundle : null,
+      aiSimulationResult: legacyAiSimulationResult,
       pvAnalysisResult: nextPvResponse.result,
       selectedEstimate: {
         panelCount: selectedBuilding.estimatedPanelCount,
@@ -4776,6 +4805,51 @@ function RiskMapPage() {
                     )}
                   </dl>
                 </div>
+              )}
+
+              {activeAiSimulationResult && (
+                <section className="aiSuitabilityCard" aria-label="AI 설치 적합도">
+                  <div className="aiSuitabilityHeader">
+                    <div>
+                      <span>설명형 AI 점수화</span>
+                      <strong>AI 설치 적합도</strong>
+                    </div>
+                    <div className="aiSuitabilityScore">
+                      <strong>{activeAiSimulationResult.suitability.score}</strong>
+                      <span>{activeAiSimulationResult.suitability.grade}</span>
+                    </div>
+                  </div>
+
+                  <p className="aiSuitabilityLabel">{activeAiSimulationResult.suitability.label}</p>
+
+                  {aiSuitabilityReasons.length > 0 && (
+                    <div className="aiSuitabilityList">
+                      <span>주요 근거</span>
+                      <ul>
+                        {aiSuitabilityReasons.map((reason) => (
+                          <li key={reason}>{reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="aiSuitabilityList">
+                    <span>주의 항목</span>
+                    {aiSuitabilityWarnings.length > 0 ? (
+                      <ul>
+                        {aiSuitabilityWarnings.map((warning) => (
+                          <li key={warning}>{warning}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>현재 자동 경고는 없지만 실제 설치 전 현장 검토가 필요합니다.</p>
+                    )}
+                  </div>
+
+                  <p className="aiSuitabilityNote">
+                    초기 MVP에서는 공공데이터와 음영 분석 결과 기반 설명형 AI 점수화 모델을 사용합니다.
+                  </p>
+                </section>
               )}
 
               <dl className="buildingInfoList solarInfoList">

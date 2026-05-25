@@ -1110,6 +1110,94 @@
   background: #fffaf5;
 }
 
+.aiSuitabilityCard {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  border: 1px solid rgba(22, 163, 74, 0.22);
+  border-radius: 14px;
+  padding: 16px;
+  background: #ffffff;
+}
+
+.aiSuitabilityHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.aiSuitabilityHeader span,
+.aiSuitabilityList span {
+  color: #15803d;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.aiSuitabilityHeader strong {
+  display: block;
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.aiSuitabilityScore {
+  min-width: 86px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #ecfdf3;
+}
+
+.aiSuitabilityScore strong {
+  margin: 0;
+  color: #166534;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.aiSuitabilityScore span {
+  margin-top: 4px;
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.aiSuitabilityLabel {
+  margin: 0;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.aiSuitabilityList {
+  display: grid;
+  gap: 7px;
+}
+
+.aiSuitabilityList ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.aiSuitabilityList p,
+.aiSuitabilityNote {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 .pvAnalysisPanelHeader {
   display: grid;
   gap: 7px;

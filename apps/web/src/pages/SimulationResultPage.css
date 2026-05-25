@@ -189,6 +189,7 @@
 }
 
 .resultAddressSummary,
+.aiAnalysisReport,
 .resultMetricSection,
 .ecoResultCard,
 .resultChartCard,
@@ -278,6 +279,126 @@
   border: 1px solid #cbb8ff;
   background: #f2edff;
   color: #5b21b6;
+}
+
+.aiAnalysisReport {
+  display: grid;
+  gap: 14px;
+  padding: 18px 20px;
+}
+
+.aiReportHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.aiReportHeader span {
+  color: #15803d;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.aiReportHeader h2 {
+  margin: 4px 0 0;
+  color: #0f172a;
+  font-size: 20px;
+  font-weight: 950;
+}
+
+.aiReportHeader > strong {
+  min-width: 84px;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #ecfdf3;
+  color: #166534;
+  font-size: 24px;
+  font-weight: 950;
+  text-align: center;
+}
+
+.aiReportSummary {
+  margin: 0;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.aiReportGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.aiReportGrid div {
+  min-width: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.aiReportGrid dt {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.aiReportGrid dd {
+  margin: 5px 0 0;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1.45;
+}
+
+.aiReportList {
+  display: grid;
+  gap: 8px;
+}
+
+.aiReportList strong {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.aiReportList ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.agentPayloadPreview {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 12px;
+}
+
+.agentPayloadPreview summary {
+  cursor: pointer;
+  color: #166534;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.agentPayloadPreview pre {
+  max-height: 300px;
+  overflow: auto;
+  margin: 10px 0 0;
+  border-radius: 8px;
+  padding: 12px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .resultMetricSection {

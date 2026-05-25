@@ -27,6 +27,7 @@ class ClimateAnalysisResponse(BaseModel):
     roofAreaM2: Optional[float] = None
     bundle: Optional[dict[str, Any]] = None
     panelsGeojson: Optional[dict[str, Any]] = None
+    aiSimulationResult: Optional[dict[str, Any]] = None
     fallbackRecommended: bool = False
     diagnostics: dict[str, Any] = Field(default_factory=dict)
 

@@ -1,5 +1,10 @@
 import type { ClimateBundle } from '../types/climateBundle';
 import type { PvAnalysisResult } from '../types/pvAnalysis';
+import {
+  isSimulationAiResult,
+  type SimulationAiAgentPayload,
+  type SimulationAiResult,
+} from './simulationAiResult';
 
 export const SELECTED_SIMULATION_RESULT_STORAGE_KEY = 'solarmate:selectedSimulationResult';
 
@@ -37,11 +42,14 @@ export type StoredSimulationResult = {
   solar: StoredSimulationSolar;
   source: SimulationResultSource;
   storedAt: string;
+  aiSimulationResult?: SimulationAiResult | null;
+  agentPayload?: SimulationAiAgentPayload | null;
 };
 
 type SimulationResultSnapshotInput = {
   building: Partial<StoredSimulationBuilding>;
   liveClimateBundle?: ClimateBundle | null;
+  aiSimulationResult?: SimulationAiResult | null;
   pvAnalysisResult?: PvAnalysisResult | null;
   selectedEstimate?: Partial<{
     panelCount: number;
@@ -216,6 +224,16 @@ function buildPvSolarPayload(result: PvAnalysisResult, selectedEstimate?: Simula
   );
 }
 
+function resolveSimulationAiResult(input: SimulationResultSnapshotInput) {
+  if (input.aiSimulationResult && isSimulationAiResult(input.aiSimulationResult)) {
+    return input.aiSimulationResult;
+  }
+
+  const bundleAiResult = input.liveClimateBundle?.ai_simulation_result;
+
+  return isSimulationAiResult(bundleAiResult) ? bundleAiResult : null;
+}
+
 export function buildStoredSimulationResult(input: SimulationResultSnapshotInput): StoredSimulationResult {
   const building: StoredSimulationBuilding = {
     name: input.building.name || '선택 아파트',
@@ -224,12 +242,21 @@ export function buildStoredSimulationResult(input: SimulationResultSnapshotInput
     buildingId: input.building.buildingId || 'demo-building',
   };
 
+  const aiSimulationResult = resolveSimulationAiResult(input);
+  const aiPayloadFields = aiSimulationResult
+    ? {
+        aiSimulationResult,
+        agentPayload: aiSimulationResult.agentPayload,
+      }
+    : {};
+
   if (input.liveClimateBundle) {
     return {
       building,
       solar: buildClimateSolarPayload(input.liveClimateBundle, input.selectedEstimate),
       source: 'climate-live-hybrid',
       storedAt: new Date().toISOString(),
+      ...aiPayloadFields,
     };
   }
 
@@ -239,6 +266,7 @@ export function buildStoredSimulationResult(input: SimulationResultSnapshotInput
       solar: buildPvSolarPayload(input.pvAnalysisResult, input.selectedEstimate),
       source: 'pv-analysis',
       storedAt: new Date().toISOString(),
+      ...aiPayloadFields,
     };
   }
 
@@ -247,6 +275,7 @@ export function buildStoredSimulationResult(input: SimulationResultSnapshotInput
     solar: buildSolarPayload({}, input.selectedEstimate),
     source: 'demo',
     storedAt: new Date().toISOString(),
+    ...aiPayloadFields,
   };
 }
 

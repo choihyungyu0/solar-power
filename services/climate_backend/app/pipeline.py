@@ -4,6 +4,7 @@ from typing import Any
 
 from shapely.geometry import mapping
 
+from .ai_simulation import build_ai_simulation_result, calculate_shading_ratios
 from .climate_client import call_pv_analysis, call_select_sun_list
 from .geometry import (
     cell_to_geojson_polygon_4326,
@@ -81,6 +82,27 @@ def _coordinate_sample_from_geometry(geometry: dict[str, Any] | None):
                 return sample
 
     return None
+
+
+def _read_feature_property(feature: dict[str, Any] | None, keys: list[str], fallback: str = ""):
+    if not isinstance(feature, dict):
+        return fallback
+
+    properties = feature.get("properties")
+
+    if not isinstance(properties, dict):
+        return fallback
+
+    for key in keys:
+        value = properties.get(key)
+
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+        if isinstance(value, (int, float)):
+            return str(value)
+
+    return fallback
 
 
 def create_request_diagnostics(request) -> dict[str, Any]:
@@ -203,6 +225,20 @@ def normalize_backend_pv_output(raw: Any, panel_capacity_w: int, panel_count: in
     data.setdefault("monthly_generation", fallback["monthly_generation"])
 
     return data
+
+
+def _build_monthly_generation_kwh(pv_output: dict[str, Any] | None, annual_generation_kwh: float):
+    if isinstance(pv_output, dict) and isinstance(pv_output.get("monthly_generation"), list):
+        values = []
+
+        for item in pv_output["monthly_generation"]:
+            if isinstance(item, dict):
+                values.append(_coerce_float(item.get("generation"), 0))
+
+        if values:
+            return round(sum(values) / len(values))
+
+    return round(annual_generation_kwh / 12) if annual_generation_kwh > 0 else 0
 
 
 async def run_hybrid_pipeline(request):
@@ -328,6 +364,97 @@ async def run_hybrid_pipeline(request):
         diagnostics["firstPanelCoordinates"] = first_panel_coordinates
         diagnostics["panelCount"] = panel_count
         diagnostics["shadingAverage"] = sun["score_mean"]
+        shading_ratios = calculate_shading_ratios(panels_geojson)
+        expected_revenue = (
+            pv_output.get("expected_revenue")
+            if isinstance(pv_output, dict) and isinstance(pv_output.get("expected_revenue"), dict)
+            else {}
+        )
+        annual_generation_kwh = _coerce_float(
+            pv_output.get("annual_generation_kwh", pv_output.get("annual_generation")) if isinstance(pv_output, dict) else None,
+            0,
+        )
+        annual_saving_krw = _coerce_float(
+            (
+                pv_output.get("annual_saving_krw")
+                if isinstance(pv_output, dict)
+                else None
+            ),
+            _coerce_float(expected_revenue.get("first_year_save_cost"), 0),
+        )
+        estimated_install_cost_krw = _coerce_float(
+            (
+                pv_output.get("expected_investment_krw")
+                if isinstance(pv_output, dict)
+                else None
+            ),
+            _coerce_float(expected_revenue.get("expected_investment"), 0),
+        )
+        install_capacity_kw = _coerce_float(expected_revenue.get("install_kw"), install_kw)
+        monthly_generation_kwh = _build_monthly_generation_kwh(pv_output, annual_generation_kwh)
+        subsidy_estimate_krw = round(min(estimated_install_cost_krw * 0.45, 30_000_000))
+        self_payment_estimate_krw = max(0, round(estimated_install_cost_krw - subsidy_estimate_krw))
+        policy_loan_limit_krw = round(self_payment_estimate_krw * 0.75)
+        payback_years = (
+            round(estimated_install_cost_krw / annual_saving_krw, 1)
+            if annual_saving_krw > 0 and estimated_install_cost_krw > 0
+            else 0
+        )
+        used_cell_count = len(shading)
+        usable_area_m2 = round(used_cell_count * 3.5, 2)
+        ai_input = {
+            "buildingId": selected_building_id,
+            "buildingName": _read_feature_property(
+                selected_building_feature,
+                ["name", "building_name", "bldg_nm", "bldg_name", "apartment_name", "dong_name"],
+                "선택 건물",
+            ),
+            "roadAddress": _read_feature_property(
+                selected_building_feature,
+                ["road_address", "rn_addr", "address", "addr", "bd_addr", "A3", "A4"],
+                "",
+            ),
+            "jibunAddress": _read_feature_property(
+                selected_building_feature,
+                ["jibun_address", "jibun", "address", "addr", "A4"],
+                "",
+            ),
+            "latitude": request.latitude,
+            "longitude": request.longitude,
+            "buildingUsage": _read_feature_property(
+                selected_building_feature,
+                ["buildingUsage", "usage_name", "bldg_usg_cd", "main_purps_cd_nm", "mainPurpsCdNm"],
+                "확인 필요",
+            ),
+            "geometryType": roof_4326.geom_type,
+            "roofAreaM2": round(roof_area, 2),
+            "usableAreaM2": usable_area_m2,
+            "roofSource": roof_source,
+            "isPreciseRoofData": roof_source != "vworld-building-footprint-fallback",
+            "originalCellCount": original_count,
+            "usedCellCount": used_cell_count,
+            "shadingAverage": sun["score_mean"],
+            **shading_ratios,
+            "panelCapacityW": request.panelCapacityW,
+            "panelAngleDeg": request.panelAngle,
+            "panelType": request.panelType,
+            "panelCountCandidate": max(1, original_count // request.cellsPerPanel),
+            "panelCountSelected": panel_count,
+            "installCapacityKw": round(install_capacity_kw, 1),
+            "annualGenerationKwh": round(annual_generation_kwh),
+            "monthlyGenerationKwh": monthly_generation_kwh,
+            "estimatedInstallCostKrw": round(estimated_install_cost_krw),
+            "subsidyEstimateKrw": subsidy_estimate_krw,
+            "annualSavingKrw": round(annual_saving_krw),
+            "policyLoanLimitKrw": policy_loan_limit_krw,
+            "paybackYears": payback_years,
+        }
+        ai_simulation_result = build_ai_simulation_result(ai_input)
+        diagnostics["greenCellRatio"] = shading_ratios["greenCellRatio"]
+        diagnostics["yellowCellRatio"] = shading_ratios["yellowCellRatio"]
+        diagnostics["redCellRatio"] = shading_ratios["redCellRatio"]
+        diagnostics["aiSuitabilityScore"] = ai_simulation_result["suitability"]["score"]
+        diagnostics["aiSuitabilityGrade"] = ai_simulation_result["suitability"]["grade"]
 
         step = "build-bundle"
         diagnostics["step"] = step
@@ -365,6 +492,7 @@ async def run_hybrid_pipeline(request):
             "regulation_hits": [],
             "pv_analysis_input": pv_input,
             "pv_analysis_output": pv_output,
+            "ai_simulation_result": ai_simulation_result,
         }
 
         diagnostics["pvAnalysisStatus"] = pv_status
@@ -384,6 +512,7 @@ async def run_hybrid_pipeline(request):
             "roofAreaM2": round(roof_area, 2),
             "bundle": bundle,
             "panelsGeojson": panels_geojson,
+            "aiSimulationResult": ai_simulation_result,
             "diagnostics": diagnostics,
         }
     except Exception as error:

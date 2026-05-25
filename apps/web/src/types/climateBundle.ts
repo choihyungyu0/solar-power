@@ -1,3 +1,5 @@
+import type { SimulationAiResult } from '../lib/simulationAiResult';
+
 export type ClimateBundleMeta = {
   unq_id: string | null;
   bldg_nm: string | null;
@@ -68,6 +70,7 @@ export type ClimateBundle = {
   regulation_hits: Array<[string, number]>;
   pv_analysis_input: ClimateBundlePvInput;
   pv_analysis_output: ClimateBundlePvOutputRaw | null;
+  ai_simulation_result?: SimulationAiResult | null;
 };
 
 export type ClimatePanelsGeoJson = {
@@ -219,6 +222,7 @@ export type ClimateLiveAnalysisSuccessResponse = {
   pvAnalysisStatus?: 'success' | 'timeout' | 'failed' | 'skipped' | 'fallback';
   bundle: ClimateBundle;
   panelsGeojson: ClimatePanelsGeoJson;
+  aiSimulationResult?: SimulationAiResult | null;
   diagnostics: ClimateLiveAnalysisDiagnostics;
 };
 
@@ -235,6 +239,7 @@ export type ClimateLiveAnalysisFailureResponse = {
   message: string;
   fallbackRecommended: true;
   analysisStage?: 'shading-complete' | 'shading-timeout' | 'pv-complete' | string;
+  aiSimulationResult?: SimulationAiResult | null;
   diagnostics: ClimateLiveAnalysisDiagnostics;
 };
 

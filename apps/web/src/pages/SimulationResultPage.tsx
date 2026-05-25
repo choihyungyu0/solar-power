@@ -13,6 +13,7 @@ import {
   LuZap,
 } from 'react-icons/lu';
 import SolarMateHeader from '../components/SolarMateHeader';
+import { formatAgentPayloadJson } from '../lib/simulationAiResult';
 import {
   readSimulationResultFromSession,
   saveSimulationResultToSession,
@@ -313,6 +314,8 @@ function SimulationResultPage() {
 
             <MobileCostCard normalized={normalized} />
 
+            {result.aiSimulationResult && <AiAnalysisReport aiResult={result.aiSimulationResult} />}
+
             <div className="resultMetricGrid">
               {resultSections.map((section) => (
                 <ResultSectionCard key={section.title} section={section} />
@@ -359,6 +362,71 @@ function SimulationResultPage() {
         </p>
       </main>
     </div>
+  );
+}
+
+function AiAnalysisReport({ aiResult }: { aiResult: NonNullable<StoredSimulationResult['aiSimulationResult']> }) {
+  const warnings = aiResult.suitability.warnings;
+  const questions = aiResult.agentPayload.questionsToAskUser;
+
+  return (
+    <section className="aiAnalysisReport" aria-label="AI 분석 리포트">
+      <div className="aiReportHeader">
+        <div>
+          <span>AI 분석 리포트</span>
+          <h2>설치 적합도 {aiResult.suitability.grade}등급</h2>
+        </div>
+        <strong>{aiResult.suitability.score}점</strong>
+      </div>
+
+      <p className="aiReportSummary">{aiResult.agentPayload.summaryForCounselor}</p>
+
+      <dl className="aiReportGrid">
+        <div>
+          <dt>권장 조치</dt>
+          <dd>{aiResult.recommendedAction}</dd>
+        </div>
+        <div>
+          <dt>예상 발전량</dt>
+          <dd>{aiResult.generationPrediction.annualGenerationKwh.toLocaleString('ko-KR')}kWh/년</dd>
+        </div>
+        <div>
+          <dt>배치 요약</dt>
+          <dd>{aiResult.panelOptimization.optimizationSummary}</dd>
+        </div>
+        <div>
+          <dt>예측 신뢰도</dt>
+          <dd>{aiResult.generationPrediction.confidenceLabel}</dd>
+        </div>
+      </dl>
+
+      {warnings.length > 0 && (
+        <div className="aiReportList">
+          <strong>주의 항목</strong>
+          <ul>
+            {warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {questions.length > 0 && (
+        <div className="aiReportList">
+          <strong>상담 시 확인 질문</strong>
+          <ul>
+            {questions.map((question) => (
+              <li key={question}>{question}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <details className="agentPayloadPreview">
+        <summary>상담 에이전트 전달 JSON</summary>
+        <pre>{formatAgentPayloadJson(aiResult.agentPayload)}</pre>
+      </details>
+    </section>
   );
 }
 
