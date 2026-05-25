@@ -20,6 +20,7 @@ import {
   type ScenarioComparisonBar,
   type ScenarioDayCard,
 } from '../lib/memberDashboardData';
+import { clearDemoAuthState, readDemoAuthState } from '../lib/demoAuth';
 import { SELECTED_SIMULATION_RESULT_STORAGE_KEY } from '../lib/simulationResultStorage';
 import './MemberDashboardPage.css';
 
@@ -180,7 +181,7 @@ export default function MemberDashboardPage({ initialTab }: MemberDashboardPageP
 
   return (
     <div className="member-dashboard-page">
-      <MemberDashboardHeader activeTab={activeTab} />
+      <MemberDashboardHeader />
 
       <main className="member-dashboard-main">
         <section
@@ -491,8 +492,8 @@ function ProfileRow({
   );
 }
 
-function MemberDashboardHeader({ activeTab }: { activeTab: DashboardTab }) {
-  const isMemberSupportTab = activeTab === 'as' || activeTab === 'profile';
+function MemberDashboardHeader() {
+  const isLoggedIn = readDemoAuthState()?.isLoggedIn === true;
 
   return (
     <header className="member-dashboard-header">
@@ -522,10 +523,10 @@ function MemberDashboardHeader({ activeTab }: { activeTab: DashboardTab }) {
       <button
         className="member-dashboard-login-button"
         type="button"
-        onClick={isMemberSupportTab ? handleMemberLogout : () => window.location.assign('/member/dashboard')}
+        onClick={isLoggedIn ? handleMemberLogout : () => window.location.assign('/login')}
       >
-        {isMemberSupportTab && <LuUserRound aria-hidden="true" />}
-        {isMemberSupportTab ? '로그아웃' : '로그인'}
+        <LuUserRound aria-hidden="true" />
+        {isLoggedIn ? '로그아웃' : '로그인'}
       </button>
     </header>
   );
@@ -827,10 +828,8 @@ function showDemoChangeAlert() {
 }
 
 function handleMemberLogout() {
-  Object.keys(window.sessionStorage)
-    .filter((key) => key.startsWith('solarmate:'))
-    .forEach((key) => window.sessionStorage.removeItem(key));
-  window.location.assign('/');
+  clearDemoAuthState();
+  window.location.assign('/login');
 }
 
 function polarToCartesian(cx: number, cy: number, r: number, angle: number) {

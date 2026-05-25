@@ -8,11 +8,13 @@ import {
   LuChartNoAxesColumnIncreasing,
   LuCheck,
   LuCoins,
+  LuMapPin,
   LuPanelTop,
   LuRuler,
   LuShieldCheck,
 } from 'react-icons/lu';
 import SafeLocalImage from '../components/SafeLocalImage';
+import { readLandingAddressDraft } from '../lib/addressDraft';
 import './SimulationSetupPage.css';
 
 type PanelOption = {
@@ -89,6 +91,11 @@ const angleOptions: AngleOption[] = [
 function SimulationSetupPage() {
   const [selectedPanelId, setSelectedPanelId] = useState('panel-500');
   const [selectedAngleId, setSelectedAngleId] = useState('angle-30');
+  const addressDraft = useMemo(() => readLandingAddressDraft(), []);
+  const selectedAddress = addressDraft?.address ?? '경기도 수원시 팔달구 경수대로 464';
+  const selectedJibunAddress = addressDraft
+    ? '지도에서 건물 선택 시 실제 건물 polygon 데이터로 반영'
+    : '경기도 수원시 팔달구 인계동 1017';
 
   const selectedPanel = useMemo(
     () => panelOptions.find((panel) => panel.id === selectedPanelId) ?? panelOptions[0],
@@ -138,7 +145,7 @@ function SimulationSetupPage() {
         </nav>
 
         <div className="headerActions">
-          <button className="loginButton" type="button" onClick={() => window.location.assign('/member/dashboard')}>
+          <button className="loginButton" type="button" onClick={() => window.location.assign('/login')}>
             로그인
           </button>
           <a className="primaryButton headerCta simulationHeaderCta" href="/simulation/setup">
@@ -157,12 +164,12 @@ function SimulationSetupPage() {
 
           <article className="setupAddressCard" aria-label="분석 대상 주소">
             <div className="setupAddressLines">
-              <AddressRow label="도로명주소" value="경기도 수원시 팔달구 경수대로 464" />
-              <AddressRow label="지번" value="경기도 수원시 팔달구 인계동 1017" />
+              <AddressRow label={addressDraft ? '입력주소' : '도로명주소'} value={selectedAddress} />
+              <AddressRow label={addressDraft ? '데이터 연결' : '지번'} value={selectedJibunAddress} />
             </div>
 
             <div className="setupBadges" aria-label="주소 분석 상태">
-              <StatusBadge icon={LuBuilding2} tone="blue" label="공동주택" />
+              <StatusBadge icon={addressDraft ? LuMapPin : LuBuilding2} tone="blue" label={addressDraft ? '입력 주소 반영' : '공동주택'} />
               <StatusBadge icon={LuBadgeCheck} tone="green" label="가상설치 가능" />
               <StatusBadge icon={LuBadgeCheck} tone="indigo" label="예상 분석 준비 완료" />
             </div>

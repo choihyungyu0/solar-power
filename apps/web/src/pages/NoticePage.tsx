@@ -177,7 +177,7 @@ function NoticeHeader() {
         <a href="/consultation">상담하기</a>
       </nav>
 
-      <button className="notice-login-button" type="button" onClick={() => window.location.assign('/member/dashboard')}>
+      <button className="notice-login-button" type="button" onClick={() => window.location.assign('/login')}>
         <LuUserRound aria-hidden="true" />
         로그인
       </button>

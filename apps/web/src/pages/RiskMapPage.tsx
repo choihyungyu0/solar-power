@@ -4,6 +4,8 @@ import {
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
+  type FormEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
@@ -75,6 +77,7 @@ import {
   isBuildingAdmdongIndexEnabled,
   loadBuildingFootprints,
   loadBuildingFootprintIndex,
+  searchBuildingFootprintsByText,
   summarizeBuildingFootprintCoordinates,
   type BuildingFootprintCollection,
   type BuildingFootprintDiagnostics,
@@ -82,6 +85,7 @@ import {
   type BuildingFootprintMatch,
   type BuildingFootprintSelectionMode,
 } from '../lib/buildingFootprints';
+import { readLandingAddressDraft, saveLandingAddressDraft } from '../lib/addressDraft';
 import { findVisibleCesiumViewer, removeCesiumEntitiesByIdPrefix } from '../lib/vworldCesiumViewer';
 import {
   buildVWorldFeatureProxyPath,
@@ -154,6 +158,7 @@ type MapLoadStatus = 'loading' | 'ready' | 'error';
 type RiskPanelTab = 'risk' | 'solar' | 'policy';
 type SelectionMode = 'screen-fallback' | 'coordinate-fallback' | 'parcel-fallback' | 'geometry' | 'building_footprint';
 type SelectionFeedbackStatus = 'idle' | 'loading' | 'success' | 'not_found' | 'error';
+type AddressSearchStatus = 'idle' | 'searching' | 'found' | 'not_found' | 'error';
 type BuildingDataHealthStatus = 'idle' | 'loading' | 'ok' | 'error';
 type PvAnalysisStatus = 'idle' | 'calculating' | 'success' | 'fallback' | 'backend-result' | 'local-fallback' | 'error';
 type ClimatePanelLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
@@ -300,6 +305,23 @@ const demoBuilding: SelectedBuilding = {
   simulationNote:
     '실제 설치 가능 여부는 현장조사, 구조안전성, 음영, 관리주체 협의에 따라 달라질 수 있습니다.',
 };
+
+function createInitialSelectedBuilding() {
+  const addressDraft = readLandingAddressDraft();
+
+  if (!addressDraft) {
+    return demoBuilding;
+  }
+
+  return {
+    ...demoBuilding,
+    address: addressDraft.address,
+    selectionNote: '첫 화면에서 입력한 주소입니다. 지도 데이터가 준비되면 주소/아파트명 검색으로 실제 건물 polygon을 매칭합니다.',
+    simulationConfidence: '입력 주소 대기',
+    simulationNote:
+      '아직 실제 건물 polygon이 선택되지 않았습니다. 주소 검색 또는 지도 클릭 후 예상·추정 분석이 실제 건물 데이터에 반영됩니다.',
+  };
+}
 
 const riskLegendItems = [
   { label: '낮음', tone: 'low' },
@@ -1278,7 +1300,14 @@ function RiskMapPage() {
   const [mapErrorMessage, setMapErrorMessage] = useState(
     '브이월드 3D 지도 로드에 실패했습니다. API 키, SDK URL, 허용 도메인을 확인해주세요.',
   );
-  const [selectedBuilding, setSelectedBuilding] = useState<SelectedBuilding>(demoBuilding);
+  const [selectedBuilding, setSelectedBuilding] = useState<SelectedBuilding>(createInitialSelectedBuilding);
+  const [addressSearchText, setAddressSearchText] = useState(() => readLandingAddressDraft()?.address ?? '');
+  const [addressSearchStatus, setAddressSearchStatus] = useState<AddressSearchStatus>('idle');
+  const [addressSearchMessage, setAddressSearchMessage] = useState(() =>
+    readLandingAddressDraft()
+      ? '첫 화면에서 입력한 주소를 불러왔습니다. 건물 데이터가 준비되면 검색할 수 있습니다.'
+      : '',
+  );
   const [analysisStatus, setAnalysisStatus] = useState('');
   const [activeTab, setActiveTab] = useState<RiskPanelTab>('risk');
   const activeTabRef = useRef<RiskPanelTab>('risk');
@@ -1305,6 +1334,7 @@ function RiskMapPage() {
   const [cameraMoveStatus, setCameraMoveStatus] = useState('climate.gg POC 패널 위치 계산 대기');
   const panelVisibilityUserOverrideRef = useRef(false);
   const climateFocusPocRef = useRef<string | null>(null);
+  const hasAutoSearchedAddressRef = useRef(false);
   const [vworldMap, setVworldMap] = useState<VWorldMapInstance | null>(null);
   const vworldMapRef = useRef<VWorldMapInstance | null>(null);
   const lastMapSelectionRef = useRef<{ longitude: number; latitude: number; selectedAt: number } | null>(null);
@@ -1630,6 +1660,33 @@ function RiskMapPage() {
           : '대체 데모 산식 · 시나리오 기준';
   const climateExpectedRevenue = activeClimatePvOutput?.expected_revenue;
   const isSeparatePvCalculating = hasLiveClimatePanelLayout && pvAnalysisStatus === 'calculating';
+  const isBuildingDataApiLoading =
+    buildingDataHealth.buildingIndexStatus === 'loading' ||
+    buildingDataHealth.buildingMetaStatus === 'loading' ||
+    buildingFootprintLoadState.status === 'index_loading' ||
+    buildingFootprintLoadState.status === 'candidate_loading';
+  const isMapApiLoading =
+    mapStatus === 'ready' &&
+    (addressSearchStatus === 'searching' ||
+      selectionFeedbackStatus === 'loading' ||
+      geometryQueryStatus === 'loading' ||
+      isBuildingDataApiLoading ||
+      climatePanelLoadStatus === 'loading' ||
+      liveClimateStatus === 'loading' ||
+      liveShadingStatus === 'trying' ||
+      pvAnalysisStatus === 'calculating');
+  const mapApiLoadingLabel =
+    liveClimateStatus === 'loading' || liveShadingStatus === 'trying'
+      ? 'climate.gg 분석 중'
+      : pvAnalysisStatus === 'calculating'
+        ? '발전량 분석 중'
+        : addressSearchStatus === 'searching'
+          ? '주소 검색 중'
+          : selectionFeedbackStatus === 'loading' || geometryQueryStatus === 'loading'
+            ? '건물 데이터 확인 중'
+            : climatePanelLoadStatus === 'loading'
+              ? '음영 데이터 불러오는 중'
+              : '지도 데이터 불러오는 중';
   const simplePaybackSource: SimplePaybackSource = hasLiveClimatePanelLayout
     ? 'climate-live'
     : 'footprint-fallback';
@@ -2051,6 +2108,153 @@ function RiskMapPage() {
     },
     [buildingPolygonSource],
   );
+
+  const handleAddressSearchChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setAddressSearchText(event.target.value);
+  }, []);
+
+  const runAddressSearch = useCallback(
+    async (rawQuery: string) => {
+      const query = rawQuery.trim();
+
+      if (!query) {
+        setAddressSearchStatus('error');
+        setAddressSearchMessage('주소 또는 아파트명을 입력해 주세요.');
+        return;
+      }
+
+      saveLandingAddressDraft(query, 'risk-map-search');
+      setAddressSearchStatus('searching');
+      setAddressSearchMessage('입력 주소를 건물 polygon 데이터에서 찾는 중입니다.');
+      setSelectionFeedbackStatus('loading');
+      setSelectionFeedbackMessage('주소 검색으로 건물을 찾는 중...');
+      setGeometryQueryStatus('loading');
+      setGeometryQueryMessage('입력 주소를 건물 polygon 데이터와 매칭하고 있습니다.');
+      setSelectedBuilding((current) => ({
+        ...current,
+        address: query,
+        selectionNote: '주소 입력값을 저장했습니다. 건물 polygon 검색 결과가 있으면 실제 건물 데이터로 갱신됩니다.',
+      }));
+
+      if (buildingPolygonSource === 'api' || buildingPolygonSource === 'none') {
+        const message =
+          buildingPolygonSource === 'api'
+            ? '현재 API 모드는 지도 클릭 좌표 기반 조회만 지원합니다. 지도에서 해당 건물을 클릭해 주세요.'
+            : '건물 polygon 데이터가 연결되어 있지 않습니다.';
+
+        setAddressSearchStatus('error');
+        setAddressSearchMessage(message);
+        setSelectionFeedbackStatus('error');
+        setSelectionFeedbackMessage(message);
+        setGeometryQueryStatus('error');
+        setGeometryQueryMessage(message);
+        return;
+      }
+
+      if (!isBuildingPolygonDataReady) {
+        const message = '건물 polygon 데이터가 아직 로드 중입니다. 잠시 뒤 다시 검색해주세요.';
+
+        setAddressSearchStatus('error');
+        setAddressSearchMessage(message);
+        setSelectionFeedbackStatus('error');
+        setSelectionFeedbackMessage(message);
+        setGeometryQueryStatus('error');
+        setGeometryQueryMessage(message);
+        return;
+      }
+
+      const result = await searchBuildingFootprintsByText({
+        query,
+        collection: buildingFootprints,
+        index: buildingFootprintLoadState.index,
+      });
+
+      setBuildingFootprintLoadState((current) => ({
+        ...current,
+        status: result.diagnostics.status,
+        diagnostics: result.diagnostics,
+        message: result.message,
+      }));
+      setSelectableBuildingPolygons(createSelectableBuildingPolygons(result.candidateFeatures));
+
+      if (result.status !== 'found' || !result.match) {
+        setAddressSearchStatus(result.status === 'error' ? 'error' : 'not_found');
+        setAddressSearchMessage(result.message);
+        setSelectionFeedbackStatus(result.status === 'error' ? 'error' : 'not_found');
+        setSelectionFeedbackMessage(result.message);
+        setGeometryQueryStatus(result.status === 'error' ? 'error' : 'not-found');
+        setGeometryQueryMessage(result.message);
+        setFeatureQueryDiagnostics({
+          queryStatus: result.status === 'error' ? 'error' : 'not_found',
+          featureCount: result.diagnostics.searchedFeatureCount,
+          dataId: getBuildingSourceDataId(buildingPolygonSource),
+          buffer: 0,
+          requestPath: getBuildingSourceRequestPath(buildingPolygonSource, result.diagnostics),
+          errorMessage: result.status === 'error' ? result.message : undefined,
+        });
+        return;
+      }
+
+      const polygon = normalizeGeoJsonPolygon(result.match.feature);
+
+      if (!polygon) {
+        const message = '검색된 건물에 표시 가능한 polygon 좌표가 없습니다.';
+
+        setAddressSearchStatus('error');
+        setAddressSearchMessage(message);
+        setSelectionFeedbackStatus('error');
+        setSelectionFeedbackMessage(message);
+        setGeometryQueryStatus('error');
+        setGeometryQueryMessage(message);
+        return;
+      }
+
+      const coordinate = getPolygonCentroid(estimateRoofPolygonFromFootprint(polygon));
+
+      applyBuildingFootprintSelection(result.match, coordinate, {
+        longitude: coordinate[0],
+        latitude: coordinate[1],
+        source: 'address-search',
+        method: 'text-search',
+        clickPickStatus: 'success',
+      });
+      setAddressSearchStatus('found');
+      setAddressSearchMessage(result.message);
+      setFeatureQueryDiagnostics({
+        queryStatus: 'success',
+        featureCount: result.diagnostics.searchedFeatureCount,
+        requestedLon: coordinate[0],
+        requestedLat: coordinate[1],
+        dataId: getBuildingSourceDataId(buildingPolygonSource),
+        buffer: 0,
+        requestPath: getBuildingSourceRequestPath(buildingPolygonSource, result.diagnostics),
+      });
+    },
+    [
+      applyBuildingFootprintSelection,
+      buildingFootprintLoadState.index,
+      buildingFootprints,
+      buildingPolygonSource,
+      isBuildingPolygonDataReady,
+    ],
+  );
+
+  const handleAddressSearchSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      void runAddressSearch(addressSearchText);
+    },
+    [addressSearchText, runAddressSearch],
+  );
+
+  useEffect(() => {
+    if (hasAutoSearchedAddressRef.current || !addressSearchText.trim() || !isBuildingPolygonDataReady) {
+      return;
+    }
+
+    hasAutoSearchedAddressRef.current = true;
+    void runAddressSearch(addressSearchText);
+  }, [addressSearchText, isBuildingPolygonDataReady, runAddressSearch]);
 
   const shouldSkipDuplicateSelection = useCallback((coordinate: Coordinate) => {
     const previousSelection = lastMapSelectionRef.current;
@@ -3471,7 +3675,7 @@ function RiskMapPage() {
         </nav>
 
         <div className="headerActions">
-          <button className="loginButton" type="button" onClick={() => window.location.assign('/member/dashboard')}>
+          <button className="loginButton" type="button" onClick={() => window.location.assign('/login')}>
             로그인
           </button>
           <a className="primaryButton headerCta" href="/risk-map">
@@ -3522,10 +3726,25 @@ function RiskMapPage() {
               aria-label="지도 검색 및 필터"
               onClick={(event) => event.stopPropagation()}
             >
-              <label>
-                <span>주소 또는 아파트명 검색</span>
-                <input type="search" placeholder="예: 화성시 동탄역 인근 아파트" />
-              </label>
+              <form className="mapSearchForm" onSubmit={handleAddressSearchSubmit}>
+                <label>
+                  <span>주소 또는 아파트명 검색</span>
+                  <input
+                    type="search"
+                    value={addressSearchText}
+                    placeholder="예: 화성시 동탄구 반송동 88-12"
+                    onChange={handleAddressSearchChange}
+                  />
+                </label>
+                <button type="submit" disabled={addressSearchStatus === 'searching'}>
+                  {addressSearchStatus === 'searching' ? '검색 중' : '검색'}
+                </button>
+                {addressSearchMessage && (
+                  <p className={`mapSearchMessage is-${addressSearchStatus}`} role={addressSearchStatus === 'error' ? 'alert' : 'status'}>
+                    {addressSearchMessage}
+                  </p>
+                )}
+              </form>
 
               <label>
                 <span>지역 선택</span>
@@ -3601,6 +3820,13 @@ function RiskMapPage() {
               roofHeightM={activeClimateBundle?.meta.bldg_hgt ?? roofHeightEstimate.roofHeightM}
               onStatusChange={setClimatePanelLayerStatus}
             />
+
+            {isMapApiLoading && (
+              <div className="mapApiLoadingOverlay" role="status" aria-live="polite" aria-label={mapApiLoadingLabel}>
+                <span className="mapApiLoadingSpinner" aria-hidden="true" />
+                <span>로딩 중</span>
+              </div>
+            )}
 
             {mapStatus === 'loading' && (
               <div className="mapStateOverlay" role="status">

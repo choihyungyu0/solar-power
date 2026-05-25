@@ -1,8 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import { LuSearch } from 'react-icons/lu';
 import SafeLocalImage from './components/SafeLocalImage';
 import ServiceIntroSection from './components/ServiceIntroSection';
+import { readLandingAddressText, saveLandingAddressDraft } from './lib/addressDraft';
 import ConsultationCompletePage from './pages/ConsultationCompletePage';
 import ConsultationPage from './pages/ConsultationPage';
+import LoginPage from './pages/LoginPage';
 import MemberDashboardPage from './pages/MemberDashboardPage';
 import NoticePage from './pages/NoticePage';
 import RiskMapPage from './pages/RiskMapPage';
@@ -10,32 +13,9 @@ import SolarAdoptionPage from './pages/SolarAdoptionPage';
 import SimulationResultPage from './pages/SimulationResultPage';
 import SimulationSetupPage from './pages/SimulationSetupPage';
 
-const heroMetrics = [
-  {
-    label: '예상',
-    title: '예상 연간 절감액',
-    value: '18,720,000원',
-    image: '/assets/landing/savings-chart-icon.png',
-    alt: '상승 그래프 아이콘',
-  },
-  {
-    label: '예상',
-    title: '예상 보조금',
-    value: '72,800,000원',
-    image: '/assets/landing/subsidy-coin-icon.png',
-    alt: '보조금 동전 아이콘',
-  },
-  {
-    label: '예상',
-    title: '예상 회수기간',
-    value: '4.6년',
-    image: '/assets/landing/payback-clock-icon.png',
-    alt: '회수기간 시계 아이콘',
-  },
-];
-
 function App() {
   const pathname = window.location.pathname.replace(/\/$/, '') || '/';
+  const [heroAddress, setHeroAddress] = useState(() => readLandingAddressText());
   const isRiskMapPage = pathname === '/risk-map';
   const isSimulationSetupPage = pathname === '/simulation/setup';
   const isSimulationResultPage = pathname === '/simulation/result';
@@ -43,6 +23,7 @@ function App() {
   const isConsultationCompletePage = pathname === '/consultation/complete';
   const isSolarAdoptionPage = pathname === '/solar-adoption';
   const isNoticePage = pathname === '/notice';
+  const isLoginPage = pathname === '/login';
   const isMemberDashboardPage = pathname === '/member/dashboard';
   const isMemberAsPage = pathname === '/member/as' || pathname === '/customer-center';
   const isMemberProfilePage = pathname === '/member/profile';
@@ -85,6 +66,10 @@ function App() {
     return <NoticePage />;
   }
 
+  if (isLoginPage) {
+    return <LoginPage />;
+  }
+
   if (isMemberDashboardPage) {
     return <MemberDashboardPage />;
   }
@@ -97,8 +82,21 @@ function App() {
     return <MemberDashboardPage initialTab="profile" />;
   }
 
-  const goMemberDashboard = () => {
-    window.location.assign('/member/dashboard');
+  const goLoginPage = () => {
+    window.location.assign('/login');
+  };
+
+  const handleHeroAddressSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const savedDraft = saveLandingAddressDraft(heroAddress, 'landing-hero');
+
+    if (!savedDraft) {
+      window.alert('주소를 입력해 주세요.');
+      return;
+    }
+
+    window.location.assign('/simulation/setup');
   };
 
   return (
@@ -121,7 +119,7 @@ function App() {
           </nav>
 
           <div className="headerActions">
-            <button className="loginButton" type="button" onClick={goMemberDashboard}>
+            <button className="loginButton" type="button" onClick={goLoginPage}>
               로그인
             </button>
             <a className="primaryButton headerCta" href="/simulation/setup">
@@ -146,9 +144,22 @@ function App() {
               전기사용량, 정책 데이터 기준의 예상값입니다.
             </p>
             <div className="heroActions">
-              <a className="primaryButton" href="/simulation/setup">
-                주소 입력하기
-              </a>
+              <form className="heroAddressForm" onSubmit={handleHeroAddressSubmit}>
+                <label className="heroAddressField" htmlFor="hero-address-input">
+                  <span>아파트 주소</span>
+                  <input
+                    id="hero-address-input"
+                    type="text"
+                    value={heroAddress}
+                    placeholder="예: 경기도 화성시 동탄구 반송동 88-12"
+                    onChange={(event) => setHeroAddress(event.target.value)}
+                  />
+                </label>
+                <button className="primaryButton" type="submit">
+                  <LuSearch aria-hidden="true" />
+                  주소 입력하기
+                </button>
+              </form>
               <a className="secondaryButton" href="#service-intro-status">
                 (서비스 지역 : 경기도)
               </a>
@@ -164,18 +175,6 @@ function App() {
             />
           </div>
 
-          <div className="metricStack" aria-label="태양광 설치 예상 지표">
-            {heroMetrics.map((metric) => (
-              <article className="metricCard" key={metric.title}>
-                <SafeLocalImage src={metric.image} alt={metric.alt} className="metricIcon" />
-                <div>
-                  <span>{metric.label}</span>
-                  <h2>{metric.title}</h2>
-                  <strong>{metric.value}</strong>
-                </div>
-              </article>
-            ))}
-          </div>
         </section>
 
         <ServiceIntroSection />

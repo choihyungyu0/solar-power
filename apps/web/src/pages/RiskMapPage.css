@@ -104,9 +104,17 @@
   right: 20px;
   z-index: 4;
   display: grid;
-  grid-template-columns: minmax(220px, 1.3fr) minmax(150px, 0.7fr) minmax(150px, 0.7fr);
+  grid-template-columns: minmax(300px, 1.4fr) minmax(150px, 0.7fr) minmax(150px, 0.7fr);
   gap: 12px;
   pointer-events: none;
+}
+
+.mapSearchForm {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 82px;
+  gap: 10px;
+  pointer-events: auto;
 }
 
 .mapControlOverlay label {
@@ -119,6 +127,56 @@
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 16px 28px rgba(15, 23, 42, 0.12);
   pointer-events: auto;
+}
+
+.mapSearchForm label {
+  pointer-events: auto;
+}
+
+.mapSearchForm button {
+  min-width: 0;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffc900 0%, #ffb800 100%);
+  color: #111827;
+  box-shadow: 0 12px 22px rgba(234, 179, 8, 0.24);
+  font-size: 15px;
+  font-weight: 950;
+  pointer-events: auto;
+}
+
+.mapSearchForm button:disabled {
+  cursor: progress;
+  background: #dbe3ed;
+  color: #526377;
+  box-shadow: none;
+}
+
+.mapSearchMessage {
+  grid-column: 1 / -1;
+  margin: -2px 0 0;
+  border: 1px solid rgba(20, 120, 255, 0.18);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #075bd8;
+  box-shadow: 0 12px 22px rgba(15, 23, 42, 0.1);
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.4;
+  pointer-events: auto;
+}
+
+.mapSearchMessage.is-error,
+.mapSearchMessage.is-not_found {
+  border-color: rgba(234, 88, 12, 0.2);
+  background: rgba(255, 247, 237, 0.98);
+  color: #9a3412;
+}
+
+.mapSearchMessage.is-found {
+  border-color: rgba(22, 163, 74, 0.2);
+  background: rgba(240, 253, 244, 0.98);
+  color: #15803d;
 }
 
 .mapControlOverlay span {
@@ -362,6 +420,43 @@
 
 .legendDot-climateCells {
   background: linear-gradient(90deg, #16a34a 0 33%, #facc15 33% 66%, #ef4444 66% 100%);
+}
+
+.mapApiLoadingOverlay {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 7;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(191, 219, 254, 0.92);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #075bd8;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.16);
+  font-size: 12px;
+  font-weight: 950;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+}
+
+.mapApiLoadingSpinner {
+  width: 18px;
+  height: 18px;
+  border: 3px solid rgba(20, 120, 255, 0.18);
+  border-top-color: #1478ff;
+  border-radius: 999px;
+  animation: mapApiLoadingSpin 0.78s linear infinite;
+}
+
+@keyframes mapApiLoadingSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .mapStateOverlay {
@@ -1343,6 +1438,14 @@
     right: 14px;
   }
 
+  .mapSearchForm {
+    grid-template-columns: 1fr;
+  }
+
+  .mapSearchForm button {
+    min-height: 44px;
+  }
+
   .mapDataHealthAlert {
     top: 260px;
     left: 14px;
@@ -1351,6 +1454,16 @@
 
   .selectionStatusOverlay {
     top: 260px;
+  }
+
+  .mapApiLoadingOverlay {
+    min-height: 36px;
+    padding: 7px 10px;
+  }
+
+  .mapApiLoadingSpinner {
+    width: 16px;
+    height: 16px;
   }
 
   .selectionDebugPanel {
@@ -1427,6 +1540,12 @@
 
   .pvMonthlyChart li {
     grid-template-columns: 30px minmax(0, 1fr) 76px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mapApiLoadingSpinner {
+    animation: none;
   }
 }
 

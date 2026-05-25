@@ -103,6 +103,22 @@ export type BuildingFootprintSelectionResult =
       message: string;
     };
 
+export type BuildingFootprintTextSearchResult =
+  | {
+      status: 'found';
+      match: BuildingFootprintMatch;
+      candidateFeatures: BuildingFootprintFeature[];
+      diagnostics: BuildingFootprintDiagnostics;
+      message: string;
+    }
+  | {
+      status: 'not_found' | 'error';
+      match: null;
+      candidateFeatures: BuildingFootprintFeature[];
+      diagnostics: BuildingFootprintDiagnostics;
+      message: string;
+    };
+
 export type BuildingFootprintCoordinateSummary = {
   minLon: number | null;
   maxLon: number | null;
@@ -128,6 +144,20 @@ const DYNAMIC_TOLERANCE_MAX_CAMERA_HEIGHT_M = 3000;
 const ADMDONG_BBOX_CLICK_TOLERANCE_M = 180;
 const NEAREST_BBOX_CANDIDATE_LIMIT = 4;
 const NEAREST_BBOX_MAX_DISTANCE_M = 3000;
+const TEXT_SEARCH_FILE_LIMIT = 12;
+const TEXT_SEARCH_STOPWORDS = new Set([
+  '경기도',
+  '화성시',
+  '동탄구',
+  '만세구',
+  '효행구',
+  '아파트',
+  '공동주택',
+  '근처',
+  '인근',
+  '주변',
+  '주소',
+]);
 
 type TurfPolygonInput = Parameters<typeof booleanPointInPolygon>[1];
 
@@ -304,6 +334,113 @@ function createMatch(
       distanceMeters,
     },
   };
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .toLocaleLowerCase('ko-KR')
+    .replace(/[^\p{Letter}\p{Number}]+/gu, '')
+    .trim();
+}
+
+function getSearchTokens(value: string) {
+  return value
+    .toLocaleLowerCase('ko-KR')
+    .split(/[^\p{Letter}\p{Number}]+/u)
+    .map((token) => normalizeSearchText(token))
+    .filter((token) => token.length >= 2 && !TEXT_SEARCH_STOPWORDS.has(token));
+}
+
+function getFeatureText(feature: BuildingFootprintFeature) {
+  const match = createMatch(feature);
+  const properties = feature.properties ?? {};
+  const propertyValues = [
+    properties.address,
+    properties.admdong_name,
+    properties.jibun,
+    properties.name,
+    properties.building_name,
+    properties.bldg_name,
+    properties.apartment_name,
+    properties.dong_name,
+    properties.usage_name,
+    properties.bld_id,
+    properties.pnu,
+  ]
+    .filter((value) => typeof value === 'string' || typeof value === 'number')
+    .join(' ');
+
+  return normalizeSearchText(
+    `${match.metadata.address} ${match.metadata.name} ${match.metadata.buildingId} ${propertyValues}`,
+  );
+}
+
+function scoreFeatureTextMatch(feature: BuildingFootprintFeature, normalizedQuery: string, tokens: string[]) {
+  const featureText = getFeatureText(feature);
+
+  if (normalizedQuery && featureText.includes(normalizedQuery)) {
+    return 1000 + normalizedQuery.length;
+  }
+
+  if (tokens.length === 0) {
+    return 0;
+  }
+
+  const matchedTokenCount = tokens.filter((token) => featureText.includes(token)).length;
+
+  if (matchedTokenCount === tokens.length) {
+    return 500 + matchedTokenCount * 20;
+  }
+
+  if (tokens.length >= 2 && matchedTokenCount >= tokens.length - 1) {
+    return 200 + matchedTokenCount * 10;
+  }
+
+  return matchedTokenCount >= 1 && tokens.some((token) => token.length >= 4 && featureText.includes(token))
+    ? 100 + matchedTokenCount * 10
+    : 0;
+}
+
+function findBestTextMatch(features: BuildingFootprintFeature[], query: string) {
+  const normalizedQuery = normalizeSearchText(query);
+  const tokens = getSearchTokens(query);
+  let bestFeature: BuildingFootprintFeature | null = null;
+  let bestScore = 0;
+
+  for (const feature of features) {
+    const score = scoreFeatureTextMatch(feature, normalizedQuery, tokens);
+
+    if (score > bestScore) {
+      bestFeature = feature;
+      bestScore = score;
+    }
+  }
+
+  return bestFeature ? createMatch(bestFeature, 'polygon', 0) : null;
+}
+
+function getTextSearchCandidateEntries(index: BuildingAdmdongIndex, query: string) {
+  const normalizedQuery = normalizeSearchText(query);
+  const tokens = getSearchTokens(query);
+
+  return index.entries
+    .map((entry) => {
+      const entryText = normalizeSearchText(`${entry.admdongName} ${entry.filename}`);
+      const directScore =
+        normalizedQuery.includes(normalizeSearchText(entry.admdongName)) || entryText.includes(normalizedQuery)
+          ? 1000
+          : 0;
+      const tokenScore = tokens.filter((token) => entryText.includes(token)).length * 100;
+
+      return {
+        entry,
+        score: directScore + tokenScore,
+      };
+    })
+    .filter((item) => item.score > 0)
+    .sort((left, right) => right.score - left.score || left.entry.featureCount - right.entry.featureCount)
+    .slice(0, TEXT_SEARCH_FILE_LIMIT)
+    .map((item) => item.entry);
 }
 
 function isPointInsideFeature(feature: BuildingFootprintFeature, coordinate: [longitude: number, latitude: number]) {
@@ -723,6 +860,162 @@ async function loadAdmdongBuildingFile(entry: BuildingAdmdongIndexEntry, indexUr
 
   loadingAdmdongCollections.set(fileUrl, loadPromise);
   return loadPromise;
+}
+
+export async function searchBuildingFootprintsByText({
+  query,
+  collection,
+  index,
+}: {
+  query: string;
+  collection?: BuildingFootprintCollection | null;
+  index?: BuildingAdmdongIndex | null;
+}): Promise<BuildingFootprintTextSearchResult> {
+  const trimmedQuery = query.trim();
+  const indexUrl = getBuildingAdmdongIndexUrl();
+  const metaUrl = getBuildingMetaUrl();
+
+  if (!trimmedQuery) {
+    const message = '검색할 주소 또는 아파트명을 입력해주세요.';
+
+    return {
+      status: 'not_found',
+      match: null,
+      candidateFeatures: [],
+      diagnostics: createBuildingFootprintDiagnostics({
+        status: 'not_found',
+        indexUrl,
+        metaUrl,
+        message,
+      }),
+      message,
+    };
+  }
+
+  if (collection) {
+    const match = findBestTextMatch(collection.features, trimmedQuery);
+    const message = match
+      ? '입력 주소와 일치하는 건물 footprint를 선택했습니다.'
+      : '입력 주소와 일치하는 건물 footprint를 찾지 못했습니다.';
+
+    return {
+      status: match ? 'found' : 'not_found',
+      match,
+      candidateFeatures: collection.features,
+      diagnostics: createBuildingFootprintDiagnostics({
+        sourceMode: 'geojson',
+        status: match ? 'selected' : 'not_found',
+        indexLoaded: true,
+        indexEntryCount: 1,
+        searchedFeatureCount: collection.features.length,
+        matchedBuildingId: match?.metadata.buildingId ?? null,
+        matchedAddress: match?.metadata.address ?? null,
+        selectionMode: match ? 'polygon' : null,
+        nearestDistanceM: match ? 0 : null,
+        nearestBuildingId: match?.metadata.buildingId ?? null,
+        nearestBuildingAddress: match?.metadata.address ?? null,
+        selectedGeometryType: match?.metadata.geometryType ?? null,
+        message,
+      }),
+      message,
+    } as BuildingFootprintTextSearchResult;
+  }
+
+  if (!index) {
+    const message = '건물 polygon index를 아직 불러오지 못했습니다. 잠시 뒤 다시 검색해주세요.';
+
+    return {
+      status: 'error',
+      match: null,
+      candidateFeatures: [],
+      diagnostics: createBuildingFootprintDiagnostics({
+        status: 'error',
+        indexUrl,
+        metaUrl,
+        message,
+      }),
+      message,
+    };
+  }
+
+  const candidateEntries = getTextSearchCandidateEntries(index, trimmedQuery);
+
+  if (candidateEntries.length === 0) {
+    const message = '주소에서 행정동 후보를 찾지 못했습니다. 예: "동탄구 반송동 88-12"처럼 동 이름을 포함해 주세요.';
+
+    return {
+      status: 'not_found',
+      match: null,
+      candidateFeatures: [],
+      diagnostics: createBuildingFootprintDiagnostics({
+        status: 'not_found',
+        indexLoaded: true,
+        indexEntryCount: index.entries.length,
+        loadedFileNames: getLoadedAdmdongFileNames(),
+        indexUrl,
+        metaUrl,
+        message,
+      }),
+      message,
+    };
+  }
+
+  const loadedCollections = await Promise.all(
+    candidateEntries.map(async (entry) => {
+      try {
+        return {
+          entry,
+          collection: await loadAdmdongBuildingFile(entry, index.url),
+          errorMessage: null,
+        };
+      } catch (error) {
+        return {
+          entry,
+          collection: null,
+          errorMessage: error instanceof Error ? error.message : `행정동 건물 GeoJSON 로드 실패: ${entry.filename}`,
+        };
+      }
+    }),
+  );
+  const loadedItems = loadedCollections.filter(
+    (item): item is { entry: BuildingAdmdongIndexEntry; collection: BuildingFootprintCollection; errorMessage: null } =>
+      Boolean(item.collection),
+  );
+  const candidateFeatures = loadedItems.flatMap((item) => item.collection.features);
+  const match = findBestTextMatch(candidateFeatures, trimmedQuery);
+  const fileErrors = loadedCollections.flatMap((item) => (item.errorMessage ? [item.errorMessage] : []));
+  const message = match
+    ? `입력 주소와 가장 가까운 건물 footprint를 선택했습니다. 후보 파일 ${candidateEntries.length.toLocaleString(
+        'ko-KR',
+      )}개를 확인했습니다.`
+    : fileErrors.length > 0 && loadedItems.length === 0
+      ? fileErrors.join(' ')
+      : '입력 주소와 일치하는 건물 footprint를 찾지 못했습니다. 지번 또는 건물명을 더 구체적으로 입력해 주세요.';
+
+  return {
+    status: match ? 'found' : fileErrors.length > 0 && loadedItems.length === 0 ? 'error' : 'not_found',
+    match,
+    candidateFeatures,
+    diagnostics: createBuildingFootprintDiagnostics({
+      status: match ? 'selected' : fileErrors.length > 0 && loadedItems.length === 0 ? 'error' : 'not_found',
+      indexLoaded: true,
+      indexEntryCount: index.entries.length,
+      candidateFileCount: candidateEntries.length,
+      loadedFileNames: getLoadedAdmdongFileNames(),
+      searchedFeatureCount: candidateFeatures.length,
+      matchedBuildingId: match?.metadata.buildingId ?? null,
+      matchedAddress: match?.metadata.address ?? null,
+      selectionMode: match ? 'polygon' : null,
+      nearestDistanceM: match ? 0 : null,
+      nearestBuildingId: match?.metadata.buildingId ?? null,
+      nearestBuildingAddress: match?.metadata.address ?? null,
+      selectedGeometryType: match?.metadata.geometryType ?? null,
+      indexUrl,
+      metaUrl,
+      message,
+    }),
+    message,
+  } as BuildingFootprintTextSearchResult;
 }
 
 export function getCandidateAdmdongEntries(

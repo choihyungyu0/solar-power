@@ -73,7 +73,7 @@ function SolarAdoptionHeader() {
       <button
         className="solar-adoption-login-button"
         type="button"
-        onClick={() => window.location.assign('/member/dashboard')}
+        onClick={() => window.location.assign('/login')}
       >
         <LuUserRound aria-hidden="true" />
         로그인

@@ -364,9 +364,9 @@ function SimulationResultPage() {
 }
 
 function ResultHeader({ selectedResult }: { selectedResult: StoredSimulationResult }) {
-  const handleDashboardClick = () => {
+  const handleLoginClick = () => {
     saveSimulationResultToSession(selectedResult);
-    window.location.assign('/member/dashboard');
+    window.location.assign('/login');
   };
 
   return (
@@ -389,7 +389,7 @@ function ResultHeader({ selectedResult }: { selectedResult: StoredSimulationResu
       </nav>
 
       <div className="resultHeaderActions">
-        <button className="resultLoginButton" type="button" onClick={handleDashboardClick}>
+        <button className="resultLoginButton" type="button" onClick={handleLoginClick}>
           로그인
         </button>
         <a className="resultHeaderCta" href="/simulation/setup">

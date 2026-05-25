@@ -305,6 +305,60 @@ img {
   flex-wrap: wrap;
 }
 
+.heroAddressForm {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  flex: 1 1 590px;
+  min-width: min(100%, 590px);
+}
+
+.heroAddressField {
+  min-width: 310px;
+  flex: 1 1 auto;
+  display: grid;
+  gap: 4px;
+  border: 1px solid #dbe3ed;
+  border-radius: 17px;
+  padding: 10px 18px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+}
+
+.heroAddressField span {
+  color: #4b5f78;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.heroAddressField input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #111827;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 850;
+  outline: 0;
+}
+
+.heroAddressField input::placeholder {
+  color: #94a3b8;
+}
+
+.heroAddressForm .primaryButton {
+  min-width: 190px;
+  gap: 8px;
+  border: 0;
+}
+
+.heroAddressForm .primaryButton svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
 .heroVisual {
   position: relative;
   min-height: 610px;
@@ -3795,6 +3849,21 @@ img {
   .heroActions {
     margin-right: auto;
     margin-left: auto;
+  }
+
+  .heroAddressForm {
+    width: 100%;
+    min-width: 0;
+    flex-direction: column;
+  }
+
+  .heroAddressField {
+    min-width: 0;
+  }
+
+  .heroAddressForm .primaryButton {
+    width: 100%;
+    min-width: 0;
   }
 
   .metricCard strong {
