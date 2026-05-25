@@ -1,0 +1,345 @@
+.solar-flow-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 14% 12%, rgba(37, 99, 235, 0.08), transparent 30%),
+    linear-gradient(180deg, #ffffff 0%, #f5f8fc 100%);
+  color: #111827;
+}
+
+.solar-flow-main {
+  width: min(1180px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 54px 0 72px;
+}
+
+.solar-flow-card,
+.solar-flow-complete-card {
+  border: 1px solid #dbe5f1;
+  border-radius: 16px;
+  padding: clamp(28px, 4vw, 54px);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18px 42px rgba(28, 65, 115, 0.12);
+}
+
+.solar-flow-stepper {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.solar-flow-stepper span {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #d5e0ef;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #7a8699;
+  font-weight: 900;
+}
+
+.solar-flow-stepper span.is-active {
+  border-color: #0b64e9;
+  background: #0b64e9;
+  color: #ffffff;
+}
+
+.solar-flow-eyebrow {
+  margin: 0 0 9px;
+  color: #0b64e9;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.solar-flow-card h1,
+.solar-flow-complete-card h1 {
+  margin: 0;
+  color: #111827;
+  font-size: clamp(32px, 3vw, 48px);
+  font-weight: 900;
+  line-height: 1.18;
+  letter-spacing: 0;
+  word-break: keep-all;
+}
+
+.solar-flow-description {
+  max-width: 740px;
+  margin: 16px 0 34px;
+  color: #536174;
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.65;
+}
+
+.solar-flow-address-panel {
+  display: grid;
+  grid-template-columns: 34px 120px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  border: 1.5px solid #bfd4f0;
+  border-radius: 12px;
+  padding: 22px 26px;
+  background: #f8fbff;
+}
+
+.solar-flow-address-panel svg {
+  width: 26px;
+  height: 26px;
+  color: #0b64e9;
+}
+
+.solar-flow-address-panel label,
+.solar-flow-form span,
+.solar-flow-cost-card span {
+  color: #344054;
+  font-size: 16px;
+  font-weight: 850;
+}
+
+.solar-flow-address-panel input,
+.solar-flow-form input {
+  width: 100%;
+  min-width: 0;
+  height: 54px;
+  border: 1px solid #cdd9e8;
+  border-radius: 8px;
+  padding: 0 16px;
+  background: #ffffff;
+  color: #111827;
+  font: inherit;
+  font-size: 17px;
+  outline: none;
+}
+
+.solar-flow-address-panel input:focus,
+.solar-flow-form input:focus {
+  border-color: #0b64e9;
+  box-shadow: 0 0 0 4px rgba(11, 100, 233, 0.12);
+}
+
+.solar-flow-option-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.solar-flow-option-card {
+  min-height: 164px;
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  border: 1.5px solid #dbe5f1;
+  border-radius: 14px;
+  padding: 24px;
+  background: #ffffff;
+  text-align: left;
+  box-shadow: 0 8px 20px rgba(28, 65, 115, 0.06);
+}
+
+.solar-flow-option-card.is-selected {
+  border-color: #0b64e9;
+  background: #f0f6ff;
+}
+
+.solar-flow-option-card svg {
+  width: 30px;
+  height: 30px;
+  color: #0b64e9;
+}
+
+.solar-flow-option-card strong {
+  color: #111827;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.solar-flow-option-card span {
+  color: #536174;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.solar-flow-cost-card {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid #d8e2ef;
+  border-radius: 12px;
+  background: #d8e2ef;
+}
+
+.solar-flow-cost-card div {
+  min-height: 118px;
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  padding: 24px;
+  background: #ffffff;
+}
+
+.solar-flow-cost-card strong {
+  color: #0f172a;
+  font-size: clamp(22px, 2vw, 30px);
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.solar-flow-loan-note,
+.solar-flow-warning {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid #d8e2ef;
+  border-radius: 12px;
+  padding: 18px 22px;
+  background: #f8fbff;
+  color: #1c2e4f;
+  font-weight: 850;
+}
+
+.solar-flow-loan-note svg,
+.solar-flow-warning svg {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  color: #0b64e9;
+}
+
+.solar-flow-loan-note p {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.solar-flow-loan-note small {
+  color: #667085;
+  font-size: 13px;
+}
+
+.solar-flow-form {
+  display: grid;
+  gap: 18px;
+}
+
+.solar-flow-form label:not(.solar-flow-checkbox) {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+
+.solar-flow-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+}
+
+.solar-flow-checkbox input {
+  width: 20px;
+  height: 20px;
+}
+
+.solar-flow-actions {
+  margin-top: 34px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.solar-flow-primary-button,
+.solar-flow-outline-button,
+.solar-flow-ghost-button {
+  min-height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 8px;
+  padding: 0 24px;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.solar-flow-primary-button {
+  background: linear-gradient(180deg, #0f72f4 0%, #0759da 100%);
+  color: #ffffff;
+  box-shadow: 0 10px 20px rgba(11, 100, 233, 0.22);
+}
+
+.solar-flow-outline-button,
+.solar-flow-ghost-button {
+  border: 1.5px solid #cdd9e8;
+  background: #ffffff;
+  color: #1c2e4f;
+}
+
+.solar-flow-ghost-button {
+  color: #0b64e9;
+}
+
+.solar-flow-complete-card {
+  min-height: 520px;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  text-align: center;
+}
+
+.solar-flow-complete-icon {
+  width: 82px;
+  height: 82px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #eaf2ff;
+  color: #0b64e9;
+}
+
+.solar-flow-complete-icon svg {
+  width: 42px;
+  height: 42px;
+  stroke-width: 2.8;
+}
+
+.solar-flow-complete-card p {
+  margin: 12px 0 0;
+  color: #536174;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.solar-flow-complete-card .solar-flow-primary-button {
+  margin-top: 36px;
+}
+
+@media (max-width: 760px) {
+  .solar-flow-main {
+    width: calc(100% - 28px);
+    padding-top: 28px;
+  }
+
+  .solar-flow-address-panel,
+  .solar-flow-form label:not(.solar-flow-checkbox) {
+    grid-template-columns: 1fr;
+  }
+
+  .solar-flow-option-grid,
+  .solar-flow-cost-card {
+    grid-template-columns: 1fr;
+  }
+
+  .solar-flow-actions {
+    justify-content: stretch;
+  }
+
+  .solar-flow-primary-button,
+  .solar-flow-outline-button,
+  .solar-flow-ghost-button {
+    width: 100%;
+  }
+}

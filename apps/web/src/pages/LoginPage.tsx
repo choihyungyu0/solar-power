@@ -1,51 +1,13 @@
 import { type ChangeEvent, type FormEvent, useState } from 'react';
-import { saveDemoAuthState } from '../lib/demoAuth';
+import { useNavigate } from 'react-router-dom';
+import SolarMateHeader from '../components/SolarMateHeader';
+import { setDemoAuth } from '../lib/demoAuth';
 import './LoginPage.css';
 
 type LoginFormState = {
   id: string;
   password: string;
 };
-
-function SolarMateLogo() {
-  return (
-    <a className="login-logo" href="/" aria-label="SolarMate 홈">
-      <svg className="login-logo-icon" viewBox="0 0 82 60" fill="none" aria-hidden="true">
-        <circle cx="22" cy="24" r="14" fill="#FDB813" />
-        <path d="M22 3V11" stroke="#FDB813" strokeWidth="4" strokeLinecap="round" />
-        <path d="M22 37V45" stroke="#FDB813" strokeWidth="4" strokeLinecap="round" />
-        <path d="M1 24H9" stroke="#FDB813" strokeWidth="4" strokeLinecap="round" />
-        <path d="M35 24H43" stroke="#FDB813" strokeWidth="4" strokeLinecap="round" />
-        <path d="M7.2 9.2L12.8 14.8" stroke="#FDB813" strokeWidth="4" strokeLinecap="round" />
-        <path d="M31.2 33.2L36.8 38.8" stroke="#FDB813" strokeWidth="4" strokeLinecap="round" />
-        <path d="M36.8 9.2L31.2 14.8" stroke="#FDB813" strokeWidth="4" strokeLinecap="round" />
-        <path d="M12.8 33.2L7.2 38.8" stroke="#FDB813" strokeWidth="4" strokeLinecap="round" />
-        <path d="M38 26H75L68 51H31L38 26Z" fill="#1468E8" />
-        <path d="M45 26L38 51" stroke="#ffffff" strokeWidth="2" opacity="0.85" />
-        <path d="M55 26L50 51" stroke="#ffffff" strokeWidth="2" opacity="0.85" />
-        <path d="M65 26L62 51" stroke="#ffffff" strokeWidth="2" opacity="0.85" />
-        <path d="M35 36H72" stroke="#ffffff" strokeWidth="2" opacity="0.85" />
-        <path d="M33 44H70" stroke="#ffffff" strokeWidth="2" opacity="0.85" />
-      </svg>
-
-      <span>SolarMate</span>
-    </a>
-  );
-}
-
-function UserIcon() {
-  return (
-    <svg width="31" height="31" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.8" />
-      <path
-        d="M4.5 20c1.3-4.2 4.1-6.2 7.5-6.2s6.2 2 7.5 6.2"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
 
 function LockIcon() {
   return (
@@ -82,35 +44,8 @@ function SearchIcon() {
   );
 }
 
-function LoginHeader() {
-  const handleLoginClick = () => {
-    if (window.location.pathname !== '/login') {
-      window.location.assign('/login');
-    }
-  };
-
-  return (
-    <header className="login-header">
-      <div className="login-header-inner">
-        <SolarMateLogo />
-
-        <nav className="login-nav" aria-label="주요 메뉴">
-          <a href="/solar-adoption">태양광 도입</a>
-          <a href="/#service-intro">서비스 소개</a>
-          <a href="/notice">공지사항</a>
-          <a href="/consultation">고객센터</a>
-        </nav>
-
-        <button className="login-header-button" type="button" onClick={handleLoginClick}>
-          <UserIcon />
-          로그인
-        </button>
-      </div>
-    </header>
-  );
-}
-
 export default function LoginPage() {
+  const navigate = useNavigate();
   const [form, setForm] = useState<LoginFormState>({
     id: '',
     password: '',
@@ -136,8 +71,14 @@ export default function LoginPage() {
       return;
     }
 
-    saveDemoAuthState(userId);
-    window.location.assign('/member/dashboard');
+    const authState = setDemoAuth(userId);
+
+    if (authState.role === 'uninstalled') {
+      navigate('/member/no-installation');
+      return;
+    }
+
+    navigate('/member/dashboard?tab=generation');
   };
 
   const handleSignupClick = () => {
@@ -150,7 +91,7 @@ export default function LoginPage() {
 
   return (
     <div className="login-page">
-      <LoginHeader />
+      <SolarMateHeader />
 
       <main className="login-main">
         <section className="login-card" aria-labelledby="login-title">
@@ -160,6 +101,9 @@ export default function LoginPage() {
 
           <h1 id="login-title">로그인</h1>
           <p>SolarMate 서비스를 이용하기 위해 로그인해주세요.</p>
+          <p className="login-demo-help">
+            데모 로그인: 아무 ID/PW 입력 시 설치자 화면으로 이동합니다. ID에 guest 또는 미설치를 입력하면 미설치자 화면으로 이동합니다.
+          </p>
 
           <form className="login-form" onSubmit={handleSubmit}>
             <div className="login-form-row">

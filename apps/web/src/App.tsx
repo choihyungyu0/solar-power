@@ -1,32 +1,60 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { LuSearch } from 'react-icons/lu';
 import SafeLocalImage from './components/SafeLocalImage';
 import ServiceIntroSection from './components/ServiceIntroSection';
+import SolarMateHeader from './components/SolarMateHeader';
 import { readLandingAddressText, saveLandingAddressDraft } from './lib/addressDraft';
 import ConsultationCompletePage from './pages/ConsultationCompletePage';
 import ConsultationPage from './pages/ConsultationPage';
 import LoginPage from './pages/LoginPage';
 import MemberDashboardPage from './pages/MemberDashboardPage';
+import MemberNoInstallationPage from './pages/MemberNoInstallationPage';
 import NoticePage from './pages/NoticePage';
 import RiskMapPage from './pages/RiskMapPage';
+import ServicePage from './pages/ServicePage';
 import SolarAdoptionPage from './pages/SolarAdoptionPage';
+import {
+  SolarAdoptionCompletePage,
+  SolarAdoptionStep1Page,
+  SolarAdoptionStep2Page,
+  SolarAdoptionStep3Page,
+  SolarAdoptionStep4Page,
+} from './pages/SolarAdoptionFlowPages';
 import SimulationResultPage from './pages/SimulationResultPage';
 import SimulationSetupPage from './pages/SimulationSetupPage';
 
 function App() {
-  const pathname = window.location.pathname.replace(/\/$/, '') || '/';
+  return (
+    <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/risk-map" element={<RiskMapPage />} />
+      <Route path="/simulation/setup" element={<SimulationSetupPage />} />
+      <Route path="/simulation/result" element={<SimulationResultPage />} />
+      <Route path="/solar-adoption" element={<SolarAdoptionPage />} />
+      <Route path="/solar-adoption/step-1" element={<SolarAdoptionStep1Page />} />
+      <Route path="/solar-adoption/step-2" element={<SolarAdoptionStep2Page />} />
+      <Route path="/solar-adoption/step-3" element={<SolarAdoptionStep3Page />} />
+      <Route path="/solar-adoption/step-4" element={<SolarAdoptionStep4Page />} />
+      <Route path="/solar-adoption/complete" element={<SolarAdoptionCompletePage />} />
+      <Route path="/service" element={<ServicePage />} />
+      <Route path="/notice" element={<NoticePage />} />
+      <Route path="/consultation" element={<ConsultationPage />} />
+      <Route path="/consultation/complete" element={<ConsultationCompletePage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/member/dashboard" element={<MemberDashboardPage />} />
+      <Route path="/member/no-installation" element={<MemberNoInstallationPage />} />
+      <Route path="/member/as" element={<Navigate to="/member/dashboard?tab=as" replace />} />
+      <Route path="/member/profile" element={<Navigate to="/member/dashboard?tab=profile" replace />} />
+      <Route path="/customer-center" element={<Navigate to="/member/dashboard?tab=as" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+function HomePage() {
+  const navigate = useNavigate();
   const [heroAddress, setHeroAddress] = useState(() => readLandingAddressText());
-  const isRiskMapPage = pathname === '/risk-map';
-  const isSimulationSetupPage = pathname === '/simulation/setup';
-  const isSimulationResultPage = pathname === '/simulation/result';
-  const isConsultationPage = pathname === '/consultation';
-  const isConsultationCompletePage = pathname === '/consultation/complete';
-  const isSolarAdoptionPage = pathname === '/solar-adoption';
-  const isNoticePage = pathname === '/notice';
-  const isLoginPage = pathname === '/login';
-  const isMemberDashboardPage = pathname === '/member/dashboard';
-  const isMemberAsPage = pathname === '/member/as' || pathname === '/customer-center';
-  const isMemberProfilePage = pathname === '/member/profile';
 
   useEffect(() => {
     if (!window.location.hash) {
@@ -38,54 +66,6 @@ function App() {
     });
   }, []);
 
-  if (isRiskMapPage) {
-    return <RiskMapPage />;
-  }
-
-  if (isSimulationSetupPage) {
-    return <SimulationSetupPage />;
-  }
-
-  if (isSimulationResultPage) {
-    return <SimulationResultPage />;
-  }
-
-  if (isConsultationPage) {
-    return <ConsultationPage />;
-  }
-
-  if (isConsultationCompletePage) {
-    return <ConsultationCompletePage />;
-  }
-
-  if (isSolarAdoptionPage) {
-    return <SolarAdoptionPage />;
-  }
-
-  if (isNoticePage) {
-    return <NoticePage />;
-  }
-
-  if (isLoginPage) {
-    return <LoginPage />;
-  }
-
-  if (isMemberDashboardPage) {
-    return <MemberDashboardPage />;
-  }
-
-  if (isMemberAsPage) {
-    return <MemberDashboardPage initialTab="as" />;
-  }
-
-  if (isMemberProfilePage) {
-    return <MemberDashboardPage initialTab="profile" />;
-  }
-
-  const goLoginPage = () => {
-    window.location.assign('/login');
-  };
-
   const handleHeroAddressSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -96,37 +76,13 @@ function App() {
       return;
     }
 
-    window.location.assign('/simulation/setup');
+    navigate('/risk-map');
   };
 
   return (
     <main className="pageShell">
       <div className="siteFrame">
-        <header className="landingHeader">
-          <a className="logo" href="/" aria-label="솔라메이트 홈">
-            <span className="sunMark" aria-hidden="true" />
-            <span>
-              <strong>로고</strong>
-              <small />
-            </span>
-          </a>
-
-          <nav className="desktopNav" aria-label="주요 메뉴">
-            <a href="/solar-adoption">태양광 도입</a>
-            <a href="/#service-intro">서비스 소개</a>
-            <a href="/notice">공지사항</a>
-            <a href="/consultation">상담하기</a>
-          </nav>
-
-          <div className="headerActions">
-            <button className="loginButton" type="button" onClick={goLoginPage}>
-              로그인
-            </button>
-            <a className="primaryButton headerCta" href="/simulation/setup">
-              우리 아파트 가능성 확인하기
-            </a>
-          </div>
-        </header>
+        <SolarMateHeader />
 
         <section className="heroSection" aria-labelledby="hero-title">
           <div className="heroCopy">
@@ -135,9 +91,7 @@ function App() {
               부담 없이 태양광 설치하기
               <br />
             </h1>
-            <p className="heroDescription">
-              (서비스 지역 : 경기도)
-            </p>
+            <p className="heroDescription">(서비스 지역 : 경기도)</p>
             <p className="disclaimer">
               ※ 시뮬레이션 결과는 건축물 정보, 일사량,
               <br />
@@ -157,12 +111,12 @@ function App() {
                 </label>
                 <button className="primaryButton" type="submit">
                   <LuSearch aria-hidden="true" />
-                  주소 입력하기
+                  우리 아파트 태양광 설치하기
                 </button>
               </form>
-              <a className="secondaryButton" href="#service-intro-status">
-                (서비스 지역 : 경기도)
-              </a>
+              <button className="secondaryButton" type="button" onClick={() => navigate('/risk-map')}>
+                전기세 위험 지도 보기
+              </button>
             </div>
           </div>
 
@@ -174,7 +128,6 @@ function App() {
               className="heroImage"
             />
           </div>
-
         </section>
 
         <ServiceIntroSection />
