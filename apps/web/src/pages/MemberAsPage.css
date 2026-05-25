@@ -5,12 +5,7 @@
     radial-gradient(circle at 50% 6%, rgba(255, 255, 255, 0.95), transparent 34%),
     linear-gradient(180deg, #ffffff 0%, #f5f7fb 100%);
   color: #10213d;
-  font-family:
-    Pretendard,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
+  font-family: var(--font-sans);
 }
 
 .member-as-page button,

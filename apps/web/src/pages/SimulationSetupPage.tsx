@@ -14,6 +14,7 @@ import {
   LuShieldCheck,
 } from 'react-icons/lu';
 import SafeLocalImage from '../components/SafeLocalImage';
+import SolarMateHeader from '../components/SolarMateHeader';
 import { readLandingAddressDraft } from '../lib/addressDraft';
 import './SimulationSetupPage.css';
 
@@ -119,41 +120,16 @@ function SimulationSetupPage() {
   }, [selectedAngle, selectedPanel]);
 
   const goHome = () => {
-    window.location.href = '/';
+    window.location.href = '/risk-map';
   };
 
   const goNext = () => {
-    window.location.href = '/risk-map';
+    window.location.href = '/simulation/result';
   };
 
   return (
     <main className="simulationSetupPage">
-      <header className="landingHeader simulationHeader">
-        <a className="logo" href="/" aria-label="솔라메이트 홈">
-          <span className="sunMark" aria-hidden="true" />
-          <span>
-            <strong>솔라메이트</strong>
-            <small>SolarMate</small>
-          </span>
-        </a>
-
-        <nav className="desktopNav" aria-label="주요 메뉴">
-          <a href="/solar-adoption">태양광 도입</a>
-          <a href="/#service-intro">서비스 소개</a>
-          <a href="/notice">공지사항</a>
-          <a href="/consultation">상담하기</a>
-        </nav>
-
-        <div className="headerActions">
-          <button className="loginButton" type="button" onClick={() => window.location.assign('/login')}>
-            로그인
-          </button>
-          <a className="primaryButton headerCta simulationHeaderCta" href="/simulation/setup">
-            우리 아파트 가능성 확인하기
-            <LuArrowRight aria-hidden="true" />
-          </a>
-        </div>
-      </header>
+      <SolarMateHeader />
 
       <div className="simulationSetupMain">
         <section className="setupTopSection" aria-labelledby="simulation-setup-title">

@@ -174,14 +174,14 @@ function SolarFeedSection() {
       <footer className="solarFooter">
         <div className="solarFooterInner">
           <div className="solarFooterBrand">
-            <a className="solarFooterLogo" href="/" aria-label="솔라메이트 홈">
+            <a className="solarFooterLogo" href="/" aria-label="이코햇 홈">
               <span className="solarFooterLogoMark" aria-hidden="true" />
               <span>
-                <strong>솔라메이트</strong>
-                <small>SolarMate</small>
+                <strong>이코햇</strong>
+                <small>EcoHat</small>
               </span>
             </a>
-            <p>아파트 태양광 도입의 모든 과정을 쉽고 투명하게 도와드리는 파트너, 솔라메이트</p>
+            <p>아파트 태양광 도입의 모든 과정을 쉽고 투명하게 도와드리는 파트너, 이코햇</p>
             <div className="solarSocialLinks" aria-label="소셜 링크 예시">
               <span>N</span>
               <span>▶</span>
@@ -192,7 +192,7 @@ function SolarFeedSection() {
           <div className="solarFooterColumn">
             <h3>회사 정보</h3>
             <p>
-              (주)솔라메이트
+              (주)이코햇
               <br />
               서울특별시 강남구 테헤란로 123, 10층 (역삼동)
               <br />
@@ -213,7 +213,7 @@ function SolarFeedSection() {
 
           <div className="solarFooterColumn">
             <h3>지원 및 다운로드</h3>
-            <p>솔라메이트 앱 다운로드</p>
+            <p>이코햇 앱 다운로드</p>
             <div className="solarStoreButtons">
               <button type="button">App Store에서 다운로드</button>
               <button type="button">Google Play에서 다운로드</button>
@@ -229,13 +229,13 @@ function SolarFeedSection() {
             <p>
               평일 09:00 ~ 18:00 (주말/공휴일 휴무)
               <br />
-              help@solarmate.co.kr
+              help@ecohat.co.kr
             </p>
           </div>
         </div>
 
         <div className="solarFooterBottom">
-          <p>© 2025 SolarMate. All rights reserved.</p>
+          <p>© 2026 EcoHat. All rights reserved.</p>
           <div>
             <a href="/">회사소개</a>
             <a href="/">이용약관</a>

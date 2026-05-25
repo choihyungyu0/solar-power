@@ -1,7 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { IconType } from 'react-icons';
 import {
-  LuBell,
   LuBuilding2,
   LuChartNoAxesColumnIncreasing,
   LuChevronRight,
@@ -9,11 +8,11 @@ import {
   LuCoins,
   LuInfo,
   LuMapPin,
-  LuMenu,
   LuPhone,
   LuSunMedium,
   LuZap,
 } from 'react-icons/lu';
+import SolarMateHeader from '../components/SolarMateHeader';
 import {
   readSimulationResultFromSession,
   saveSimulationResultToSession,
@@ -294,7 +293,7 @@ function SimulationResultPage() {
 
   return (
     <div className="simulationResultPage">
-      <ResultHeader selectedResult={normalized.result} />
+      <SolarMateHeader onBeforeLogin={() => saveSimulationResultToSession(normalized.result)} />
 
       <main className="simulationResultMain">
         <section className="resultTitleArea" aria-labelledby="simulation-result-title">
@@ -360,52 +359,6 @@ function SimulationResultPage() {
         </p>
       </main>
     </div>
-  );
-}
-
-function ResultHeader({ selectedResult }: { selectedResult: StoredSimulationResult }) {
-  const handleLoginClick = () => {
-    saveSimulationResultToSession(selectedResult);
-    window.location.assign('/login');
-  };
-
-  return (
-    <header className="resultSiteHeader">
-      <a className="resultLogo" href="/" aria-label="솔라메이트 홈">
-        <span className="resultLogoMark" aria-hidden="true">
-          <img src="/assets/landing/apartment-isometric.png" alt="" />
-        </span>
-        <strong>
-          <span className="resultLogoKorean">솔라메이트</span>
-          <small>SolarMate</small>
-        </strong>
-      </a>
-
-      <nav className="resultNav" aria-label="주요 메뉴">
-        <a href="/solar-adoption">태양광 도입</a>
-        <a href="/#service-intro">서비스 소개</a>
-        <a href="/notice">공지사항</a>
-        <a href="/consultation">상담하기</a>
-      </nav>
-
-      <div className="resultHeaderActions">
-        <button className="resultLoginButton" type="button" onClick={handleLoginClick}>
-          로그인
-        </button>
-        <a className="resultHeaderCta" href="/simulation/setup">
-          우리 아파트 태양광 설치하기
-        </a>
-      </div>
-
-      <div className="resultMobileHeaderActions" aria-label="모바일 빠른 메뉴">
-        <button type="button" aria-label="알림">
-          <LuBell aria-hidden="true" />
-        </button>
-        <button type="button" aria-label="메뉴">
-          <LuMenu aria-hidden="true" />
-        </button>
-      </div>
-    </header>
   );
 }
 

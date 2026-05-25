@@ -20,6 +20,7 @@ import VWorldSolarPanelLayer, {
   deriveRoofHeightMFromFeature,
   type VWorldSolarPanelLayerStatus,
 } from '../components/VWorldSolarPanelLayer';
+import SolarMateHeader from '../components/SolarMateHeader';
 import ClimatePanelLayer, {
   CLIMATE_PANEL_LEGEND_ITEMS,
   type ClimatePanelLayerStatus,
@@ -123,10 +124,10 @@ const TOUCH_GESTURE_SUPPRESS_CLICK_MS = 700;
 const MAP_LEFT_CLICK_SELECT_ONLY = import.meta.env.VITE_MAP_LEFT_CLICK_SELECT_ONLY !== 'false';
 const MAP_CAMERA_CONTROL_MODE = MAP_LEFT_CLICK_SELECT_ONLY ? 'left-click-select-right-drag-map' : 'default';
 const LEFT_CLICK_SELECT_MAX_MOVE_PX = 5;
-const ROOF_FOCUS_MIN_HEIGHT_M = 520;
+const ROOF_FOCUS_MIN_HEIGHT_M = 340;
 const ROOF_FOCUS_MAX_HEIGHT_M = 1800;
 const ROOF_FOCUS_SPAN_MULTIPLIER = 3.2;
-const ROOF_FOCUS_HEIGHT_PADDING_M = 220;
+const ROOF_FOCUS_HEIGHT_PADDING_M = 180;
 const CLIMATE_POC_FOCUS_MIN_HEIGHT_M = 550;
 const CLIMATE_POC_FOCUS_MAX_HEIGHT_M = 1800;
 const CLIMATE_POC_FOCUS_SPAN_MULTIPLIER = 4;
@@ -155,7 +156,7 @@ const RISK_MAP_SELECTION_OBJECT_IDS = [
 ];
 
 type MapLoadStatus = 'loading' | 'ready' | 'error';
-type RiskPanelTab = 'risk' | 'solar' | 'policy';
+type RiskPanelTab = 'risk' | 'solar';
 type SelectionMode = 'screen-fallback' | 'coordinate-fallback' | 'parcel-fallback' | 'geometry' | 'building_footprint';
 type SelectionFeedbackStatus = 'idle' | 'loading' | 'success' | 'not_found' | 'error';
 type AddressSearchStatus = 'idle' | 'searching' | 'found' | 'not_found' | 'error';
@@ -336,9 +337,6 @@ const buildingFields = [
   ['현재 월 공용부 전기요금', 'currentMonthlyFee'],
   ['월 전기사용량', 'monthlyUsage'],
   ['전기세 상승 위험 등급', 'riskLevel'],
-  ['5년 누적 추가 부담 예상', 'fiveYearExtraCost'],
-  ['태양광 도입 시 예상 절감 가능성', 'solarPotential'],
-  ['보조금 검토 가능성', 'subsidyReview'],
 ] as const;
 
 const solarFields = [
@@ -373,7 +371,6 @@ const pvAnalysisResultCards = [
 const panelTabs = [
   { id: 'risk', label: '위험 진단' },
   { id: 'solar', label: '태양광 설치' },
-  { id: 'policy', label: '보조금' },
 ] as const;
 
 function formatSolarValue(value: number, unit: (typeof solarFields)[number][2]) {
@@ -1601,7 +1598,6 @@ function RiskMapPage() {
     pvAnalysisStatus === 'fallback' ||
     pvAnalysisStatus === 'backend-result' ||
     pvAnalysisStatus === 'local-fallback';
-  const hasResultDetailReady = hasPvAnalysisCompleted || hasLiveClimatePanelLayout;
   const liveRoofAreaM2 = liveClimateDiagnostics?.roofAreaM2 ?? null;
   const liveCellCount = liveClimateDiagnostics?.cellCount ?? null;
   const liveShadingAverage = liveClimateDiagnostics?.shadingAverage ?? null;
@@ -1810,13 +1806,6 @@ function RiskMapPage() {
         : hasAnyPanelLayout
           ? '패널 배치 결과로 발전량 분석을 실행하세요.'
           : '패널 배치 후 발전량 분석을 실행할 수 있습니다.',
-    },
-    {
-      title: '리포트 확인',
-      state: hasResultDetailReady ? 'active' : 'pending',
-      message: hasResultDetailReady
-        ? '예상/추정 리포트를 확인하세요.'
-        : '음영 분석 또는 발전량 분석 후 리포트가 활성화됩니다.',
     },
   ];
 
@@ -2707,10 +2696,10 @@ function RiskMapPage() {
 
     setAnalysisStatus(
       didSave
-        ? '현재 선택 건물과 최신 예상 분석 결과를 저장하고 상세 리포트로 이동합니다.'
-        : '브라우저 저장소를 사용할 수 없어 상세 리포트에서 시나리오 기준 예시값을 표시합니다.',
+        ? '현재 선택 건물과 최신 예상 분석 결과를 저장하고 패널 선택 화면으로 이동합니다.'
+        : '브라우저 저장소를 사용할 수 없어 결과 화면에서 시나리오 기준 예시값을 표시합니다.',
     );
-    window.location.assign('/simulation/result');
+    window.location.assign('/simulation/setup');
   }, [
     liveClimateBundle,
     liveClimateStatus,
@@ -3236,8 +3225,7 @@ function RiskMapPage() {
 
       if (
         targetElement?.closest('.mapControlOverlay') ||
-        targetElement?.closest('.riskLegend') ||
-        targetElement?.closest('.scenarioComparisonStrip')
+        targetElement?.closest('.riskLegend')
       ) {
         return;
       }
@@ -3658,41 +3646,7 @@ function RiskMapPage() {
 
   return (
     <main className="riskMapPage">
-      <header className="landingHeader riskMapHeader">
-        <a className="logo" href="/" aria-label="솔라메이트 홈">
-          <span className="sunMark" aria-hidden="true" />
-          <span>
-            <strong>솔라메이트</strong>
-            <small>SolarMate</small>
-          </span>
-        </a>
-
-        <nav className="desktopNav" aria-label="주요 메뉴">
-          <a href="/solar-adoption">태양광 도입</a>
-          <a href="/#service-intro">서비스 소개</a>
-          <a href="/notice">공지사항</a>
-          <a href="/consultation">상담하기</a>
-        </nav>
-
-        <div className="headerActions">
-          <button className="loginButton" type="button" onClick={() => window.location.assign('/login')}>
-            로그인
-          </button>
-          <a className="primaryButton headerCta" href="/risk-map">
-            무료 진단 시작
-          </a>
-        </div>
-      </header>
-
-      <section className="riskMapIntro" aria-labelledby="risk-map-title">
-        <span className="riskMapEyebrow">전기세 위험 지도</span>
-        <div>
-          <h1 id="risk-map-title">지도에서 우리 아파트의 전기세 위험을 확인하세요</h1>
-          <p>
-            3D 지도에서 건물을 선택하면 전기세 상승 위험 등급과 태양광 대응 가능성을 확인할 수 있습니다.
-          </p>
-        </div>
-      </section>
+      <SolarMateHeader />
 
       <section className="riskMapWorkspace" aria-label="전기세 위험 지도 작업 영역">
         <div className="riskMapCanvasColumn">
@@ -3968,20 +3922,6 @@ function RiskMapPage() {
               </span>
             </div>
 
-            <div className="scenarioComparisonStrip" aria-label="전기세 위험과 태양광 대응 비교">
-              <div>
-                <span>미도입 시 5년 추가 부담 예상</span>
-                <strong>{selectedBuilding.fiveYearExtraCost}</strong>
-              </div>
-              <div>
-                <span>태양광 도입 시 예상 절감</span>
-                <strong>예상 {selectedBuilding.estimatedAnnualSavingsKrw.toLocaleString('ko-KR')}원/년</strong>
-              </div>
-              <div>
-                <span>보조금 적용 시 검토 가능성</span>
-                <strong>{selectedBuilding.subsidyReview}</strong>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -4951,22 +4891,6 @@ function RiskMapPage() {
                 {Math.round(mvpAssumptionPreview.annualSavingsKrw).toLocaleString('ko-KR')}원 예시입니다.
               </p>
             </>
-          )}
-
-          {activeTab === 'policy' && (
-            <div className="policyReviewPanel">
-              <h3>보조금 검토 가능성</h3>
-              <strong>{selectedBuilding.subsidyReview}</strong>
-              <p>
-                보조금은 공고 기준 확인 필요 상태입니다. 접수 가능 여부와 지원 규모는 지자체 예산, 건물 조건,
-                신청 시점에 따라 달라질 수 있습니다.
-              </p>
-              <ul>
-                <li>경기도/지자체 공고 기준 확인 필요</li>
-                <li>공동주택 관리주체 동의 및 구조 검토 필요</li>
-                <li>정책자금 접근성 향상을 위한 신청 지원 검토 가능</li>
-              </ul>
-            </div>
           )}
 
           {analysisStatus && <p className="analysisStatus">{analysisStatus}</p>}

@@ -100,7 +100,7 @@ export default function LoginPage() {
           </div>
 
           <h1 id="login-title">로그인</h1>
-          <p>SolarMate 서비스를 이용하기 위해 로그인해주세요.</p>
+          <p>이코햇 서비스를 이용하기 위해 로그인해주세요.</p>
           <p className="login-demo-help">
             데모 로그인: 아무 ID/PW 입력 시 설치자 화면으로 이동합니다. ID에 guest 또는 미설치를 입력하면 미설치자 화면으로 이동합니다.
           </p>

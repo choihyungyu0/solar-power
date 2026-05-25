@@ -3,8 +3,8 @@ import {
   LuChartNoAxesColumnIncreasing,
   LuCircleUserRound,
   LuHeadphones,
-  LuUserRound,
 } from 'react-icons/lu';
+import SolarMateHeader from '../components/SolarMateHeader';
 import { readSimulationResultFromSession } from '../lib/simulationResultStorage';
 import './MemberProfilePage.css';
 
@@ -41,7 +41,7 @@ const fallbackProfileValues: ProfileValues = {
   name: '김솔라',
   birthDate: '1998.03.12',
   phone: '010-1234-5678',
-  email: 'solarmate@example.com',
+  email: 'ecohat@example.com',
 };
 
 const fallbackAddress: AddressSummary = {
@@ -125,13 +125,6 @@ function showDemoChangeAlert() {
   window.alert('데모 화면에서는 실제 정보 변경이 저장되지 않습니다.');
 }
 
-function handleMemberLogout() {
-  Object.keys(window.sessionStorage)
-    .filter((key) => key.startsWith('solarmate:'))
-    .forEach((key) => window.sessionStorage.removeItem(key));
-  window.location.assign('/');
-}
-
 export default function MemberProfilePage() {
   const initialProfileValues = useMemo(() => getInitialProfileValues(), []);
   const address = useMemo(() => getAddressSummary(), []);
@@ -146,7 +139,7 @@ export default function MemberProfilePage() {
 
   return (
     <div className="member-profile-page">
-      <MemberProfileHeader />
+      <SolarMateHeader variant="member" />
 
       <main className="member-profile-main">
         <section className="member-profile-card" aria-labelledby="member-profile-title">
@@ -194,40 +187,6 @@ export default function MemberProfilePage() {
         </section>
       </main>
     </div>
-  );
-}
-
-function MemberProfileHeader() {
-  return (
-    <header className="member-profile-header">
-      <a className="member-profile-logo" href="/" aria-label="솔라메이트 홈">
-        <span className="member-profile-logo-mark" aria-hidden="true">
-          <span className="member-profile-logo-sun" />
-          <span className="member-profile-logo-panel">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <span key={index} />
-            ))}
-          </span>
-        </span>
-
-        <span className="member-profile-logo-text">
-          <strong>솔라메이트</strong>
-          <small>SolarMate</small>
-        </span>
-      </a>
-
-      <nav className="member-profile-nav" aria-label="주요 메뉴">
-        <a href="/solar-adoption">태양광 도입</a>
-        <a href="/#service-intro">서비스 소개</a>
-        <a href="/notice">공지사항</a>
-        <a href="/consultation">상담하기</a>
-      </nav>
-
-      <button className="member-profile-logout-button" type="button" onClick={handleMemberLogout}>
-        <LuUserRound aria-hidden="true" />
-        로그아웃
-      </button>
-    </header>
   );
 }
 

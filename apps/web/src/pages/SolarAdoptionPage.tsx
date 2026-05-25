@@ -14,7 +14,7 @@ export default function SolarAdoptionPage() {
       <main className="solar-adoption-main">
         <section className="solar-adoption-panel" aria-labelledby="solar-adoption-title">
           <section className="solar-adoption-hero" aria-labelledby="solar-adoption-title">
-            <p>(대충) 태양광 어려우셨죠?</p>
+            <p>태양광 어려우셨죠?</p>
             <h1 id="solar-adoption-title">태양광 쉽게 설치할 수 있게 도와드려요</h1>
           </section>
 

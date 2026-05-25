@@ -92,7 +92,7 @@ export default function ConsultationCompletePage() {
           </section>
         </section>
 
-        <button className="consultation-complete-prev-button" type="button" onClick={() => navigate('/consultation')}>
+        <button className="consultation-complete-prev-button" type="button" onClick={() => navigate('/service')}>
           <span aria-hidden="true">‹</span>
           이전
         </button>

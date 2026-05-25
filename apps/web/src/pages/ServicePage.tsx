@@ -51,7 +51,7 @@ export default function ServicePage() {
         <section className="service-page-hero" aria-labelledby="service-page-title">
           <div className="service-page-hero-copy">
             <p>서비스 소개</p>
-            <h1 id="service-page-title">아파트 태양광 도입을 한 번에 판단하는 SolarMate</h1>
+            <h1 id="service-page-title">아파트 태양광 도입을 한 번에 판단하는 이코햇</h1>
             <span>
               전기요금 부담, 도심 자가발전, 보조금 복잡성을 한 흐름으로 정리해 설치 가능성부터 상담 신청까지
               이어줍니다.

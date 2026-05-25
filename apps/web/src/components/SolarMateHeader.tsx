@@ -6,6 +6,8 @@ import './SolarMateHeader.css';
 
 type SolarMateHeaderProps = {
   variant?: 'public' | 'member';
+  onBeforeLogin?: () => void;
+  onBeforeLogout?: () => void;
 };
 
 const navItems = [
@@ -27,7 +29,7 @@ const navItems = [
   },
 ];
 
-export default function SolarMateHeader({ variant = 'public' }: SolarMateHeaderProps) {
+export default function SolarMateHeader({ variant = 'public', onBeforeLogin, onBeforeLogout }: SolarMateHeaderProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const demoAuth = useMemo(() => getDemoAuth(), [location.pathname, location.search]);
@@ -35,17 +37,19 @@ export default function SolarMateHeader({ variant = 'public' }: SolarMateHeaderP
 
   const handleAuthClick = () => {
     if (isLoggedIn) {
+      onBeforeLogout?.();
       clearDemoAuth();
       navigate('/login');
       return;
     }
 
+    onBeforeLogin?.();
     navigate('/login');
   };
 
   return (
     <header className={`solarmate-header ${variant === 'member' ? 'is-member' : ''}`}>
-      <NavLink className="solarmate-header-logo" to="/" aria-label="SolarMate 홈">
+      <NavLink className="solarmate-header-logo" to="/" aria-label="이코햇 홈">
         <span className="solarmate-header-logo-mark" aria-hidden="true">
           <span className="solarmate-header-logo-sun" />
           <span className="solarmate-header-logo-panel">
@@ -56,8 +60,8 @@ export default function SolarMateHeader({ variant = 'public' }: SolarMateHeaderP
         </span>
 
         <span className="solarmate-header-logo-text">
-          <strong>SolarMate</strong>
-          <small>솔라메이트</small>
+          <strong>이코햇</strong>
+          <small>EcoHat</small>
         </span>
       </NavLink>
 

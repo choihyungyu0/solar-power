@@ -7,63 +7,14 @@
   color: #102033;
 }
 
-.riskMapHeader {
-  min-height: 72px;
-  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.08);
-}
-
-.riskMapHeader .primaryButton {
-  background: linear-gradient(180deg, #1478ff 0%, #075bd8 100%);
-  color: #ffffff;
-  box-shadow: 0 14px 28px rgba(20, 120, 255, 0.24);
-}
-
-.riskMapIntro {
-  width: min(100%, 1840px);
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 28px;
-  align-items: end;
-  padding: 24px 36px 18px;
-}
-
-.riskMapEyebrow {
-  width: fit-content;
-  border: 1px solid rgba(20, 120, 255, 0.2);
-  border-radius: 999px;
-  padding: 9px 15px;
-  background: #ffffff;
-  color: #075bd8;
-  font-size: 14px;
-  font-weight: 850;
-  white-space: nowrap;
-}
-
-.riskMapIntro h1 {
-  margin: 0;
-  color: #0f172a;
-  font-size: clamp(34px, 3.4vw, 56px);
-  line-height: 1.08;
-  letter-spacing: 0;
-}
-
-.riskMapIntro p {
-  max-width: 760px;
-  margin: 12px 0 0;
-  color: #506175;
-  font-size: 18px;
-  font-weight: 650;
-}
-
 .riskMapWorkspace {
   width: min(100%, 1840px);
-  min-height: max(760px, calc(100vh - 142px));
+  min-height: max(760px, calc(100vh - var(--solarmate-header-height, 82px)));
   margin: 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(430px, 460px);
   gap: 26px;
-  padding: 0 36px 36px;
+  padding: 18px 36px 36px;
 }
 
 .riskMapCanvasColumn,
@@ -75,7 +26,7 @@
 .vworldMapShell {
   position: relative;
   min-height: 760px;
-  height: calc(100vh - 152px);
+  height: calc(100vh - var(--solarmate-header-height, 82px) - 54px);
   overflow: hidden;
   border: 1px solid rgba(122, 144, 166, 0.26);
   border-radius: 22px;
@@ -345,46 +296,6 @@
   color: #26364a;
   font-size: 13px;
   font-weight: 850;
-}
-
-.scenarioComparisonStrip {
-  position: absolute;
-  right: 20px;
-  bottom: 20px;
-  z-index: 4;
-  width: min(520px, calc(100% - 410px));
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  pointer-events: none;
-}
-
-.scenarioComparisonStrip div {
-  min-width: 0;
-  border: 1px solid rgba(201, 213, 225, 0.78);
-  border-radius: 16px;
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 16px 28px rgba(15, 23, 42, 0.1);
-}
-
-.scenarioComparisonStrip span,
-.scenarioComparisonStrip strong {
-  display: block;
-}
-
-.scenarioComparisonStrip span {
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 850;
-}
-
-.scenarioComparisonStrip strong {
-  margin-top: 3px;
-  color: #0f172a;
-  font-size: 13px;
-  font-weight: 950;
-  line-height: 1.28;
 }
 
 .legendDot {
@@ -743,7 +654,7 @@
 
 .riskPanelTabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
   margin-top: 20px;
   border: 1px solid #e2e8f0;
@@ -829,7 +740,6 @@
 }
 
 .simulationSummary,
-.policyReviewPanel,
 .geometryStatusBox,
 .panelSourceSummary,
 .climatePanelLegendPanel,
@@ -857,9 +767,7 @@
 .simulationSummary strong,
 .panelSourceSummary strong,
 .climatePanelLegendHeader strong,
-.climateBundleSummaryHeader strong,
-.policyReviewPanel h3,
-.policyReviewPanel strong {
+.climateBundleSummaryHeader strong {
   display: block;
   margin-top: 8px;
   color: #0f3f88;
@@ -869,9 +777,7 @@
 }
 
 .simulationSummary p,
-.panelSourceSummary p,
-.policyReviewPanel p,
-.policyReviewPanel li {
+.panelSourceSummary p {
   color: #40566e;
   font-size: 14px;
   font-weight: 650;
@@ -879,8 +785,7 @@
 }
 
 .simulationSummary p,
-.panelSourceSummary p,
-.policyReviewPanel p {
+.panelSourceSummary p {
   margin: 8px 0 0;
 }
 
@@ -993,21 +898,6 @@
   color: #0f172a;
   font-weight: 850;
   overflow-wrap: anywhere;
-}
-
-.policyReviewPanel h3 {
-  margin: 0;
-}
-
-.policyReviewPanel strong {
-  color: #075985;
-}
-
-.policyReviewPanel ul {
-  display: grid;
-  gap: 7px;
-  margin: 12px 0 0;
-  padding-left: 18px;
 }
 
 .solarInfoList {
@@ -1392,11 +1282,6 @@
 }
 
 @media (max-width: 1100px) {
-  .riskMapIntro {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-
   .riskMapWorkspace {
     grid-template-columns: 1fr;
   }
@@ -1408,21 +1293,9 @@
 }
 
 @media (max-width: 760px) {
-  .riskMapIntro {
-    padding: 24px 18px 16px;
-  }
-
-  .riskMapIntro h1 {
-    font-size: 34px;
-  }
-
-  .riskMapIntro p {
-    font-size: 16px;
-  }
-
   .riskMapWorkspace {
     min-height: 0;
-    padding: 0 18px 28px;
+    padding: 16px 18px 28px;
   }
 
   .vworldMapShell {
@@ -1476,16 +1349,8 @@
   .riskLegend {
     left: 14px;
     right: 14px;
-    bottom: 88px;
-    border-radius: 18px;
-  }
-
-  .scenarioComparisonStrip {
-    left: 14px;
-    right: 14px;
     bottom: 14px;
-    width: auto;
-    grid-template-columns: 1fr;
+    border-radius: 18px;
   }
 
   .selectedRoofOverlay {
@@ -1558,23 +1423,17 @@
     min-height: 72px;
   }
 
-  .riskMapIntro,
   .riskMapWorkspace {
     width: 100%;
     max-width: none;
   }
 
-  .riskMapIntro {
-    grid-template-columns: 210px minmax(0, 1fr);
-    padding: 20px clamp(28px, 2.2vw, 44px) 14px;
-  }
-
   .riskMapWorkspace {
-    height: calc(100dvh - 178px);
+    height: calc(100dvh - 72px);
     min-height: 720px;
     grid-template-columns: minmax(0, 1fr) clamp(420px, 24vw, 480px);
     gap: clamp(20px, 1.6vw, 30px);
-    padding: 0 clamp(28px, 2.2vw, 44px) 28px;
+    padding: 18px clamp(28px, 2.2vw, 44px) 28px;
   }
 
   .vworldMapShell {
@@ -1589,22 +1448,10 @@
 }
 
 @media (min-width: 1600px) and (max-height: 1100px) {
-  .riskMapIntro {
-    padding-top: 16px;
-    padding-bottom: 12px;
-  }
-
-  .riskMapIntro h1 {
-    font-size: clamp(36px, 2.5vw, 48px);
-  }
-
-  .riskMapIntro p {
-    margin-top: 8px;
-  }
-
   .riskMapWorkspace {
-    height: calc(100dvh - 188px);
+    height: calc(100dvh - 72px);
     min-height: 0;
+    padding-top: 14px;
     padding-bottom: 12px;
   }
 

@@ -7,8 +7,8 @@ import {
   LuCirclePlus,
   LuCircleUserRound,
   LuHeadphones,
-  LuUserRound,
 } from 'react-icons/lu';
+import SolarMateHeader from '../components/SolarMateHeader';
 import './MemberAsPage.css';
 
 type FaqItem = {
@@ -66,7 +66,7 @@ export default function MemberAsPage() {
 
   return (
     <div className="member-as-page">
-      <MemberAsHeader />
+      <SolarMateHeader variant="member" />
 
       <main className="member-as-main">
         <section className="member-as-card" aria-label="A/S 고객센터">
@@ -145,46 +145,5 @@ export default function MemberAsPage() {
         </section>
       </main>
     </div>
-  );
-}
-
-function handleMemberLogout() {
-  Object.keys(window.sessionStorage)
-    .filter((key) => key.startsWith('solarmate:'))
-    .forEach((key) => window.sessionStorage.removeItem(key));
-  window.location.assign('/');
-}
-
-function MemberAsHeader() {
-  return (
-    <header className="member-as-header">
-      <a className="member-as-logo" href="/" aria-label="솔라메이트 홈">
-        <span className="member-as-logo-mark" aria-hidden="true">
-          <span className="member-as-logo-sun" />
-          <span className="member-as-logo-panel">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <span key={index} />
-            ))}
-          </span>
-        </span>
-
-        <span className="member-as-logo-text">
-          <strong>솔라메이트</strong>
-          <small>SolarMate</small>
-        </span>
-      </a>
-
-      <nav className="member-as-nav" aria-label="주요 메뉴">
-        <a href="/solar-adoption">태양광 도입</a>
-        <a href="/#service-intro">서비스 소개</a>
-        <a href="/notice">공지사항</a>
-        <a href="/consultation">상담하기</a>
-      </nav>
-
-      <button className="member-as-login-button" type="button" onClick={handleMemberLogout}>
-        <LuUserRound aria-hidden="true" />
-        로그아웃
-      </button>
-    </header>
   );
 }

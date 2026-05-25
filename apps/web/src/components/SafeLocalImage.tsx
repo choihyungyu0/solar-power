@@ -14,7 +14,7 @@ function SafeLocalImage({ src, fallbackSrc, alt, className }: SafeLocalImageProp
   if (hasFailed) {
     return (
       <div className={`${className ?? ''} imagePlaceholder`} role="img" aria-label={alt}>
-        <span>SolarMate</span>
+        <span>이코햇</span>
       </div>
     );
   }

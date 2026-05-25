@@ -21,7 +21,7 @@ import {
   type ScenarioComparisonBar,
   type ScenarioDayCard,
 } from '../lib/memberDashboardData';
-import { isDemoLoggedIn } from '../lib/demoAuth';
+import { getDemoUserRole, isDemoLoggedIn } from '../lib/demoAuth';
 import { SELECTED_SIMULATION_RESULT_STORAGE_KEY } from '../lib/simulationResultStorage';
 import './MemberDashboardPage.css';
 
@@ -123,7 +123,7 @@ const fallbackProfileValues: ProfileValues = {
   name: '김솔라',
   birthDate: '1998.03.12',
   phone: '010-1234-5678',
-  email: 'solarmate@example.com',
+  email: 'ecohat@example.com',
 };
 
 const profileFields: ProfileField[] = [
@@ -196,11 +196,17 @@ export default function MemberDashboardPage({ initialTab }: MemberDashboardPageP
     hasSelectedSimulationResult,
   ]);
 
-  const isDemoSource = dashboardData.source === 'demo';
+  useEffect(() => {
+    if (getDemoUserRole() === 'uninstalled') {
+      navigate('/member/no-installation', { replace: true });
+    }
+  }, [navigate]);
+
+  const isDemoSource = dashboardData.isFallbackDemo;
   const badgeText = isDemoSource ? '데모 대시보드 데이터' : '선택 건물 분석값 기반';
   const noticeText = isDemoSource
-    ? '데모 산식 기반 예상 시나리오입니다. 실제 계량기 사용량이나 실측 발전량으로 표시하지 않습니다.'
-    : '선택 건물 분석값 기반 시나리오입니다.';
+    ? '데모 산식 기반 예상/추정 시나리오입니다. 실제 계량기 데이터가 아닙니다.'
+    : '선택 건물 분석값 기반 시나리오입니다. 실제 계량기 데이터가 아닌 예상/추정 값입니다.';
   const handleDashboardTabClick = (tab: DashboardTab) => {
     setActiveTab(tab);
     navigate(`/member/dashboard?tab=${tab}`);
@@ -276,12 +282,15 @@ function GenerationDashboard({
   isDemoSource: boolean;
 }) {
   const [activeGenerationTab, setActiveGenerationTab] = useState<GenerationTab>('realtime');
+  const realtimeScenario = useMemo(() => buildRealtimeDashboardScenario(dashboardData), [dashboardData]);
 
   return (
     <>
       <div className="member-dashboard-warranty-row">
         <strong>보증기한</strong>
-        <div className="member-dashboard-warranty-bar" aria-label="보증기한 상태 표시" />
+        <div className="member-dashboard-warranty-bar" aria-label="보증기한 상태 표시">
+          <span>보증기간 확인</span>
+        </div>
       </div>
 
       <section className="member-dashboard-generation-card" aria-labelledby="member-dashboard-title">
@@ -297,117 +306,276 @@ function GenerationDashboard({
 
         <p className="member-dashboard-scenario-note">{noticeText}</p>
 
-        <nav className="member-dashboard-generation-tab-row" aria-label="발전량 세부 메뉴">
-          {generationTabs.map((tab) => (
-            <button
-              key={tab.id}
-              className={activeGenerationTab === tab.id ? 'is-active' : ''}
-              type="button"
-              aria-current={activeGenerationTab === tab.id ? 'page' : undefined}
-              onClick={() => setActiveGenerationTab(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+        <div className="member-dashboard-generation-workbench">
+          <RealtimeGaugeCard scenario={realtimeScenario} />
 
-        {activeGenerationTab === 'realtime' && (
-          <RealtimeGenerationPanel dashboardData={dashboardData} scenarioCards={scenarioCards} />
-        )}
+          <section className="member-dashboard-generation-panel-frame" aria-live="polite">
+            {activeGenerationTab === 'realtime' && <RealtimeGenerationPanel scenario={realtimeScenario} />}
 
-        {activeGenerationTab === 'hourly' && <HourlyUsagePanel scenarioCards={scenarioCards} />}
+            {activeGenerationTab === 'hourly' && <HourlyUsagePanel scenarioCards={scenarioCards} />}
 
-        {activeGenerationTab === 'monthly' && <MonthlyUsagePanel dashboardData={dashboardData} />}
+            {activeGenerationTab === 'monthly' && <MonthlyUsagePanel dashboardData={dashboardData} />}
 
-        {activeGenerationTab === 'pattern' && <PatternAnalysisPanel dashboardData={dashboardData} />}
+            {activeGenerationTab === 'pattern' && <PatternAnalysisPanel dashboardData={dashboardData} />}
+          </section>
+
+          <nav className="member-dashboard-generation-tab-row" aria-label="발전량 세부 메뉴">
+            {generationTabs.map((tab) => (
+              <button
+                key={tab.id}
+                className={activeGenerationTab === tab.id ? 'is-active' : ''}
+                type="button"
+                aria-current={activeGenerationTab === tab.id ? 'page' : undefined}
+                onClick={() => setActiveGenerationTab(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+        </div>
       </section>
     </>
   );
 }
 
-function RealtimeGenerationPanel({
-  dashboardData,
-  scenarioCards,
-}: {
-  dashboardData: NormalizedDashboardData;
-  scenarioCards: ScenarioDayCard[];
-}) {
-  const representativeCard = scenarioCards[1] ?? scenarioCards[0];
-  const currentEstimatedCharge = representativeCard ? representativeCard.dailyBillKrw * 30 : 0;
-  const generationOffsetKwh = representativeCard ? representativeCard.dailyGenerationKwh * 30 : dashboardData.solar.annualGenerationKwh / 12;
-  const generationOffsetKrw = generationOffsetKwh * dashboardData.solar.electricityPriceKrwPerKwh;
+type RealtimeStageClass = 'one' | 'two' | 'three';
+
+type RealtimeDashboardScenario = {
+  currentRealtimeCharge: number;
+  monthlyExpectedCharge: number;
+  beforeOffsetCharge: number;
+  generationSavingKrw: number;
+  expectedUsageKwh: number;
+  expectedGenerationKwh: number;
+  netUsageKwh: number;
+  progressiveStage: 1 | 2 | 3;
+  stageLabel: string;
+  stageClass: RealtimeStageClass;
+  gaugeRotation: number;
+  periodLabel: string;
+};
+
+function RealtimeGaugeCard({ scenario }: { scenario: RealtimeDashboardScenario }) {
+  const needleStyle = {
+    '--needle-rotation': `${scenario.gaugeRotation}deg`,
+  } as CSSProperties;
 
   return (
+    <article className="member-dashboard-realtime-gauge-card" aria-label="실시간 요금 게이지">
+      <div className="member-dashboard-gauge-header">
+        <span>실시간 요금</span>
+        <strong>{formatKrw(scenario.currentRealtimeCharge)}</strong>
+      </div>
+
+      <div className="member-dashboard-gauge-visual" style={needleStyle}>
+        <div className="member-dashboard-gauge-arc">
+          <span className="is-stage-one">1단계</span>
+          <span className="is-stage-two">2단계</span>
+          <span className="is-stage-three">3단계</span>
+          <i className="member-dashboard-gauge-needle" />
+          <b className={`member-dashboard-gauge-center is-${scenario.stageClass}`}>{scenario.progressiveStage}</b>
+        </div>
+      </div>
+
+      <dl className="member-dashboard-gauge-details">
+        <div>
+          <dt>실시간 요금</dt>
+          <dd>{formatKrw(scenario.currentRealtimeCharge)}</dd>
+        </div>
+        <div>
+          <dt>월 예상 요금</dt>
+          <dd>{formatKrw(scenario.monthlyExpectedCharge)}</dd>
+        </div>
+        <div>
+          <dt>사용기간</dt>
+          <dd>{scenario.periodLabel}</dd>
+        </div>
+        <div>
+          <dt>예상사용량</dt>
+          <dd>{formatKwh(scenario.expectedUsageKwh)}</dd>
+        </div>
+        <div>
+          <dt>예상발전량</dt>
+          <dd>{formatKwh(scenario.expectedGenerationKwh)}</dd>
+        </div>
+        <div>
+          <dt>누진단계</dt>
+          <dd>{scenario.stageLabel}</dd>
+        </div>
+      </dl>
+    </article>
+  );
+}
+
+function RealtimeGenerationPanel({ scenario }: { scenario: RealtimeDashboardScenario }) {
+  return (
     <section className="member-dashboard-generation-panel" aria-label="실시간 요금 데모 대시보드">
+      <div className="member-dashboard-panel-heading">
+        <h2>실시간 요금</h2>
+        <p>실제 계량기 데이터가 아닌 예상/추정 시나리오입니다.</p>
+      </div>
+
       <div className="member-dashboard-realtime-summary">
         <article>
           <span>현재 예상 요금</span>
-          <strong>{formatKrw(currentEstimatedCharge)}</strong>
-          <p>선택 건물 분석값 기반 월 환산 시나리오</p>
+          <strong>{formatKrw(scenario.currentRealtimeCharge)}</strong>
+          <p>선택 건물 분석값을 월 단위로 환산한 현재 시점 데모 값</p>
         </article>
         <article>
-          <span>발전 상쇄량</span>
-          <strong>{formatKwh(generationOffsetKwh)}</strong>
-          <p>예상 태양광 발전으로 상쇄 가능한 월 사용량</p>
+          <span>상계 전 예상</span>
+          <strong>{formatKrw(scenario.beforeOffsetCharge)}</strong>
+          <p>태양광 발전 상계를 적용하기 전 월 예상 요금</p>
         </article>
         <article>
-          <span>예상 절감 효과</span>
-          <strong>{formatKrw(generationOffsetKrw)}</strong>
-          <p>실제 계량기 데이터가 아닌 데모 대시보드 데이터</p>
+          <span>상계 후 예상</span>
+          <strong>{formatKrw(scenario.monthlyExpectedCharge)}</strong>
+          <p>예상 발전량을 반영한 월 예상 요금</p>
         </article>
-      </div>
-
-      <div className="member-dashboard-meter-grid">
-        {scenarioCards.map((card) => (
-          <ScenarioMeterCard key={`${card.id}-${card.month}`} card={card} />
-        ))}
+        <article>
+          <span>예상 발전량</span>
+          <strong>{formatKwh(scenario.expectedGenerationKwh)}</strong>
+          <p>선택 월 기준 태양광 발전량 시나리오</p>
+        </article>
+        <article>
+          <span>예상 사용량</span>
+          <strong>{formatKwh(scenario.expectedUsageKwh)}</strong>
+          <p>공동 전력 사용량을 추정한 데모 값</p>
+        </article>
+        <article>
+          <span>누진단계</span>
+          <strong>{scenario.stageLabel}</strong>
+          <p>예상 사용량 기준으로 단순 분류한 단계</p>
+        </article>
       </div>
     </section>
   );
 }
 
+function buildRealtimeDashboardScenario(data: NormalizedDashboardData): RealtimeDashboardScenario {
+  const today = new Date();
+  const year = today.getFullYear();
+  const monthIndex = today.getMonth();
+  const month = monthIndex + 1;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const expectedGenerationKwh =
+    data.solar.monthlyGenerationKwh[monthIndex] ?? Math.max(0, data.solar.annualGenerationKwh / 12);
+  const expectedUsageKwh = getMonthlyUsageEstimate(data, monthIndex, expectedGenerationKwh);
+  const electricityPrice = data.solar.electricityPriceKrwPerKwh;
+  const beforeOffsetCharge = Math.round(expectedUsageKwh * electricityPrice);
+  const generationSavingKrw = Math.round(Math.min(expectedUsageKwh, expectedGenerationKwh) * electricityPrice);
+  const monthlyExpectedCharge = Math.max(0, beforeOffsetCharge - generationSavingKrw);
+  const currentRealtimeCharge = Math.round(monthlyExpectedCharge / 10);
+  const netUsageKwh = Math.max(0, expectedUsageKwh - expectedGenerationKwh);
+  const progressiveStage = getProgressiveStage(expectedUsageKwh);
+  const stageClass = getStageClass(progressiveStage);
+  const gaugeRotation = Math.max(-78, Math.min(78, (expectedUsageKwh / 900) * 156 - 78));
+  const paddedMonth = String(month).padStart(2, '0');
+
+  return {
+    currentRealtimeCharge,
+    monthlyExpectedCharge,
+    beforeOffsetCharge,
+    generationSavingKrw,
+    expectedUsageKwh,
+    expectedGenerationKwh,
+    netUsageKwh,
+    progressiveStage,
+    stageLabel: `${progressiveStage}단계`,
+    stageClass,
+    gaugeRotation,
+    periodLabel: `${year}.${paddedMonth}.01 - ${year}.${paddedMonth}.${String(daysInMonth).padStart(2, '0')}`,
+  };
+}
+
+function getProgressiveStage(expectedUsageKwh: number): 1 | 2 | 3 {
+  if (expectedUsageKwh <= 300) {
+    return 1;
+  }
+
+  if (expectedUsageKwh <= 700) {
+    return 2;
+  }
+
+  return 3;
+}
+
+function getStageClass(stage: 1 | 2 | 3): RealtimeStageClass {
+  if (stage === 1) {
+    return 'one';
+  }
+
+  if (stage === 2) {
+    return 'two';
+  }
+
+  return 'three';
+}
+
 function HourlyUsagePanel({ scenarioCards }: { scenarioCards: ScenarioDayCard[] }) {
   const representativeCard = scenarioCards[1] ?? scenarioCards[0];
-  const usageTotal = representativeCard?.segments.reduce((sum, segment) => sum + segment.usagePercent, 0) ?? 1;
-  const generationTotal = representativeCard?.segments.reduce((sum, segment) => sum + segment.generationPercent, 0) ?? 1;
-  const rows =
-    representativeCard?.segments.map((segment) => ({
-      hour: segment.hour,
-      usageKwh: (representativeCard.dailyUsageKwh * segment.usagePercent) / usageTotal,
-      generationKwh:
-        generationTotal > 0 ? (representativeCard.dailyGenerationKwh * segment.generationPercent) / generationTotal : 0,
-      usagePercent: segment.usagePercent,
-      generationPercent: segment.generationPercent,
-    })) ?? [];
 
   return (
     <section className="member-dashboard-generation-panel" aria-label="시간별 사용량">
       <div className="member-dashboard-panel-heading">
         <h2>시간별 사용량</h2>
-        <p>24시간 예상 사용량과 태양광 발전량을 단순 시나리오로 비교합니다.</p>
+        <p>시간별 사용량은 선택 건물 분석값 기반 시나리오입니다.</p>
       </div>
 
-      <div className="member-dashboard-hourly-list">
-        {rows.map((row) => (
-          <div className="member-dashboard-hourly-row" key={row.hour}>
-            <strong>{String(row.hour).padStart(2, '0')}시</strong>
-            <div className="member-dashboard-hourly-bars">
-              <span className="is-usage" style={{ width: `${Math.max(8, row.usagePercent)}%` }}>
-                {formatKwh(row.usageKwh)}
-              </span>
-              <span className="is-generation" style={{ width: `${Math.max(0, row.generationPercent)}%` }}>
-                {row.generationKwh > 0 ? formatKwh(row.generationKwh) : ''}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
+      {representativeCard && (
+        <div className="member-dashboard-meter-grid is-hourly-single">
+          <ScenarioMeterCard key={`${representativeCard.id}-${representativeCard.month}`} card={representativeCard} />
+        </div>
+      )}
     </section>
   );
 }
 
 function MonthlyUsagePanel({ dashboardData }: { dashboardData: NormalizedDashboardData }) {
-  const maxGeneration = Math.max(...dashboardData.solar.monthlyGenerationKwh, 1);
+  const today = new Date();
+  const selectedYear = today.getFullYear();
+  const selectedMonth = today.getMonth() + 1;
+  const monthlyRows = dashboardData.solar.monthlyGenerationKwh.map((generationKwh, index) => ({
+    month: index + 1,
+    generationKwh,
+    usageKwh: getMonthlyUsageEstimate(dashboardData, index, generationKwh),
+  }));
+  const maxValue = Math.max(...monthlyRows.flatMap((row) => [row.generationKwh, row.usageKwh]), 1);
+  const chartWidth = 520;
+  const chartHeight = 268;
+  const chartLeft = 54;
+  const chartTop = 28;
+  const chartBottom = 64;
+  const chartRight = 24;
+  const chartBaseY = chartHeight - chartBottom;
+  const chartPlotWidth = chartWidth - chartLeft - chartRight;
+  const chartPlotHeight = chartBaseY - chartTop;
+  const currentMonthIndex = Math.max(0, Math.min(monthlyRows.length - 1, selectedMonth - 1));
+  const usagePoints = monthlyRows.map((row, index) =>
+    getMonthlyChartPoint(row.usageKwh, index, monthlyRows.length, maxValue, {
+      left: chartLeft,
+      top: chartTop,
+      baseY: chartBaseY,
+      plotWidth: chartPlotWidth,
+      plotHeight: chartPlotHeight,
+    }),
+  );
+  const generationPoints = monthlyRows.map((row, index) =>
+    getMonthlyChartPoint(row.generationKwh, index, monthlyRows.length, maxValue, {
+      left: chartLeft,
+      top: chartTop,
+      baseY: chartBaseY,
+      plotWidth: chartPlotWidth,
+      plotHeight: chartPlotHeight,
+    }),
+  );
+  const usageAreaPoints = getMonthlyAreaPoints(usagePoints, chartBaseY);
+  const generationAreaPoints = getMonthlyAreaPoints(generationPoints, chartBaseY);
+  const usageLinePoints = getMonthlyLinePoints(usagePoints);
+  const generationLinePoints = getMonthlyLinePoints(generationPoints);
+  const selectedPoint = usagePoints[currentMonthIndex];
+  const selectedUsage = monthlyRows[currentMonthIndex]?.usageKwh ?? 0;
+  const topScaleLabel = formatKwh(maxValue);
+  const midScaleLabel = formatKwh(maxValue / 2);
 
   return (
     <section className="member-dashboard-generation-panel" aria-label="월별 사용량">
@@ -416,29 +584,153 @@ function MonthlyUsagePanel({ dashboardData }: { dashboardData: NormalizedDashboa
         <p>선택 건물 분석값 또는 데모 산식 기반 월별 발전량/사용량 예상입니다.</p>
       </div>
 
-      <div className="member-dashboard-monthly-list">
-        {dashboardData.solar.monthlyGenerationKwh.map((generationKwh, index) => {
-          const month = index + 1;
-          const usageKwh = getMonthlyUsageEstimate(dashboardData, index, generationKwh);
-          const maxValue = Math.max(maxGeneration, usageKwh, 1);
+      <div className="member-dashboard-monthly-chart-card">
+        <div className="member-dashboard-monthly-app-controls" aria-label="월별 그래프 기준">
+          <button type="button" aria-label="이전 월">
+            ‹
+          </button>
+          <span>{selectedYear}년</span>
+          <span>{selectedMonth}월</span>
+          <button type="button" aria-label="다음 월">
+            ›
+          </button>
+        </div>
 
-          return (
-            <div className="member-dashboard-monthly-row" key={month}>
-              <strong>{month}월</strong>
-              <div className="member-dashboard-monthly-bars">
-                <span className="is-generation" style={{ width: `${Math.max(8, (generationKwh / maxValue) * 100)}%` }}>
-                  발전 {formatKwh(generationKwh)}
-                </span>
-                <span className="is-usage" style={{ width: `${Math.max(8, (usageKwh / maxValue) * 100)}%` }}>
-                  사용 {formatKwh(usageKwh)}
-                </span>
-              </div>
-            </div>
-          );
-        })}
+        <div className="member-dashboard-monthly-app-chart">
+          <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label="월별 사용량과 발전량 비교 그래프">
+            <defs>
+              <linearGradient id="member-dashboard-monthly-usage-gradient" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor="#ffd447" />
+                <stop offset="100%" stopColor="#ffd447" stopOpacity="0.72" />
+              </linearGradient>
+              <linearGradient id="member-dashboard-monthly-generation-gradient" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor="#2d8fc7" />
+                <stop offset="100%" stopColor="#2d8fc7" stopOpacity="0.72" />
+              </linearGradient>
+            </defs>
+
+            <line className="member-dashboard-monthly-axis" x1={chartLeft} x2={chartWidth - chartRight} y1={chartBaseY} y2={chartBaseY} />
+            <line className="member-dashboard-monthly-axis" x1={chartLeft} x2={chartLeft} y1={chartTop} y2={chartBaseY} />
+            <line className="member-dashboard-monthly-grid-line" x1={chartLeft} x2={chartWidth - chartRight} y1={chartTop} y2={chartTop} />
+            <line
+              className="member-dashboard-monthly-grid-line"
+              x1={chartLeft}
+              x2={chartWidth - chartRight}
+              y1={chartTop + chartPlotHeight / 2}
+              y2={chartTop + chartPlotHeight / 2}
+            />
+
+            <text className="member-dashboard-monthly-scale-label" x={chartLeft - 10} y={chartTop + 4}>
+              {topScaleLabel}
+            </text>
+            <text className="member-dashboard-monthly-scale-label" x={chartLeft - 10} y={chartTop + chartPlotHeight / 2 + 4}>
+              {midScaleLabel}
+            </text>
+
+            <polygon className="member-dashboard-monthly-usage-area" points={usageAreaPoints} />
+            <polyline className="member-dashboard-monthly-usage-line" points={usageLinePoints} />
+            <polygon className="member-dashboard-monthly-generation-area" points={generationAreaPoints} />
+            <polyline className="member-dashboard-monthly-generation-line" points={generationLinePoints} />
+
+            {monthlyRows.map((row, index) => {
+              const point = usagePoints[index];
+
+              return (
+                <text
+                  className="member-dashboard-monthly-month-label"
+                  key={row.month}
+                  x={point.x}
+                  y={chartBaseY + 31}
+                  transform={`rotate(-50 ${point.x} ${chartBaseY + 31})`}
+                >
+                  {String(row.month).padStart(2, '0')}월
+                </text>
+              );
+            })}
+
+            <circle className="member-dashboard-monthly-selected-dot" cx={selectedPoint.x} cy={selectedPoint.y} r="7" />
+            <line
+              className="member-dashboard-monthly-selected-guide"
+              x1={selectedPoint.x}
+              x2={selectedPoint.x}
+              y1={selectedPoint.y}
+              y2={chartBaseY}
+            />
+
+            <g transform={`translate(${Math.min(selectedPoint.x + 10, chartWidth - 168)} ${Math.max(chartTop + 14, selectedPoint.y - 52)})`}>
+              <rect className="member-dashboard-monthly-tooltip-box" width="144" height="58" rx="6" />
+              <text className="member-dashboard-monthly-tooltip-title" x="14" y="22">
+                {String(selectedMonth).padStart(2, '0')}/15
+              </text>
+              <text className="member-dashboard-monthly-tooltip-value" x="14" y="43">
+                사용량: {formatKwh(selectedUsage)}
+              </text>
+            </g>
+          </svg>
+        </div>
+
+        <div className="member-dashboard-monthly-app-legend" aria-label="월별 그래프 범례">
+          <span>
+            <i className="is-usage" aria-hidden="true" />
+            사용량
+          </span>
+          <span>
+            <i className="is-generation" aria-hidden="true" />
+            발전량
+          </span>
+        </div>
       </div>
     </section>
   );
+}
+
+type MonthlyChartBounds = {
+  left: number;
+  top: number;
+  baseY: number;
+  plotWidth: number;
+  plotHeight: number;
+};
+
+type MonthlyChartPoint = {
+  x: number;
+  y: number;
+};
+
+function getMonthlyChartPoint(
+  value: number,
+  index: number,
+  count: number,
+  maxValue: number,
+  bounds: MonthlyChartBounds,
+): MonthlyChartPoint {
+  const x = bounds.left + (bounds.plotWidth / Math.max(1, count - 1)) * index;
+  const y = bounds.baseY - (Math.max(0, value) / Math.max(1, maxValue)) * bounds.plotHeight;
+
+  return {
+    x: roundChartValue(x),
+    y: roundChartValue(Math.max(bounds.top, Math.min(bounds.baseY, y))),
+  };
+}
+
+function getMonthlyAreaPoints(points: MonthlyChartPoint[], baseY: number) {
+  if (points.length === 0) {
+    return '';
+  }
+
+  const firstPoint = points[0];
+  const lastPoint = points[points.length - 1];
+  const linePoints = getMonthlyLinePoints(points);
+
+  return `${firstPoint.x},${baseY} ${linePoints} ${lastPoint.x},${baseY}`;
+}
+
+function getMonthlyLinePoints(points: MonthlyChartPoint[]) {
+  return points.map((point) => `${point.x},${point.y}`).join(' ');
+}
+
+function roundChartValue(value: number) {
+  return Math.round(value * 10) / 10;
 }
 
 function PatternAnalysisPanel({ dashboardData }: { dashboardData: NormalizedDashboardData }) {
@@ -455,16 +747,21 @@ function PatternAnalysisPanel({ dashboardData }: { dashboardData: NormalizedDash
 
       <div className="member-dashboard-pattern-grid">
         <article>
-          <strong>오전/오후 사용량이 높습니다.</strong>
-          <p>공동주택 공용부 사용 패턴을 가정한 데모 시나리오에서 출근 전후와 저녁 시간대 사용량이 높게 표시됩니다.</p>
+          <span>사용 패턴</span>
+          <strong>오후 시간대 사용량이 높은 패턴입니다.</strong>
+          <p>공동주택 공용부 사용 패턴을 가정한 데모 시나리오에서 출근 이후와 저녁 시간대 사용량이 높게 표시됩니다.</p>
         </article>
         <article>
+          <span>절감 패턴</span>
           <strong>태양광 발전 시간대와 자가소비 시간이 일부 일치합니다.</strong>
           <p>10시부터 15시까지 발전량이 높아 공용부 부하 일부를 상쇄할 가능성이 있습니다.</p>
         </article>
         <article>
-          <strong>{bestMonthIndex + 1}월 발전량이 가장 높게 추정됩니다.</strong>
-          <p>월평균 예상 발전량은 {formatKwh(monthlyAverage)}이며, 계절과 음영 조건에 따라 실제 값은 달라질 수 있습니다.</p>
+          <span>개선 추천</span>
+          <strong>음영이 높은 구간은 패널 배치에서 제외하는 것이 좋습니다.</strong>
+          <p>
+            {bestMonthIndex + 1}월 발전량이 가장 높게 추정되며, 월평균 예상 발전량은 {formatKwh(monthlyAverage)}입니다.
+          </p>
         </article>
       </div>
     </section>

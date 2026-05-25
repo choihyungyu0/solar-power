@@ -25,9 +25,9 @@ const VWORLD_ENGINE_SCRIPT_DEFINITIONS = [
     statusKey: 'ol3WebglLoaded',
   },
 ] as const;
-const HWASEONG_INITIAL_LONGITUDE = 127.07213319715528;
-const HWASEONG_INITIAL_LATITUDE = 37.203936096777305;
-const HWASEONG_INITIAL_HEIGHT = 720;
+const HWASEONG_INITIAL_LONGITUDE = 127.07271472011158;
+const HWASEONG_INITIAL_LATITUDE = 37.2059932805347;
+const HWASEONG_INITIAL_HEIGHT = 340;
 const HWASEONG_INITIAL_PITCH = -82;
 const ENABLE_VWORLD_CAMERA_FALLBACK = import.meta.env.VITE_ENABLE_VWORLD_CAMERA_FALLBACK === 'true';
 const MAP_LEFT_CLICK_SELECT_ONLY = import.meta.env.VITE_MAP_LEFT_CLICK_SELECT_ONLY !== 'false';
@@ -36,7 +36,12 @@ const LEFT_CLICK_SELECT_MAX_MOVE_PX = 5;
 const POINTER_DRAG_SUPPRESS_CLICK_MS = 700;
 
 let vworldScriptPromise: Promise<void> | null = null;
-const scriptLoadPromises = new Map<string, Promise<void>>();
+
+type VWorldLoaderWindow = Window &
+  typeof globalThis & {
+    __solarMateScriptLoadPromises?: Map<string, Promise<void>>;
+    __solarMateVWorldScriptPromise?: Promise<void> | null;
+  };
 
 export type VWorldSelection = {
   longitude?: number;
@@ -279,6 +284,29 @@ function updateVWorldDiagnostics(status: VWorldLoadStatus) {
   return diagnostics;
 }
 
+function getLoaderWindow() {
+  return window as VWorldLoaderWindow;
+}
+
+function getScriptLoadPromises() {
+  const loaderWindow = getLoaderWindow();
+
+  if (!loaderWindow.__solarMateScriptLoadPromises) {
+    loaderWindow.__solarMateScriptLoadPromises = new Map<string, Promise<void>>();
+  }
+
+  return loaderWindow.__solarMateScriptLoadPromises;
+}
+
+function rememberVWorldScriptPromise(promise: Promise<void> | null) {
+  vworldScriptPromise = promise;
+  getLoaderWindow().__solarMateVWorldScriptPromise = promise;
+}
+
+function clearVWorldScriptPromise() {
+  rememberVWorldScriptPromise(null);
+}
+
 function readCameraControlDiagnostics(): CameraControlDiagnostics {
   const diagnostics = window.__solarMateMapDiagnostics?.selectionInputControls ?? {};
 
@@ -321,6 +349,7 @@ function findExistingScript(id: string, src: string) {
 }
 
 function loadScriptOnce(id: string, src: string): Promise<void> {
+  const scriptLoadPromises = getScriptLoadPromises();
   const existingPromise = scriptLoadPromises.get(id) ?? scriptLoadPromises.get(src);
 
   if (existingPromise) {
@@ -331,7 +360,35 @@ function loadScriptOnce(id: string, src: string): Promise<void> {
     const existing = findExistingScript(id, src);
 
     if (existing) {
-      resolve();
+      const loadStatus = existing.dataset.solarMateLoadStatus;
+
+      if (loadStatus === 'loaded' || (existing as HTMLScriptElement & { readyState?: string }).readyState === 'complete') {
+        resolve();
+        return;
+      }
+
+      if (loadStatus === 'error') {
+        reject(new Error(`${id} failed to load`));
+        return;
+      }
+
+      const handleLoad = () => {
+        cleanup();
+        existing.dataset.solarMateLoadStatus = 'loaded';
+        resolve();
+      };
+      const handleError = () => {
+        cleanup();
+        existing.dataset.solarMateLoadStatus = 'error';
+        reject(new Error(`${id} failed to load`));
+      };
+      const cleanup = () => {
+        existing.removeEventListener('load', handleLoad);
+        existing.removeEventListener('error', handleError);
+      };
+
+      existing.addEventListener('load', handleLoad);
+      existing.addEventListener('error', handleError);
       return;
     }
 
@@ -339,8 +396,15 @@ function loadScriptOnce(id: string, src: string): Promise<void> {
     script.id = id;
     script.src = src;
     script.async = false;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error(`${id} failed to load`));
+    script.dataset.solarMateLoadStatus = 'loading';
+    script.onload = () => {
+      script.dataset.solarMateLoadStatus = 'loaded';
+      resolve();
+    };
+    script.onerror = () => {
+      script.dataset.solarMateLoadStatus = 'error';
+      reject(new Error(`${id} failed to load`));
+    };
     document.head.appendChild(script);
   }).catch((error: unknown) => {
     scriptLoadPromises.delete(id);
@@ -410,7 +474,7 @@ async function loadVWorldScriptInternal() {
     status.bootstrapLoaded = true;
     updateVWorldDiagnostics(status);
   } catch {
-    vworldScriptPromise = null;
+    clearVWorldScriptPromise();
     throw new VWorldScriptLoadError(
       '브이월드 3D SDK 부트스트랩 스크립트 로드에 실패했습니다. API 키, SDK URL, Vercel 허용 도메인을 확인해주세요.',
       updateVWorldDiagnostics(status),
@@ -427,12 +491,12 @@ async function loadVWorldScriptInternal() {
       updateVWorldDiagnostics(status);
     }
   } catch {
-    vworldScriptPromise = null;
+    clearVWorldScriptPromise();
     throw new VWorldScriptLoadError(VWORLD_ENGINE_LOAD_FAILURE_MESSAGE, updateVWorldDiagnostics(status));
   }
 
   if (!hasExpectedVWorldGlobal()) {
-    vworldScriptPromise = null;
+    clearVWorldScriptPromise();
     throw new VWorldScriptLoadError(VWORLD_ENGINE_LOAD_FAILURE_MESSAGE, updateVWorldDiagnostics(status));
   }
 
@@ -448,13 +512,17 @@ export function loadVWorldScript() {
     return Promise.resolve();
   }
 
-  if (vworldScriptPromise) {
-    return vworldScriptPromise;
+  const rememberedPromise = vworldScriptPromise ?? getLoaderWindow().__solarMateVWorldScriptPromise ?? null;
+
+  if (rememberedPromise) {
+    vworldScriptPromise = rememberedPromise;
+    return rememberedPromise;
   }
 
-  vworldScriptPromise = loadVWorldScriptInternal();
+  const nextPromise = loadVWorldScriptInternal();
+  rememberVWorldScriptPromise(nextPromise);
 
-  return vworldScriptPromise;
+  return nextPromise;
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -854,7 +922,7 @@ function scheduleCesiumCameraControlConfiguration(map: VWorldMapInstance | null)
         import.meta.env.DEV
       ) {
         console.warn(
-          '[SolarMate] Cesium viewer was not available, so VWorld map mouse controls kept the existing behavior.',
+          '[EcoHat] Cesium viewer was not available, so VWorld map mouse controls kept the existing behavior.',
         );
       }
       return;
