@@ -1011,7 +1011,7 @@
 }
 
 .member-dashboard-as-primary-action {
-  width: 320px;
+  width: 100%;
   border: 0;
   background: linear-gradient(180deg, #0067df 0%, #0052c4 100%);
   box-shadow: 0 8px 18px rgba(0, 86, 199, 0.18);
@@ -1019,10 +1019,21 @@
 }
 
 .member-dashboard-as-outline-action {
-  width: 200px;
+  position: fixed;
+  right: 28px;
+  bottom: 92px;
+  z-index: 40;
+  width: 64px;
+  height: 64px;
+  min-height: 64px;
+  padding: 0;
   border: 1.5px solid #0067df;
+  border-radius: 999px;
   background: #ffffff;
+  box-shadow: 0 12px 28px rgba(0, 86, 199, 0.24);
   color: #0056c7;
+  font-size: 0;
+  gap: 0;
 }
 
 .member-dashboard-as-primary-action svg,
@@ -1644,9 +1655,16 @@
     flex-direction: column;
   }
 
-  .member-dashboard-as-primary-action,
-  .member-dashboard-as-outline-action {
+  .member-dashboard-as-primary-action {
     width: 100%;
+  }
+
+  .member-dashboard-as-outline-action {
+    right: 18px;
+    bottom: 82px;
+    width: 58px;
+    height: 58px;
+    min-height: 58px;
   }
 
   .member-dashboard-profile-address-box {
