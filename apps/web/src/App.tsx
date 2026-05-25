@@ -113,9 +113,6 @@ function HomePage() {
                   우리 아파트 태양광 설치하기
                 </button>
               </form>
-              <button className="secondaryButton" type="button" onClick={() => navigate('/risk-map')}>
-                전기세 위험 지도 보기
-              </button>
             </div>
           </div>
 

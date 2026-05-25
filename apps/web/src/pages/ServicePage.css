@@ -76,7 +76,7 @@
   box-shadow: 0 10px 20px rgba(11, 100, 233, 0.22);
 }
 
-.service-page-actions button:last-child {
+.service-page-actions button + button {
   border: 1.5px solid #cdd9e8;
   background: #ffffff;
   color: #0757bd;

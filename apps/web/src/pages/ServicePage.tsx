@@ -62,10 +62,6 @@ export default function ServicePage() {
                 태양광 도입하기
                 <LuArrowRight aria-hidden="true" />
               </button>
-              <button type="button" onClick={() => navigate('/risk-map')}>
-                전기세 위험 지도 보기
-                <LuMap aria-hidden="true" />
-              </button>
             </div>
           </div>
 
