@@ -107,7 +107,14 @@ export default function NoticePage() {
           </section>
 
           <section className="notice-faq-section" aria-labelledby="notice-faq-title">
-            <h2 id="notice-faq-title">자주 묻는 질문</h2>
+            <div className="notice-faq-top">
+              <h2 id="notice-faq-title">자주 묻는 질문</h2>
+
+              <button className="notice-more-button" type="button">
+                더보기
+                <LuChevronRight aria-hidden="true" />
+              </button>
+            </div>
 
             <div className="notice-faq-list">
               {faqItems.map((item, index) => {

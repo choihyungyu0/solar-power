@@ -325,8 +325,16 @@
   padding: 30px 32px 28px;
 }
 
+.notice-faq-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
 .notice-faq-section h2 {
-  margin: 0 0 22px;
+  margin: 0;
   color: #071631;
   font-size: 32px;
   font-weight: 950;
@@ -477,6 +485,12 @@
   .notice-title-group h1,
   .notice-faq-section h2 {
     font-size: 26px;
+  }
+
+  .notice-faq-top {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
   }
 
   .notice-news-row {
