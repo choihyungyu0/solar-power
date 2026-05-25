@@ -18,6 +18,10 @@ export type PvAnalysisIdentityDiagnostics = {
   pvAnalysisStatus?: string;
   usedVercelPvAnalysis?: boolean;
   backendBaseUrl?: string;
+  panelCount?: number;
+  installKw?: number;
+  shadingAverage?: number;
+  roofAreaM2?: number;
 };
 
 export type PvAnalysisResponseIdentity = {
@@ -31,6 +35,8 @@ export type PvAnalysisResponseIdentity = {
 
 export type PvAnalysisSource =
   | 'gyeonggi-climate-platform'
+  | 'render-backend'
+  | 'frontend-local-formula'
   | 'backend-pv-analysis'
   | 'local-fallback-formula'
   | 'local-scenario-fallback';

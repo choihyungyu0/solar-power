@@ -39,7 +39,7 @@ export type ClimateBundlePvInput = {
 };
 
 export type ClimateBundlePvOutputRaw = {
-  source?: 'local-fallback-formula' | 'backend-pv-analysis' | string;
+  source?: 'render-backend' | 'frontend-local-formula' | 'local-fallback-formula' | 'backend-pv-analysis' | string;
   annual_generation: number;
   annual_generation_kwh?: number;
   annual_saving_krw?: number;
@@ -81,6 +81,11 @@ export type ClimatePanelsGeoJson = {
       cell_5186_bbox?: [number, number, number, number];
     };
   }>;
+};
+
+export type ClimateRoofPolygon4326 = {
+  type: 'Polygon';
+  coordinates: number[][][];
 };
 
 export type ClimateFixtureEntry = {
@@ -136,9 +141,16 @@ export type ClimateLiveAnalysisDiagnostics = {
   input5186?: { x: number; y: number };
   requestSelectedBuildingId?: string | null;
   requestSessionId?: string | null;
+  staleBackendResponseIgnored?: boolean;
+  backendPanelsBuildingId?: string | null;
+  currentSelectedBuildingId?: string | null;
+  backendPanelsSessionId?: string | null;
+  currentSessionId?: string | null;
+  sameBuildingForBackendPanels?: boolean | null;
   selectedFeatureBuildingId?: string | null;
   ignoredStaleLiveResponse?: boolean;
   roofAreaM2?: number;
+  roofGeometryType?: string | null;
   cellCount?: number;
   shadingCellCount?: number;
   shadingAverage?: number;
@@ -184,6 +196,13 @@ export type ClimateLiveAnalysisDiagnostics = {
   selectBuldTimeoutMs?: number;
   selectBuldAttemptTimingsMs?: number[];
   selectBuldLastError?: string;
+  backendRoofCentroidInsideSelected?: boolean | null;
+  backendRoofDistanceToSelectedM?: number | null;
+  backendRoofMatchesSelected?: boolean | null;
+  backendPanelCellCountBeforeClip?: number;
+  backendPanelCellCountAfterClip?: number;
+  backendPanelCellsOutsideSelectedCount?: number;
+  panelCellCountAfterClip?: number;
   [key: string]: unknown;
 };
 
@@ -194,6 +213,8 @@ export type ClimateLiveAnalysisSuccessResponse = {
   selectedAnalysisSessionId?: string | null;
   selectedFeatureBuildingId?: string | null;
   roofSource: ClimateLiveRoofSource;
+  roofPolygon4326?: ClimateRoofPolygon4326 | null;
+  roofAreaM2?: number | null;
   analysisStage?: 'shading-complete' | 'shading-timeout' | 'pv-complete' | string;
   pvAnalysisStatus?: 'success' | 'timeout' | 'failed' | 'skipped' | 'fallback';
   bundle: ClimateBundle;
@@ -208,6 +229,8 @@ export type ClimateLiveAnalysisFailureResponse = {
   selectedAnalysisSessionId?: string | null;
   selectedFeatureBuildingId?: string | null;
   roofSource?: ClimateLiveRoofSource;
+  roofPolygon4326?: ClimateRoofPolygon4326 | null;
+  roofAreaM2?: number | null;
   disabled?: boolean;
   message: string;
   fallbackRecommended: true;

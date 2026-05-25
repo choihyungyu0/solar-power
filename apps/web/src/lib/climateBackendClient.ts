@@ -106,6 +106,11 @@ function normalizeBackendResponse(
       typeof diagnostics.ignoredStaleLiveResponse === 'boolean'
         ? diagnostics.ignoredStaleLiveResponse
         : false,
+    usedVercelPvAnalysis: false,
+    backendBaseUrl:
+      typeof diagnostics.backendBaseUrl === 'string'
+        ? diagnostics.backendBaseUrl
+        : diagnosticsFromFetch.backendBaseUrl,
   };
 
   if (payload.ok === false) {
@@ -153,6 +158,7 @@ function normalizeBackendResponse(
 function createBackendRequestBody(input: ClimateLiveAnalysisRequest) {
   return {
     selectedBuildingId: input.selectedBuildingId,
+    selectedAnalysisSessionId: input.selectedAnalysisSessionId,
     selectedBuildingFeature: input.selectedBuildingFeature,
     longitude: input.longitude,
     latitude: input.latitude,

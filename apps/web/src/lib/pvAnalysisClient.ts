@@ -1,4 +1,10 @@
-import { createDefaultPvAnalysisInput, createFallbackPvAnalysisResult, createSafePvAnalysisInputSummary } from './normalizePvAnalysis';
+import { getConfiguredClimateBackendBaseUrl, isExternalClimateBackendConfigured } from './climateBackendClient';
+import {
+  createDefaultPvAnalysisInput,
+  createFallbackPvAnalysisResult,
+  createFrontendLocalPvFormulaResult,
+  createSafePvAnalysisInputSummary,
+} from './normalizePvAnalysis';
 import type { ClimateRooftopAnalysisInput, PvAnalysisInput, PvAnalysisProxyResponse } from '../types/pvAnalysis';
 
 const PV_ANALYSIS_PROXY_PATH = '/api/pv-analysis';
@@ -10,6 +16,10 @@ function createClientFallbackResponse(
     ClimateRooftopAnalysisInput,
     'selectedBuildingId' | 'selectedAnalysisSessionId' | 'roofSource'
   >,
+  options: {
+    useFrontendLocalFormula?: boolean;
+    diagnostics?: PvAnalysisProxyResponse['diagnostics'];
+  } = {},
 ): PvAnalysisProxyResponse {
   const fallbackInput = createDefaultPvAnalysisInput(input);
 
@@ -18,11 +28,14 @@ function createClientFallbackResponse(
     fallback: true,
     message,
     input: createSafePvAnalysisInputSummary(fallbackInput),
-    result: createFallbackPvAnalysisResult(fallbackInput),
+    result: options.useFrontendLocalFormula
+      ? createFrontendLocalPvFormulaResult(fallbackInput)
+      : createFallbackPvAnalysisResult(fallbackInput),
     selectedBuildingId: identity?.selectedBuildingId ?? null,
     selectedAnalysisSessionId: identity?.selectedAnalysisSessionId ?? null,
     roofSource: identity?.roofSource ?? null,
     diagnostics: {
+      ...(options.diagnostics ?? {}),
       requestSelectedBuildingId: identity?.selectedBuildingId ?? null,
       requestSessionId: identity?.selectedAnalysisSessionId ?? null,
       ignoredStaleLiveResponse: false,
@@ -31,6 +44,23 @@ function createClientFallbackResponse(
 }
 
 export async function requestPvAnalysis(input: PvAnalysisInput): Promise<PvAnalysisProxyResponse> {
+  if (isExternalClimateBackendConfigured()) {
+    return createClientFallbackResponse(
+      input,
+      'Render 백엔드가 활성화되어 있어 Vercel /api/pv-analysis 호출 없이 프론트엔드 시나리오 산식으로 표시합니다.',
+      undefined,
+      {
+        useFrontendLocalFormula: true,
+        diagnostics: {
+          pvAnalysisSource: 'frontend-local-formula',
+          pvAnalysisStatus: 'local-fallback',
+          usedVercelPvAnalysis: false,
+          backendBaseUrl: getConfiguredClimateBackendBaseUrl(),
+        },
+      },
+    );
+  }
+
   try {
     const response = await fetch(PV_ANALYSIS_PROXY_PATH, {
       method: 'POST',

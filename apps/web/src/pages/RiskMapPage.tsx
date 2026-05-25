@@ -7,6 +7,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
+import { booleanPointInPolygon, point } from '@turf/turf';
 import VWorldSelectableBuildingLayer, {
   type VWorldSelectableBuildingLayerStatus,
 } from '../components/VWorldSelectableBuildingLayer';
@@ -48,6 +49,7 @@ import {
   type SolarPanelLayoutResult,
 } from '../lib/solarPanelLayout';
 import { requestPvAnalysis } from '../lib/pvAnalysisClient';
+import { createFrontendLocalPvFormulaResult } from '../lib/normalizePvAnalysis';
 import { requestSelectedBuildingPolygon } from '../lib/buildingPolygonClient';
 import {
   DEFAULT_CLIMATE_POC_ID,
@@ -98,6 +100,7 @@ import type {
   ClimateLiveAnalysisDiagnostics,
   ClimateLiveRoofSource,
   ClimatePanelsGeoJson,
+  ClimateRoofPolygon4326,
   ClimateSelectedBuildingFeature,
 } from '../types/climateBundle';
 import type { PvAnalysisInput, PvAnalysisProxyResponse, PvAnalysisResult, PvAnalysisSource } from '../types/pvAnalysis';
@@ -126,6 +129,7 @@ const CLIMATE_POC_FOCUS_SPAN_MULTIPLIER = 4;
 const CLIMATE_POC_FOCUS_HEIGHT_PADDING_M = 320;
 const SIMPLE_PAYBACK_MAX_REASONABLE_YEARS = 100;
 const FOOTPRINT_FALLBACK_SIMPLE_PAYBACK_YEARS = 6.8;
+const BACKEND_ROOF_MATCH_DISTANCE_THRESHOLD_M = 15;
 const DEFAULT_PANEL_PLACEMENT_SOURCE = '건물 footprint 기반 자체 배치';
 const BUILDING_DATA_HEALTH_ERROR_MESSAGE =
   '건물 polygon 데이터를 불러오지 못했습니다. 배포 데이터 경로를 확인해주세요.';
@@ -133,6 +137,8 @@ const SELECTION_NOT_FOUND_MESSAGE =
   '선택 좌표 주변에서 건물 polygon을 찾지 못했습니다. 지도를 확대하거나 건물 중심을 다시 클릭해주세요.';
 const RISK_MAP_SELECTION_ENTITY_PREFIXES = [
   'solarmate-selected-building-',
+  'solarmate-backend-panel-',
+  'solarmate-backend-roof-',
   'solarmate-self-panel-',
   'solarmate-panel-',
   'solarmate-panel-debug-',
@@ -232,6 +238,8 @@ type SelectableBuildingFeature = {
     coordinates: unknown;
   };
 };
+
+type TurfPolygonInput = Parameters<typeof booleanPointInPolygon>[1];
 
 type RiskProcessStep = {
   title: string;
@@ -488,11 +496,7 @@ function createLivePvScenarioFallbackResult(input: PvAnalysisInput): PvAnalysisR
 }
 
 function getClimatePvOutputSource(output: ClimateBundle['pv_analysis_output']): PvAnalysisSource {
-  if (output?.source === 'backend-pv-analysis' || output?.source === 'local-fallback-formula') {
-    return output.source;
-  }
-
-  return output ? 'backend-pv-analysis' : 'local-fallback-formula';
+  return output ? 'render-backend' : 'frontend-local-formula';
 }
 
 function createPvInputFromClimateBundle({
@@ -575,6 +579,10 @@ function createBackendPvAnalysisResponse({
     pvAnalysisStatus: status,
     usedVercelPvAnalysis: false,
     backendBaseUrl,
+    panelCount: input.solar_panel_info.panel_count,
+    installKw: roundDecimal((input.solar_panel_info.panel_capacity * input.solar_panel_info.panel_count) / 1000, 1),
+    shadingAverage: input.shading_index_average,
+    roofAreaM2: diagnostics?.roofAreaM2 ?? bundle.roof_area_sqm_5186,
   };
 
   if (output) {
@@ -599,15 +607,15 @@ function createBackendPvAnalysisResponse({
     response: {
       ok: false,
       fallback: true,
-      source: 'local-fallback-formula',
-      message: 'Render 백엔드 PV 결과가 없어 시나리오 산식으로 발전량을 표시합니다.',
+      source: 'frontend-local-formula',
+      message: 'Render 백엔드 응답에 PV 출력이 없어 프론트엔드 시나리오 산식으로 발전량을 표시합니다.',
       selectedBuildingId,
       selectedAnalysisSessionId,
       roofSource,
       selectedFeatureBuildingId: selectedFeatureBuildingId ?? null,
       diagnostics: identityDiagnostics,
       input: createSafePvInputSummary(input),
-      result: createLivePvScenarioFallbackResult(input),
+      result: createFrontendLocalPvFormulaResult(input),
     },
   };
 }
@@ -799,6 +807,161 @@ function getDistanceMeters(from: Coordinate, to: Coordinate) {
   const deltaY = (to[1] - from[1]) * metersPerDegreeLat;
 
   return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+}
+
+function createTurfPolygonInput(feature: SelectableBuildingFeature | null): TurfPolygonInput | null {
+  const geometry = feature?.geometry;
+
+  if (!geometry || (geometry.type !== 'Polygon' && geometry.type !== 'MultiPolygon')) {
+    return null;
+  }
+
+  return {
+    type: 'Feature',
+    properties: feature.properties ?? {},
+    geometry,
+  } as TurfPolygonInput;
+}
+
+function isCoordinateInsideSelectedFeature(coordinate: Coordinate, feature: SelectableBuildingFeature | null) {
+  const turfPolygonInput = createTurfPolygonInput(feature);
+
+  if (!turfPolygonInput) {
+    return false;
+  }
+
+  try {
+    return booleanPointInPolygon(point(coordinate), turfPolygonInput, { ignoreBoundary: false });
+  } catch {
+    return false;
+  }
+}
+
+function getPointToSegmentDistanceMeters(coordinate: Coordinate, segmentStart: Coordinate, segmentEnd: Coordinate) {
+  const metersPerDegreeLat = 111_320;
+  const metersPerDegreeLon = metersPerDegreeLat * Math.cos((coordinate[1] * Math.PI) / 180);
+  const pointX = coordinate[0] * metersPerDegreeLon;
+  const pointY = coordinate[1] * metersPerDegreeLat;
+  const startX = segmentStart[0] * metersPerDegreeLon;
+  const startY = segmentStart[1] * metersPerDegreeLat;
+  const endX = segmentEnd[0] * metersPerDegreeLon;
+  const endY = segmentEnd[1] * metersPerDegreeLat;
+  const segmentX = endX - startX;
+  const segmentY = endY - startY;
+  const segmentLengthSquared = segmentX * segmentX + segmentY * segmentY;
+
+  if (segmentLengthSquared === 0) {
+    return getDistanceMeters(coordinate, segmentStart);
+  }
+
+  const projection = Math.max(
+    0,
+    Math.min(1, ((pointX - startX) * segmentX + (pointY - startY) * segmentY) / segmentLengthSquared),
+  );
+  const nearestX = startX + projection * segmentX;
+  const nearestY = startY + projection * segmentY;
+  const deltaX = pointX - nearestX;
+  const deltaY = pointY - nearestY;
+
+  return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+}
+
+function getDistanceToPolygonBoundaryMeters(coordinate: Coordinate, polygon: PolygonCoordinates) {
+  if (polygon.length < 2) {
+    return null;
+  }
+
+  let nearestDistanceM = Number.POSITIVE_INFINITY;
+
+  for (let index = 0; index < polygon.length - 1; index += 1) {
+    nearestDistanceM = Math.min(nearestDistanceM, getPointToSegmentDistanceMeters(coordinate, polygon[index], polygon[index + 1]));
+  }
+
+  return Number.isFinite(nearestDistanceM) ? nearestDistanceM : null;
+}
+
+function getDistanceToSelectedFeatureMeters(coordinate: Coordinate, feature: SelectableBuildingFeature | null) {
+  const polygon = feature ? normalizeGeoJsonPolygon(feature as VWorldFeature) : null;
+
+  return polygon ? getDistanceToPolygonBoundaryMeters(coordinate, polygon) : null;
+}
+
+function normalizeBackendRoofPolygon4326(roofPolygon4326: ClimateRoofPolygon4326 | null | undefined) {
+  if (!roofPolygon4326) {
+    return null;
+  }
+
+  return normalizeGeoJsonPolygon({
+    type: 'Feature',
+    properties: {},
+    geometry: roofPolygon4326,
+  });
+}
+
+function checkBackendRoofMatchesSelected({
+  roofPolygon4326,
+  selectedBuildingFeature,
+}: {
+  roofPolygon4326: ClimateRoofPolygon4326 | null | undefined;
+  selectedBuildingFeature: SelectableBuildingFeature | null;
+}) {
+  const roofPolygon = normalizeBackendRoofPolygon4326(roofPolygon4326);
+  const roofCentroid = roofPolygon ? getPolygonCentroid(roofPolygon) : null;
+
+  if (!roofCentroid) {
+    return {
+      backendRoofCentroidInsideSelected: null,
+      backendRoofDistanceToSelectedM: null,
+      backendRoofMatchesSelected: null,
+    };
+  }
+
+  const insideSelected = isCoordinateInsideSelectedFeature(roofCentroid, selectedBuildingFeature);
+  const distanceToSelectedM = insideSelected ? 0 : getDistanceToSelectedFeatureMeters(roofCentroid, selectedBuildingFeature);
+  const matchesSelected =
+    insideSelected ||
+    (typeof distanceToSelectedM === 'number' && distanceToSelectedM <= BACKEND_ROOF_MATCH_DISTANCE_THRESHOLD_M);
+
+  return {
+    backendRoofCentroidInsideSelected: insideSelected,
+    backendRoofDistanceToSelectedM: distanceToSelectedM,
+    backendRoofMatchesSelected: matchesSelected,
+  };
+}
+
+function filterBackendPanelsToSelectedFeature(
+  panelsGeojson: ClimatePanelsGeoJson,
+  selectedBuildingFeature: SelectableBuildingFeature | null,
+) {
+  const features = panelsGeojson.features;
+  const clippedFeatures = features.filter((feature) => {
+    const ring = feature.geometry.coordinates[0];
+    const panelPolygon = Array.isArray(ring)
+      ? ring
+          .filter(
+            (coordinate): coordinate is [number, number] =>
+              Array.isArray(coordinate) &&
+              coordinate.length >= 2 &&
+              typeof coordinate[0] === 'number' &&
+              typeof coordinate[1] === 'number' &&
+              Number.isFinite(coordinate[0]) &&
+              Number.isFinite(coordinate[1]),
+          )
+          .map(([longitude, latitude]) => [longitude, latitude] as Coordinate)
+      : [];
+
+    return panelPolygon.length >= 4 && isCoordinateInsideSelectedFeature(getPolygonCentroid(panelPolygon), selectedBuildingFeature);
+  });
+
+  return {
+    panelsGeojson: {
+      ...panelsGeojson,
+      features: clippedFeatures,
+    },
+    backendPanelCellCountBeforeClip: features.length,
+    backendPanelCellCountAfterClip: clippedFeatures.length,
+    backendPanelCellsOutsideSelectedCount: features.length - clippedFeatures.length,
+  };
 }
 
 function getPolygonMaxSpanMeters(polygon: PolygonCoordinates) {
@@ -1137,6 +1300,7 @@ function RiskMapPage() {
   const [liveClimateError, setLiveClimateError] = useState('');
   const [liveClimateBundle, setLiveClimateBundle] = useState<ClimateBundle | null>(null);
   const [liveClimatePanelGeojson, setLiveClimatePanelGeojson] = useState<ClimatePanelsGeoJson | null>(null);
+  const [liveBackendRoofPolygon4326, setLiveBackendRoofPolygon4326] = useState<ClimateRoofPolygon4326 | null>(null);
   const [liveClimateDiagnostics, setLiveClimateDiagnostics] = useState<ClimateLiveAnalysisDiagnostics | null>(null);
   const [cameraMoveStatus, setCameraMoveStatus] = useState('climate.gg POC 패널 위치 계산 대기');
   const panelVisibilityUserOverrideRef = useRef(false);
@@ -1276,13 +1440,29 @@ function RiskMapPage() {
   );
   const selectedBuildingId = selectedBuildingFootprint?.buildingId ?? null;
   const selectedAnalysisSessionId = selectedBuildingFootprint?.analysisSessionId ?? null;
-  const livePanelsBuildingId = liveClimateBundle ? liveClimateDiagnostics?.requestSelectedBuildingId ?? selectedBuildingId : null;
-  const livePanelsSessionId = liveClimateBundle ? liveClimateDiagnostics?.requestSessionId ?? selectedAnalysisSessionId : null;
+  const livePanelsBuildingId =
+    liveClimateDiagnostics?.backendPanelsBuildingId ??
+    liveClimateDiagnostics?.requestSelectedBuildingId ??
+    (liveClimateBundle ? selectedBuildingId : null);
+  const livePanelsSessionId =
+    liveClimateDiagnostics?.backendPanelsSessionId ??
+    liveClimateDiagnostics?.requestSessionId ??
+    (liveClimateBundle ? selectedAnalysisSessionId : null);
+  const backendPanelsBuildingId = livePanelsBuildingId;
+  const backendPanelsSessionId = livePanelsSessionId;
+  const currentSelectedBuildingId = selectedBuildingId;
+  const currentSessionId = selectedAnalysisSessionId;
   const sameBuildingForLivePanels =
     livePanelsBuildingId && livePanelsSessionId
       ? livePanelsBuildingId === selectedBuildingId && livePanelsSessionId === selectedAnalysisSessionId
       : null;
-  const staleResponseIgnored = Boolean(liveClimateDiagnostics?.ignoredStaleLiveResponse);
+  const sameBuildingForBackendPanels =
+    typeof liveClimateDiagnostics?.sameBuildingForBackendPanels === 'boolean'
+      ? liveClimateDiagnostics.sameBuildingForBackendPanels
+      : sameBuildingForLivePanels;
+  const staleResponseIgnored = Boolean(
+    liveClimateDiagnostics?.staleBackendResponseIgnored ?? liveClimateDiagnostics?.ignoredStaleLiveResponse,
+  );
   const sameViewerAsBuildingLayer =
     selectedBuildingLayerStatus.viewerDebugId && panelLayerStatus.viewerDebugId
       ? selectedBuildingLayerStatus.viewerDebugId === panelLayerStatus.viewerDebugId
@@ -1310,6 +1490,27 @@ function RiskMapPage() {
     [liveClimatePanelGeojson],
   );
   const liveClimatePanelFeatureCount = liveClimatePocExtent?.featureCount ?? liveClimatePanelGeojson?.features.length ?? 0;
+  const backendRoofMatchesSelected =
+    typeof liveClimateDiagnostics?.backendRoofMatchesSelected === 'boolean'
+      ? liveClimateDiagnostics.backendRoofMatchesSelected
+      : null;
+  const backendRoofDistanceToSelectedM =
+    typeof liveClimateDiagnostics?.backendRoofDistanceToSelectedM === 'number'
+      ? liveClimateDiagnostics.backendRoofDistanceToSelectedM
+      : null;
+  const hasBackendPolygonMismatch =
+    backendRoofMatchesSelected === false &&
+    (backendRoofDistanceToSelectedM ?? Number.POSITIVE_INFINITY) > BACKEND_ROOF_MATCH_DISTANCE_THRESHOLD_M;
+  const panelCellCountAfterClip =
+    typeof liveClimateDiagnostics?.panelCellCountAfterClip === 'number'
+      ? liveClimateDiagnostics.panelCellCountAfterClip
+      : typeof liveClimateDiagnostics?.backendPanelCellCountAfterClip === 'number'
+        ? liveClimateDiagnostics.backendPanelCellCountAfterClip
+        : null;
+  const backendPanelCellsOutsideSelectedCount =
+    typeof liveClimateDiagnostics?.backendPanelCellsOutsideSelectedCount === 'number'
+      ? liveClimateDiagnostics.backendPanelCellsOutsideSelectedCount
+      : null;
   const hasStaticClimatePanelLayout =
     isClimatePanelModeEnabled &&
     climatePanelLoadStatus === 'loaded' &&
@@ -1326,12 +1527,15 @@ function RiskMapPage() {
     : hasStaticClimatePanelLayout
       ? climatePanelGeojson
       : null;
+  const activeBackendRoofPolygon4326 =
+    liveBackendRoofPolygon4326 ?? (hasLiveClimatePanelLayout ? liveClimateBundle?.roof_polygon_4326 ?? null : null);
   const activeClimatePanelFeatureCount = hasLiveClimatePanelLayout
     ? liveClimatePanelFeatureCount
     : hasStaticClimatePanelLayout
       ? staticClimatePanelFeatureCount
       : 0;
-  const shouldRenderClimatePanelLayer = isSolarPanelLayerVisible && Boolean(activeClimatePanelGeojson);
+  const shouldRenderClimatePanelLayer =
+    isSolarPanelLayerVisible && (Boolean(activeClimatePanelGeojson) || Boolean(activeBackendRoofPolygon4326));
   const shouldRenderGeneratedPanelLayer =
     isSolarPanelLayerVisible &&
     hasMapAnchoredGeometry &&
@@ -1351,6 +1555,16 @@ function RiskMapPage() {
   const demoPanelSourceLabel = hasLiveClimatePanelLayout
     ? '선택 건물 footprint + climate.gg 음영 분석'
     : DEFAULT_PANEL_PLACEMENT_SOURCE;
+  const verifiedPanelPlacementSourceLabel = hasBackendPolygonMismatch
+    ? '백엔드 polygon 불일치로 자체 배치 표시'
+    : hasLiveClimatePanelLayout
+      ? '선택 건물 footprint + climate.gg 음영 분석'
+      : isClimatePanelModeEnabled
+        ? 'climate.gg 샘플 음영 분석'
+        : '건물 footprint 기반 자체 배치';
+  const verifiedResolvedPanelPlacementSourceLabel = hasLiveClimatePanelLayout
+    ? '선택 건물 footprint + climate.gg 음영 분석'
+    : verifiedPanelPlacementSourceLabel;
   const hasAnyPanelLayout = hasGeneratedPanelLayout || hasStaticClimatePanelLayout || hasLiveClimatePanelLayout;
   const hasPvAnalysisCompleted =
     pvAnalysisStatus === 'success' ||
@@ -1394,7 +1608,7 @@ function RiskMapPage() {
     (pvAnalysisStatus === 'backend-result'
       ? getClimatePvOutputSource(activeClimatePvOutput)
       : pvAnalysisStatus === 'local-fallback'
-        ? 'local-fallback-formula'
+        ? 'frontend-local-formula'
         : pvAnalysisStatus === 'fallback'
           ? 'local-scenario-fallback'
           : pvAnalysisStatus === 'calculating'
@@ -1410,7 +1624,7 @@ function RiskMapPage() {
     pvAnalysisStatus === 'backend-result'
       ? 'Render 백엔드 결과 · 시나리오 산식 포함'
       : pvAnalysisStatus === 'local-fallback'
-        ? '시나리오 산식 · 로컬 fallback'
+        ? '프론트엔드 시나리오 산식'
         : pvAnalysisResponse?.ok
           ? '경기 기후 플랫폼 응답 · 시나리오 기준'
           : '대체 데모 산식 · 시나리오 기준';
@@ -1457,7 +1671,7 @@ function RiskMapPage() {
         : 'climate.gg 옥상 polygon 조회가 지연되어 선택 건물 footprint 기반으로 음영 분석을 진행했습니다.'
       : null;
   const analysisOverviewCards = [
-    ['분석 소스', demoPanelSourceLabel],
+    ['분석 소스', verifiedPanelPlacementSourceLabel],
     ['옥상 추정 면적', formatEstimatedSquareMeters(overviewRoofAreaM2)],
     ['음영 평균 점수', formatEstimatedScore(overviewShadingAverage)],
     ['예상 패널 수', formatDiagnosticCount(overviewPanelCount)],
@@ -1566,6 +1780,7 @@ function RiskMapPage() {
     setLiveClimateDiagnostics(null);
     setLiveClimateBundle(null);
     setLiveClimatePanelGeojson(null);
+    setLiveBackendRoofPolygon4326(null);
     setPvAnalysisStatus('idle');
     setPvAnalysisMessage('');
     setPvAnalysisResponse(null);
@@ -1723,11 +1938,11 @@ function RiskMapPage() {
       message: focusResult.message,
       method: focusResult.method,
       selectionSource: 'climate.gg POC',
-      selectionMethod: resolvedPanelPlacementSourceLabel,
+      selectionMethod: verifiedResolvedPanelPlacementSourceLabel,
       moved: focusResult.moved,
       markerAdded: false,
     });
-  }, [climateBundle, climatePocExtent, isClimatePanelModeEnabled, resolvedPanelPlacementSourceLabel, vworldMap]);
+  }, [climateBundle, climatePocExtent, isClimatePanelModeEnabled, verifiedResolvedPanelPlacementSourceLabel, vworldMap]);
 
   const applyBuildingFootprintSelection = useCallback(
     (match: BuildingFootprintMatch, coordinate: Coordinate, selection?: VWorldSelection) => {
@@ -1785,6 +2000,7 @@ function RiskMapPage() {
       setLiveClimateDiagnostics(null);
       setLiveClimateBundle(null);
       setLiveClimatePanelGeojson(null);
+      setLiveBackendRoofPolygon4326(null);
       panelVisibilityUserOverrideRef.current = false;
       setIsSolarPanelLayerVisible(activeTabRef.current === 'solar' && panelPolygons.length > 0);
       setMapFocusStatus({
@@ -1919,6 +2135,7 @@ function RiskMapPage() {
     setLiveClimateDiagnostics(null);
     setLiveClimateBundle(null);
     setLiveClimatePanelGeojson(null);
+    setLiveBackendRoofPolygon4326(null);
 
     const dataId = getConfiguredVWorldBuildingDataId();
     const buffer = 10;
@@ -2181,8 +2398,8 @@ function RiskMapPage() {
             response: {
               ok: false,
               fallback: true,
-              source: 'local-fallback-formula',
-              message: 'Render 백엔드 PV 결과가 없어 시나리오 산식으로 발전량을 표시합니다.',
+              source: 'frontend-local-formula',
+              message: 'Render 백엔드 응답에 PV 출력이 없어 프론트엔드 시나리오 산식으로 발전량을 표시합니다.',
               selectedBuildingId: selectedBuildingIdForPv,
               selectedAnalysisSessionId: selectedSessionIdForPv,
               roofSource: liveRoofSource ?? 'vworld-building-footprint-fallback',
@@ -2191,13 +2408,17 @@ function RiskMapPage() {
                 requestSelectedBuildingId: selectedBuildingIdForPv,
                 requestSessionId: selectedSessionIdForPv,
                 ignoredStaleLiveResponse: false,
-                pvAnalysisSource: 'local-fallback-formula',
+                pvAnalysisSource: 'frontend-local-formula',
                 pvAnalysisStatus: 'local-fallback',
                 usedVercelPvAnalysis: false,
                 backendBaseUrl,
+                panelCount: input.solar_panel_info.panel_count,
+                installKw: roundDecimal((input.solar_panel_info.panel_capacity * input.solar_panel_info.panel_count) / 1000, 1),
+                shadingAverage: input.shading_index_average,
+                roofAreaM2: selectedBuilding.estimatedRoofAreaM2,
               },
               input: createSafePvInputSummary(input),
-              result: createLivePvScenarioFallbackResult(input),
+              result: createFrontendLocalPvFormulaResult(input),
             } satisfies PvAnalysisProxyResponse,
           };
 
@@ -2375,12 +2596,23 @@ function RiskMapPage() {
     }
 
     const requestSelectedBuildingId = selectedBuildingId;
-    const requestSessionId = selectedAnalysisSessionId;
+    const requestSessionId = createSelectedAnalysisSessionId(requestSelectedBuildingId);
     const requestSelectionId = mapSelectionRequestIdRef.current;
     const livePanelCapacityW = 640;
     const livePanelAngle = 35;
     const livePanelType = 1;
     const liveCellsPerPanel = 2;
+
+    setSelectedBuildingFootprint((current) =>
+      current && current.buildingId === requestSelectedBuildingId
+        ? {
+            ...current,
+            analysisSessionId: requestSessionId,
+          }
+        : current,
+    );
+    selectedBuildingIdRef.current = requestSelectedBuildingId;
+    selectedAnalysisSessionIdRef.current = requestSessionId;
 
     setLiveShadingStatus('trying');
     setLiveClimateStatus('loading');
@@ -2389,6 +2621,7 @@ function RiskMapPage() {
     setLiveClimateDiagnostics(null);
     setLiveClimateBundle(null);
     setLiveClimatePanelGeojson(null);
+    setLiveBackendRoofPolygon4326(null);
     setPvAnalysisStatus('idle');
     setPvAnalysisMessage('');
     setPvAnalysisResponse(null);
@@ -2412,17 +2645,30 @@ function RiskMapPage() {
     const responseSessionId = response.selectedAnalysisSessionId ?? response.diagnostics.requestSessionId ?? requestSessionId;
     const currentBuildingId = selectedBuildingIdRef.current;
     const currentSessionId = selectedAnalysisSessionIdRef.current;
+    const sameBuildingForBackendPanels = responseBuildingId === currentBuildingId;
+    const backendIdentityDiagnostics: Partial<ClimateLiveAnalysisDiagnostics> = {
+      staleBackendResponseIgnored: false,
+      backendPanelsBuildingId: responseBuildingId,
+      currentSelectedBuildingId: currentBuildingId,
+      backendPanelsSessionId: responseSessionId,
+      currentSessionId,
+      sameBuildingForBackendPanels,
+      requestSelectedBuildingId: responseBuildingId,
+      requestSessionId: responseSessionId,
+      ignoredStaleLiveResponse: false,
+    };
     const isStaleResponse =
       mapSelectionRequestIdRef.current !== requestSelectionId ||
       responseBuildingId !== currentBuildingId ||
-      responseSessionId !== currentSessionId;
+      (Boolean(responseSessionId) && responseSessionId !== currentSessionId);
 
     if (isStaleResponse) {
       setLiveClimateDiagnostics((current) => ({
         ...(current ?? {}),
-        requestSelectedBuildingId: responseBuildingId,
-        requestSessionId: responseSessionId,
+        ...backendIdentityDiagnostics,
         ignoredStaleLiveResponse: true,
+        staleBackendResponseIgnored: true,
+        sameBuildingForBackendPanels: false,
       }));
       return;
     }
@@ -2451,7 +2697,57 @@ function RiskMapPage() {
             : '기본 배치 표시 중',
       );
       setLiveClimateError(fallbackMessage);
-      setLiveClimateDiagnostics(response.diagnostics);
+      setLiveClimateDiagnostics({
+        ...response.diagnostics,
+        ...backendIdentityDiagnostics,
+      });
+      setLiveBackendRoofPolygon4326(response.roofPolygon4326 ?? null);
+      setPvAnalysisStatus('idle');
+      setPvAnalysisMessage(fallbackMessage);
+      setAnalysisStatus(fallbackMessage);
+      setIsSolarPanelLayerVisible(true);
+      return;
+    }
+
+    const roofMatchDiagnostics = checkBackendRoofMatchesSelected({
+      roofPolygon4326: response.roofPolygon4326 ?? response.bundle.roof_polygon_4326,
+      selectedBuildingFeature,
+    });
+    const clippedPanelResult = filterBackendPanelsToSelectedFeature(response.panelsGeojson, selectedBuildingFeature);
+    const backendAcceptanceDiagnostics: ClimateLiveAnalysisDiagnostics = {
+      ...response.diagnostics,
+      ...backendIdentityDiagnostics,
+      roofSource: response.roofSource,
+      roofAreaM2: response.roofAreaM2 ?? response.diagnostics.roofAreaM2,
+      backendRoofCentroidInsideSelected: roofMatchDiagnostics.backendRoofCentroidInsideSelected,
+      backendRoofDistanceToSelectedM: roofMatchDiagnostics.backendRoofDistanceToSelectedM,
+      backendRoofMatchesSelected: roofMatchDiagnostics.backendRoofMatchesSelected,
+      backendPanelCellCountBeforeClip: clippedPanelResult.backendPanelCellCountBeforeClip,
+      backendPanelCellCountAfterClip: clippedPanelResult.backendPanelCellCountAfterClip,
+      backendPanelCellsOutsideSelectedCount: clippedPanelResult.backendPanelCellsOutsideSelectedCount,
+      panelCellCountAfterClip: clippedPanelResult.backendPanelCellCountAfterClip,
+    };
+    const backendPolygonMismatch =
+      roofMatchDiagnostics.backendRoofMatchesSelected === false &&
+      (roofMatchDiagnostics.backendRoofDistanceToSelectedM ?? Number.POSITIVE_INFINITY) >
+        BACKEND_ROOF_MATCH_DISTANCE_THRESHOLD_M;
+    const backendMismatchMessage = '백엔드 분석 polygon이 선택 건물과 다르게 감지되어 표시하지 않았습니다.';
+
+    setLiveBackendRoofPolygon4326(response.roofPolygon4326 ?? response.bundle.roof_polygon_4326 ?? null);
+
+    if (backendPolygonMismatch || clippedPanelResult.backendPanelCellCountAfterClip === 0) {
+      const fallbackMessage =
+        backendPolygonMismatch
+          ? backendMismatchMessage
+          : '백엔드 패널 셀이 선택 건물 footprint 내부에 없어 자체 배치를 표시합니다.';
+
+      setLiveShadingStatus('fallback');
+      setLiveClimateStatus('idle');
+      setLiveClimateStep('백엔드 polygon 검증 실패 · 자체 배치 표시');
+      setLiveClimateError(fallbackMessage);
+      setLiveClimateDiagnostics(backendAcceptanceDiagnostics);
+      setLiveClimateBundle(null);
+      setLiveClimatePanelGeojson(null);
       setPvAnalysisStatus('idle');
       setPvAnalysisMessage(fallbackMessage);
       setAnalysisStatus(fallbackMessage);
@@ -2479,16 +2775,22 @@ function RiskMapPage() {
     setLiveShadingStatus('success');
     setLiveClimateStatus('success');
     setLiveClimateStep('음영 분석은 Render 백엔드에서 완료되었습니다.');
-    setLiveClimateError('');
+    setLiveClimateError(
+      clippedPanelResult.backendPanelCellsOutsideSelectedCount > 0
+        ? `선택 건물 밖으로 감지된 백엔드 셀 ${clippedPanelResult.backendPanelCellsOutsideSelectedCount.toLocaleString(
+            'ko-KR',
+          )}개를 제외하고 표시합니다.`
+        : '',
+    );
     setLiveClimateDiagnostics({
-      ...response.diagnostics,
+      ...backendAcceptanceDiagnostics,
       pvAnalysisSource: nextPvResponse.diagnostics?.pvAnalysisSource,
       pvAnalysisStatus: backendPvResult.status,
       usedVercelPvAnalysis: false,
       backendBaseUrl: configuredClimateBackendBaseUrl || liveBackendBaseUrl,
     });
     setLiveClimateBundle(response.bundle);
-    setLiveClimatePanelGeojson(response.panelsGeojson);
+    setLiveClimatePanelGeojson(clippedPanelResult.panelsGeojson);
     setIsSolarPanelLayerVisible(true);
     setPvAnalysisResponse(nextPvResponse);
     setPvAnalysisStatus(backendPvResult.status);
@@ -3288,8 +3590,13 @@ function RiskMapPage() {
               map={vworldMap}
               visible={shouldRenderClimatePanelLayer}
               panelsGeojson={activeClimatePanelGeojson}
+              roofPolygon4326={activeBackendRoofPolygon4326}
               pocId={activeClimateBundle?.meta.unq_id ?? DEFAULT_CLIMATE_POC_ID}
-              panelSource={hasLiveClimatePanelLayout ? 'climate-live' : 'static-poc'}
+              panelSource={
+                hasLiveClimatePanelLayout || (!hasStaticClimatePanelLayout && activeBackendRoofPolygon4326)
+                  ? 'climate-live'
+                  : 'static-poc'
+              }
               selectedBuildingId={selectedBuildingId}
               selectedAnalysisSessionId={selectedAnalysisSessionId}
               roofHeightM={activeClimateBundle?.meta.bldg_hgt ?? roofHeightEstimate.roofHeightM}
@@ -3380,6 +3687,34 @@ function RiskMapPage() {
                     <dd>{buildingFootprintDiagnostics.matchedBuildingId ?? '-'}</dd>
                   </div>
                   <div>
+                    <dt>selectedBuildingId</dt>
+                    <dd>{selectedBuildingId ?? '-'}</dd>
+                  </div>
+                  <div>
+                    <dt>backendPanelsBuildingId</dt>
+                    <dd>{backendPanelsBuildingId ?? '-'}</dd>
+                  </div>
+                  <div>
+                    <dt>sameBuildingForBackendPanels</dt>
+                    <dd>{formatDiagnosticBoolean(sameBuildingForBackendPanels)}</dd>
+                  </div>
+                  <div>
+                    <dt>backendRoofMatchesSelected</dt>
+                    <dd>{formatDiagnosticBoolean(backendRoofMatchesSelected)}</dd>
+                  </div>
+                  <div>
+                    <dt>backendRoofDistanceToSelectedM</dt>
+                    <dd>{formatDiagnosticMeters(backendRoofDistanceToSelectedM)}</dd>
+                  </div>
+                  <div>
+                    <dt>panelCellCountAfterClip</dt>
+                    <dd>{formatDiagnosticCount(panelCellCountAfterClip)}</dd>
+                  </div>
+                  <div>
+                    <dt>staleBackendResponseIgnored</dt>
+                    <dd>{formatDiagnosticBoolean(staleResponseIgnored)}</dd>
+                  </div>
+                  <div>
                     <dt>nearestDistanceM</dt>
                     <dd>{formatDiagnosticMeters(buildingFootprintDiagnostics.nearestDistanceM)}</dd>
                   </div>
@@ -3394,6 +3729,18 @@ function RiskMapPage() {
                   {item.label}
                 </span>
               ))}
+              <span>
+                <i className="legendDot legendDot-selectedFootprint" aria-hidden="true" />
+                빨강: 선택 건물 footprint
+              </span>
+              <span>
+                <i className="legendDot legendDot-backendRoof" aria-hidden="true" />
+                보라 점선: 백엔드 분석 polygon
+              </span>
+              <span>
+                <i className="legendDot legendDot-climateCells" aria-hidden="true" />
+                초록/노랑/빨강 셀: climate.gg 음영 점수
+              </span>
             </div>
 
             <div className="scenarioComparisonStrip" aria-label="전기세 위험과 태양광 대응 비교">
@@ -3499,7 +3846,7 @@ function RiskMapPage() {
 
               <div className="panelSourceSummary">
                 <span>패널 배치 데이터 소스</span>
-                <strong>{demoPanelSourceLabel}</strong>
+                <strong>{verifiedPanelPlacementSourceLabel}</strong>
                 <p>
                   표시되는 패널과 발전량은 예상·추정 예시이며, 실제 설치 가능 여부는 현장조사와 구조안전성,
                   관리주체 협의, 실제 공고 확인이 필요합니다.
@@ -3603,7 +3950,7 @@ function RiskMapPage() {
                 </div>
                 <div>
                   <span>패널 배치 소스</span>
-                  <strong>{demoPanelSourceLabel}</strong>
+                  <strong>{verifiedPanelPlacementSourceLabel}</strong>
                 </div>
                 <div>
                   <span>liveClimateStatus</span>
@@ -3779,6 +4126,46 @@ function RiskMapPage() {
                 <div>
                   <span>selectedBuildingId</span>
                   <strong>{selectedBuildingId ?? '-'}</strong>
+                </div>
+                <div>
+                  <span>backendPanelsBuildingId</span>
+                  <strong>{backendPanelsBuildingId ?? '-'}</strong>
+                </div>
+                <div>
+                  <span>currentSelectedBuildingId</span>
+                  <strong>{currentSelectedBuildingId ?? '-'}</strong>
+                </div>
+                <div>
+                  <span>backendPanelsSessionId</span>
+                  <strong>{backendPanelsSessionId ?? '-'}</strong>
+                </div>
+                <div>
+                  <span>currentSessionId</span>
+                  <strong>{currentSessionId ?? '-'}</strong>
+                </div>
+                <div>
+                  <span>sameBuildingForBackendPanels</span>
+                  <strong>{formatDiagnosticBoolean(sameBuildingForBackendPanels)}</strong>
+                </div>
+                <div>
+                  <span>backendRoofMatchesSelected</span>
+                  <strong>{formatDiagnosticBoolean(backendRoofMatchesSelected)}</strong>
+                </div>
+                <div>
+                  <span>backendRoofDistanceToSelectedM</span>
+                  <strong>{formatDiagnosticMeters(backendRoofDistanceToSelectedM)}</strong>
+                </div>
+                <div>
+                  <span>panelCellCountAfterClip</span>
+                  <strong>{formatDiagnosticCount(panelCellCountAfterClip)}</strong>
+                </div>
+                <div>
+                  <span>backendPanelCellsOutsideSelectedCount</span>
+                  <strong>{formatDiagnosticCount(backendPanelCellsOutsideSelectedCount)}</strong>
+                </div>
+                <div>
+                  <span>staleBackendResponseIgnored</span>
+                  <strong>{formatDiagnosticBoolean(staleResponseIgnored)}</strong>
                 </div>
                 <div>
                   <span>livePanelsBuildingId</span>

@@ -14,6 +14,7 @@ const DEFAULT_SHADING_INDEX_AVERAGE = 3.36;
 const DEFAULT_SOLAR_PANEL_ANGLE = 30;
 const ANNUAL_GENERATION_KWH_PER_KW = 1265;
 const ELECTRICITY_VALUE_KRW_PER_KWH = 150;
+const FRONTEND_LOCAL_INVESTMENT_KRW_PER_KW = 1_200_000;
 const FALLBACK_PAYBACK_YEARS = 6.8;
 const CARBON_REDUCTION_KG_PER_KWH = 0.4594;
 const PINE_TREE_KG_CO2_PER_YEAR = 6.6;
@@ -39,6 +40,10 @@ function roundDecimal(value: number, digits = 1) {
   const multiplier = 10 ** digits;
 
   return Math.round(value * multiplier) / multiplier;
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function createSafeSeriesValue(value: unknown, fallback = 0) {
@@ -184,6 +189,35 @@ export function createFallbackPvAnalysisResult(input?: Partial<PvAnalysisInput>)
     pineTreeEffect,
     annualRevenueSeries: [],
     annualSaveCostSeries: [],
+    monthlyGenerationSeries: createFallbackMonthlyGenerationSeries(annualGenerationKwh),
+  };
+}
+
+export function createFrontendLocalPvFormulaResult(input?: Partial<PvAnalysisInput>): PvAnalysisResult {
+  const fallbackInput = createDefaultPvAnalysisInput(input);
+  const panelCapacityW = normalizePanelCapacity(fallbackInput);
+  const panelCount = normalizePanelCount(fallbackInput);
+  const installKw = roundDecimal((panelCapacityW * panelCount) / 1000, 1);
+  const shadingFactor = clampNumber(fallbackInput.shading_index_average / 3.5, 0.45, 1.0);
+  const annualGenerationKwh = roundNumber(installKw * 365 * 3.6 * shadingFactor);
+  const annualSavingKrw = roundMoney(annualGenerationKwh * ELECTRICITY_VALUE_KRW_PER_KWH);
+  const estimatedInvestmentKrw = roundMoney(installKw * FRONTEND_LOCAL_INVESTMENT_KRW_PER_KW);
+  const carbonReductionKg = roundDecimal(annualGenerationKwh * CARBON_REDUCTION_KG_PER_KWH, 1);
+
+  return {
+    annualGenerationKwh,
+    installKw,
+    firstYearTotalEconomicEffectKrw: annualSavingKrw,
+    firstYearSelfConsumptionSavingKrw: annualSavingKrw,
+    estimatedInvestmentKrw,
+    estimatedSurplusSalesKrw: 0,
+    carbonReductionKg,
+    pineTreeEffect: roundDecimal(carbonReductionKg / PINE_TREE_KG_CO2_PER_YEAR, 1),
+    annualRevenueSeries: [],
+    annualSaveCostSeries: Array.from({ length: 20 }, (_, index) => ({
+      year: index + 1,
+      saveCostKrw: annualSavingKrw,
+    })),
     monthlyGenerationSeries: createFallbackMonthlyGenerationSeries(annualGenerationKwh),
   };
 }
