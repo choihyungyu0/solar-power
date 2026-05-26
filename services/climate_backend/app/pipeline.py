@@ -19,6 +19,7 @@ from .supabase_client import save_analysis_result, save_training_sample
 
 
 PIPELINE_SOURCE = "external-fastapi-climate-backend"
+MANUAL_TEST_SOURCE = "manual-production-test"
 DEFAULT_MAX_CELLS = 300
 FULL_MAX_CELLS = 2500
 SELECT_BULD_TIMEOUT_SECONDS = 8
@@ -230,6 +231,19 @@ def _read_nested(mapping_value: dict[str, Any] | None, *keys: str):
     return current
 
 
+def _read_request_is_test(request) -> bool:
+    return getattr(request, "isTest", False) is True
+
+
+def _read_request_persistence_source(request, fallback: str) -> str:
+    source = getattr(request, "source", None)
+
+    if isinstance(source, str) and source.strip():
+        return source.strip()
+
+    return MANUAL_TEST_SOURCE if _read_request_is_test(request) else fallback
+
+
 def _select_buld_match_diagnostics(select_buld_5186, selected_roof_5186):
     centroid = select_buld_5186.centroid
     centroid_inside = selected_roof_5186.covers(centroid)
@@ -309,6 +323,8 @@ def _build_analysis_result_row(
 
     return {
         "building_id": selected_building_id,
+        "is_test": bool(ai_input.get("isTest")),
+        "source": ai_input.get("persistenceSource") or PIPELINE_SOURCE,
         "building_name": ai_input.get("buildingName"),
         "road_address": ai_input.get("roadAddress"),
         "jibun_address": ai_input.get("jibunAddress"),
@@ -374,7 +390,8 @@ def _build_training_sample_row(
         or _coerce_optional_int(ai_input.get("annualSavingKrw")),
         "payback_years": _coerce_optional_float(_read_nested(ai_simulation_result, "economics", "paybackYears"))
         or _coerce_optional_float(ai_input.get("paybackYears")),
-        "source": "render-backend-simulation-ai",
+        "is_test": bool(ai_input.get("isTest")),
+        "source": ai_input.get("persistenceSource") or "render-backend-simulation-ai",
     }
 
 
@@ -430,6 +447,8 @@ async def run_hybrid_pipeline(request):
     step = "validate-request"
     selected_building_id = getattr(request, "selectedBuildingId", None)
     selected_analysis_session_id = getattr(request, "selectedAnalysisSessionId", None)
+    request_is_test = _read_request_is_test(request)
+    persistence_source = _read_request_persistence_source(request, "render-backend-simulation-ai")
     roof_source = "vworld-building-footprint-fallback"
     diagnostics = {
         **create_request_diagnostics(request),
@@ -667,6 +686,8 @@ async def run_hybrid_pipeline(request):
             "panelCapacityW": request.panelCapacityW,
             "panelAngleDeg": request.panelAngle,
             "panelType": request.panelType,
+            "isTest": request_is_test,
+            "persistenceSource": persistence_source,
             "panelCountCandidate": max(1, original_count // request.cellsPerPanel),
             "panelCountSelected": panel_count,
             "installCapacityKw": round(install_capacity_kw, 1),

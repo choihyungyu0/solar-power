@@ -9,6 +9,7 @@ import {
   LuInfo,
   LuMapPin,
   LuPhone,
+  LuPrinter,
   LuSunMedium,
   LuZap,
 } from 'react-icons/lu';
@@ -482,6 +483,10 @@ function SimulationResultPage() {
     window.location.assign('/consultation');
   }, [result]);
 
+  const handlePrintSave = useCallback(() => {
+    window.print();
+  }, []);
+
   const profitReportActions = {
     onGenerate: handleProfitReportGenerate,
     onConsultationApply: handleConsultationApply,
@@ -498,9 +503,15 @@ function SimulationResultPage() {
             <h1 id="simulation-result-title">설치 결과 시뮬레이션</h1>
             <p>선택하신 아파트의 태양광 설치 비용, 예상 수익, 절감 효과를 확인해보세요.</p>
           </div>
-          <a className="mapBackButton" href="/risk-map">
-            지도 다시 보기
-          </a>
+          <div className="resultTitleActions">
+            <button className="printSaveButton" type="button" onClick={handlePrintSave}>
+              <LuPrinter aria-hidden="true" />
+              PDF로 저장
+            </button>
+            <a className="mapBackButton" href="/risk-map">
+              지도 다시 보기
+            </a>
+          </div>
         </section>
 
         <section className="simulationResultLayout">
@@ -563,6 +574,11 @@ function SimulationResultPage() {
           <LuInfo aria-hidden="true" />
           본 시뮬레이션은 예상치로 실제 결과와 다를 수 있습니다.
         </p>
+
+        <section className="printContactCta" aria-label="인쇄용 상담 안내">
+          <strong>우리 아파트 태양광 설치하기</strong>
+          <p>예상 리포트를 바탕으로 실제 보조금, 대출 가능성, 현장 확인 항목을 상담에서 검토하세요.</p>
+        </section>
       </main>
     </div>
   );

@@ -18,6 +18,8 @@ from .schemas import (
 )
 from .supabase_client import (
     check_supabase_health,
+    find_recent_duplicate_consultation_request,
+    get_consultation_profit_report,
     get_analysis_result_by_id,
     get_latest_profit_report_by_analysis_result,
     get_latest_subsidy_program,
@@ -29,6 +31,14 @@ from .supabase_client import (
 )
 
 app = FastAPI(title="SolarMate Climate Backend")
+MANUAL_TEST_SOURCE = "manual-production-test"
+CONSULTATION_DUPLICATE_WINDOW_MINUTES = 5
+CONSULTATION_FIELD_LIMITS = {
+    "name": 50,
+    "contact": 50,
+    "email": 120,
+    "content": 2000,
+}
 
 allowed_origins = [
     "http://localhost:5173",
@@ -118,6 +128,27 @@ def _compact_save_status(prefix: str, save_result: dict[str, Any]) -> dict[str, 
     return status
 
 
+def _read_persistence_marker(payload: Any, default_source: str) -> tuple[bool, str]:
+    is_test = getattr(payload, "isTest", False) is True
+    source = getattr(payload, "source", None)
+
+    if isinstance(source, str) and source.strip():
+        return is_test, source.strip()
+
+    return is_test, MANUAL_TEST_SOURCE if is_test else default_source
+
+
+def _validate_text_limit(label: str, value: str | None, max_length: int) -> dict[str, Any] | None:
+    if value is not None and len(value) > max_length:
+        return {
+            "ok": False,
+            "message": f"{label}은(는) 최대 {max_length}자까지 입력할 수 있습니다.",
+            "errorType": "ValidationError",
+        }
+
+    return None
+
+
 def _extract_region_for_subsidy(agent_payload: dict[str, Any]) -> tuple[str, str | None]:
     location = None
     subsidy_rag_input = agent_payload.get("subsidyRagInput")
@@ -184,11 +215,58 @@ def admin_update_consultation_status(
     )
 
 
+@app.get("/api/admin/consultations/{consultation_id}/profit-report")
+def admin_consultation_profit_report(
+    consultation_id: str,
+    _: bool = Depends(require_admin_access),
+):
+    result = get_consultation_profit_report(consultation_id)
+
+    if result.get("ok") is True and isinstance(result.get("row"), dict):
+        row = result["row"]
+        report = row.get("report_json") if isinstance(row.get("report_json"), dict) else {}
+        report_markdown = row.get("report_markdown")
+        loan_scenario = row.get("loan_scenario") if isinstance(row.get("loan_scenario"), dict) else None
+
+        if loan_scenario is None and isinstance(report.get("loanSupportScenario"), dict):
+            loan_scenario = report["loanSupportScenario"]
+
+        return {
+            "ok": True,
+            "consultationId": result.get("consultationId") or consultation_id,
+            "analysisResultId": result.get("analysisResultId"),
+            "profitReportId": row.get("id"),
+            "report": report,
+            "reportMarkdown": report_markdown if isinstance(report_markdown, str) else "",
+            "loanScenario": loan_scenario,
+            "createdAt": row.get("created_at"),
+        }
+
+    if result.get("errorType") == "NotFound" and result.get("analysisResultId"):
+        message = "연결된 수익 리포트가 없습니다."
+    elif result.get("errorType") == "NoLinkedAnalysis":
+        message = "연결된 분석 결과가 없습니다."
+    elif result.get("errorType") == "NotFound":
+        message = "상담 신청을 찾을 수 없습니다."
+    else:
+        message = "연결된 수익 리포트를 불러오지 못했습니다."
+
+    return JSONResponse(
+        status_code=404 if result.get("errorType") in {"NotFound", "NoLinkedAnalysis"} else 503,
+        content={
+            "ok": False,
+            "message": message,
+            "errorType": result.get("errorType"),
+        },
+    )
+
+
 @app.post("/api/ai-profit-report")
 async def create_ai_profit_report(payload: ProfitReportRequest):
     analysis_result_id = payload.analysisResultId.strip() if payload.analysisResultId else None
     ai_simulation_result = payload.aiSimulationResult if isinstance(payload.aiSimulationResult, dict) else None
     agent_payload = payload.agentPayload if isinstance(payload.agentPayload, dict) else None
+    is_test, persistence_source = _read_persistence_marker(payload, "ai-profit-report-agent")
     loaded_analysis_row: dict[str, Any] | None = None
 
     if analysis_result_id:
@@ -317,8 +395,12 @@ async def create_ai_profit_report(payload: ProfitReportRequest):
                 "analysisResultId": analysis_result_id,
                 "agentPayload": agent_payload,
                 "userFinanceInput": user_finance_input,
+                "isTest": is_test,
+                "source": persistence_source,
                 "loadedAnalysisCreatedAt": loaded_analysis_row.get("created_at") if loaded_analysis_row else None,
             },
+            "is_test": is_test,
+            "source": persistence_source,
             "subsidy_matrix": report.get("subsidyMatrix"),
             "loan_scenario": report.get("loanSupportScenario"),
             "report_json": report,
@@ -338,6 +420,8 @@ async def create_ai_profit_report(payload: ProfitReportRequest):
             "monthly_payment_estimate_krw": loan_scenario.get("monthlyPaymentEstimateKrw"),
             "note": loan_scenario.get("note"),
             "raw_payload": loan_scenario,
+            "is_test": is_test,
+            "source": persistence_source,
         }
     )
     db_save_status = {
@@ -399,6 +483,12 @@ async def climate_rooftop_analysis(payload: ClimateAnalysisRequest):
 async def create_consultation(payload: ConsultationRequest):
     name = payload.name.strip() if payload.name else ""
     contact = payload.contact.strip() if payload.contact else ""
+    email = payload.email.strip() if payload.email else None
+    content = payload.content.strip() if payload.content else None
+    road_address = payload.roadAddress.strip() if payload.roadAddress else None
+    jibun_address = payload.jibunAddress.strip() if payload.jibunAddress else None
+    analysis_result_id = payload.analysisResultId.strip() if payload.analysisResultId else None
+    is_test, persistence_source = _read_persistence_marker(payload, "consultation-form")
 
     if not name:
         return {
@@ -424,6 +514,29 @@ async def create_consultation(payload: ConsultationRequest):
             "error": "privacyAgreed must be true.",
         }
 
+    for validation_error in (
+        _validate_text_limit("이름", name, CONSULTATION_FIELD_LIMITS["name"]),
+        _validate_text_limit("연락처", contact, CONSULTATION_FIELD_LIMITS["contact"]),
+        _validate_text_limit("이메일", email, CONSULTATION_FIELD_LIMITS["email"]),
+        _validate_text_limit("상담 내용", content, CONSULTATION_FIELD_LIMITS["content"]),
+    ):
+        if validation_error:
+            return validation_error
+
+    duplicate_result = find_recent_duplicate_consultation_request(
+        contact=contact,
+        analysis_result_id=analysis_result_id,
+        road_address=road_address,
+        window_minutes=CONSULTATION_DUPLICATE_WINDOW_MINUTES,
+    )
+
+    if duplicate_result.get("ok") is True and isinstance(duplicate_result.get("id"), str):
+        return {
+            "ok": True,
+            "consultationRequestId": duplicate_result["id"],
+            "message": "이미 접수된 상담 신청입니다.",
+        }
+
     agent_payload = payload.agentPayload if isinstance(payload.agentPayload, dict) else {}
 
     if payload.profitReportId:
@@ -436,16 +549,18 @@ async def create_consultation(payload: ConsultationRequest):
         {
             "name": name,
             "contact": contact,
-            "email": payload.email.strip() if payload.email else None,
+            "email": email,
             "consultation_type": payload.consultationType.strip() if payload.consultationType else None,
-            "content": payload.content.strip() if payload.content else None,
-            "road_address": payload.roadAddress.strip() if payload.roadAddress else None,
-            "jibun_address": payload.jibunAddress.strip() if payload.jibunAddress else None,
-            "analysis_result_id": payload.analysisResultId.strip() if payload.analysisResultId else None,
+            "content": content,
+            "road_address": road_address,
+            "jibun_address": jibun_address,
+            "analysis_result_id": analysis_result_id,
             "privacy_agreed": payload.privacyAgreed,
             "third_party_agreed": payload.thirdPartyAgreed,
             "agent_payload": agent_payload or None,
             "status": "received",
+            "is_test": is_test,
+            "source": persistence_source,
         }
     )
 
@@ -461,7 +576,6 @@ async def create_consultation(payload: ConsultationRequest):
         "message": "상담 신청 저장 중 오류가 발생했습니다.",
         "errorType": save_result.get("errorType"),
         "reason": save_result.get("reason"),
-        "error": save_result.get("error") or save_result.get("reason") or "consultation save failed.",
     }
 
 

@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any
 
@@ -9,6 +10,7 @@ SIMULATION_TRAINING_SAMPLES_TABLE = "simulation_training_samples"
 PROFIT_REPORTS_TABLE = "profit_reports"
 SUBSIDY_PROGRAMS_TABLE = "subsidy_programs"
 LOAN_SCENARIOS_TABLE = "loan_scenarios"
+OPTIONAL_COMPAT_COLUMNS = {"is_test", "source"}
 
 
 def is_supabase_enabled() -> bool:
@@ -32,6 +34,41 @@ def _safe_failure_result(error: Exception) -> dict[str, Any]:
         "errorType": type(error).__name__,
         "error": str(error),
     }
+
+
+def _is_missing_optional_column_error(error: Exception) -> bool:
+    message = str(error).lower()
+
+    if not any(column_name in message for column_name in OPTIONAL_COMPAT_COLUMNS):
+        return False
+
+    return any(
+        marker in message
+        for marker in (
+            "pgrst204",
+            "schema cache",
+            "could not find",
+            "does not exist",
+            "column",
+        )
+    )
+
+
+def _strip_optional_columns(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    skipped_columns = [
+        column_name
+        for column_name in OPTIONAL_COMPAT_COLUMNS
+        if column_name in payload
+    ]
+
+    return (
+        {
+            key: value
+            for key, value in payload.items()
+            if key not in OPTIONAL_COMPAT_COLUMNS
+        },
+        sorted(skipped_columns),
+    )
 
 
 @lru_cache(maxsize=1)
@@ -89,6 +126,27 @@ def _insert_row(table_name: str, payload: dict[str, Any]) -> dict[str, Any]:
             "id": row_id,
         }
     except Exception as error:
+        if (
+            any(column_name in payload for column_name in OPTIONAL_COMPAT_COLUMNS)
+            and _is_missing_optional_column_error(error)
+        ):
+            compatible_payload, skipped_columns = _strip_optional_columns(payload)
+
+            try:
+                response = client.table(table_name).insert(compatible_payload).execute()
+                data = response.data if isinstance(response.data, list) else []
+                row = data[0] if data and isinstance(data[0], dict) else {}
+                row_id = row.get("id") if isinstance(row.get("id"), str) else None
+
+                return {
+                    "ok": True,
+                    "enabled": True,
+                    "id": row_id,
+                    "optionalColumnsSkipped": skipped_columns,
+                }
+            except Exception as retry_error:
+                return _safe_failure_result(retry_error)
+
         return _safe_failure_result(error)
 
 
@@ -102,6 +160,68 @@ def save_training_sample(row: dict[str, Any]) -> dict[str, Any]:
 
 def save_consultation_request(row: dict[str, Any]) -> dict[str, Any]:
     return _insert_row(CONSULTATION_REQUESTS_TABLE, row)
+
+
+def find_recent_duplicate_consultation_request(
+    *,
+    contact: str,
+    analysis_result_id: str | None = None,
+    road_address: str | None = None,
+    window_minutes: int = 5,
+) -> dict[str, Any]:
+    client, disabled_or_failed = _get_enabled_client()
+
+    if disabled_or_failed:
+        return disabled_or_failed
+
+    normalized_contact = contact.strip()
+    normalized_analysis_result_id = analysis_result_id.strip() if analysis_result_id else ""
+    normalized_road_address = road_address.strip() if road_address else ""
+
+    if not normalized_contact or (not normalized_analysis_result_id and not normalized_road_address):
+        return {
+            "ok": False,
+            "enabled": True,
+            "reason": "Duplicate check was skipped because match keys are incomplete.",
+            "errorType": "DuplicateCheckSkipped",
+        }
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=window_minutes)).isoformat()
+
+    try:
+        query = (
+            client.table(CONSULTATION_REQUESTS_TABLE)
+            .select("id,created_at")
+            .eq("contact", normalized_contact)
+            .gte("created_at", cutoff)
+            .order("created_at", desc=True)
+            .limit(1)
+        )
+
+        if normalized_analysis_result_id:
+            query = query.eq("analysis_result_id", normalized_analysis_result_id)
+        else:
+            query = query.eq("road_address", normalized_road_address)
+
+        response = query.execute()
+        data = response.data if isinstance(response.data, list) else []
+        row = data[0] if data and isinstance(data[0], dict) else None
+
+        if row is None:
+            return {
+                "ok": False,
+                "enabled": True,
+                "reason": "Recent duplicate consultation request was not found.",
+                "errorType": "NotFound",
+            }
+
+        return {
+            "ok": True,
+            "enabled": True,
+            "id": row.get("id") if isinstance(row.get("id"), str) else None,
+        }
+    except Exception as error:
+        return _safe_failure_result(error)
 
 
 def save_profit_report(row: dict[str, Any]) -> dict[str, Any]:
@@ -142,6 +262,66 @@ def get_latest_profit_report_by_analysis_result(analysis_result_id: str) -> dict
             "ok": True,
             "enabled": True,
             "row": row,
+        }
+    except Exception as error:
+        return _safe_failure_result(error)
+
+
+def get_consultation_profit_report(consultation_id: str) -> dict[str, Any]:
+    client, disabled_or_failed = _get_enabled_client()
+
+    if disabled_or_failed:
+        return disabled_or_failed
+
+    try:
+        consultation_response = (
+            client.table(CONSULTATION_REQUESTS_TABLE)
+            .select("id,analysis_result_id")
+            .eq("id", consultation_id)
+            .limit(1)
+            .execute()
+        )
+        consultation_data = consultation_response.data if isinstance(consultation_response.data, list) else []
+        consultation_row = (
+            consultation_data[0]
+            if consultation_data and isinstance(consultation_data[0], dict)
+            else None
+        )
+
+        if consultation_row is None:
+            return {
+                "ok": False,
+                "enabled": True,
+                "reason": "Consultation request was not found.",
+                "errorType": "NotFound",
+            }
+
+        analysis_result_id = consultation_row.get("analysis_result_id")
+
+        if not isinstance(analysis_result_id, str) or not analysis_result_id:
+            return {
+                "ok": False,
+                "enabled": True,
+                "reason": "Consultation request has no linked analysis result.",
+                "errorType": "NoLinkedAnalysis",
+                "consultationId": consultation_id,
+            }
+
+        profit_report_result = get_latest_profit_report_by_analysis_result(analysis_result_id)
+
+        if profit_report_result.get("ok") is not True:
+            return {
+                **profit_report_result,
+                "consultationId": consultation_id,
+                "analysisResultId": analysis_result_id,
+            }
+
+        return {
+            "ok": True,
+            "enabled": True,
+            "consultationId": consultation_id,
+            "analysisResultId": analysis_result_id,
+            "row": profit_report_result.get("row"),
         }
     except Exception as error:
         return _safe_failure_result(error)
@@ -290,7 +470,39 @@ def _format_admin_consultation_row(
         "paybackYears": net_investment.get("paybackYears"),
         "subsidyProgramName": subsidy_matrix.get("programName"),
         "loanApprovalStatus": loan_scenario.get("loanApprovalStatus"),
+        "isTest": row.get("is_test") is True,
+        "source": row.get("source") if isinstance(row.get("source"), str) else None,
     }
+
+
+def _select_admin_consultation_rows(client: Any, limit: int) -> list[dict[str, Any]]:
+    base_columns = (
+        "id,created_at,name,contact,email,consultation_type,road_address,status,"
+        "analysis_result_id,agent_payload"
+    )
+    extended_columns = f"{base_columns},is_test,source"
+
+    try:
+        response = (
+            client.table(CONSULTATION_REQUESTS_TABLE)
+            .select(extended_columns)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+    except Exception as error:
+        if not _is_missing_optional_column_error(error):
+            raise
+
+        response = (
+            client.table(CONSULTATION_REQUESTS_TABLE)
+            .select(base_columns)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+
+    return response.data if isinstance(response.data, list) else []
 
 
 def list_admin_consultations(limit: int = 100) -> dict[str, Any]:
@@ -300,20 +512,7 @@ def list_admin_consultations(limit: int = 100) -> dict[str, Any]:
         return disabled_or_failed
 
     try:
-        consultation_response = (
-            client.table(CONSULTATION_REQUESTS_TABLE)
-            .select(
-                "id,created_at,name,contact,email,consultation_type,road_address,status,analysis_result_id,agent_payload"
-            )
-            .order("created_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        consultation_rows = (
-            consultation_response.data
-            if isinstance(consultation_response.data, list)
-            else []
-        )
+        consultation_rows = _select_admin_consultation_rows(client, limit)
         analysis_ids = sorted(
             {
                 row.get("analysis_result_id")

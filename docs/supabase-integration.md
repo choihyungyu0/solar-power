@@ -58,6 +58,9 @@ ENABLE_SUPABASE_WRITE=true
 3. `simulation_training_samples`에 시뮬레이션 기반 학습 샘플 저장
 4. 저장 실패 시에도 분석 결과는 그대로 반환하고 `dbSaveStatus`에 실패 사유만 기록
 
+운영 화면에서 생성된 row는 기본적으로 `is_test=false`다. 반복 테스트 스크립트는 `isTest:true`, `source:'manual-production-test'`를 API 요청에 포함해 수동 테스트 row를 구분한다.
+새 컬럼이 아직 Supabase에 적용되지 않은 환경에서는 백엔드가 `is_test`, `source` 컬럼을 제거하고 1회 재시도하므로 기존 저장 흐름은 유지된다.
+
 성공 예:
 
 ```json
@@ -102,6 +105,20 @@ ENABLE_SUPABASE_WRITE=true
 - `contact`
 - `privacyAgreed: true`
 
+입력 제한:
+
+- `name`: 최대 50자
+- `contact`: 최대 50자
+- `email`: 최대 120자
+- `content`: 최대 2000자
+
+중복 접수 방지:
+
+- `analysisResultId`가 있으면 최근 5분 내 `contact + analysisResultId`가 같은 상담 신청을 중복으로 본다.
+- `analysisResultId`가 없으면 최근 5분 내 `contact + roadAddress`가 같은 상담 신청을 중복으로 본다.
+- 중복이면 새 row를 만들지 않고 기존 `consultationRequestId`를 반환한다.
+- 오류 응답에는 이름, 연락처, 이메일 같은 개인정보 값을 포함하지 않는다.
+
 저장 컬럼:
 
 - `name`
@@ -124,6 +141,16 @@ ENABLE_SUPABASE_WRITE=true
   "ok": true,
   "consultationRequestId": "uuid",
   "message": "상담 신청이 접수되었습니다."
+}
+```
+
+중복 접수 응답:
+
+```json
+{
+  "ok": true,
+  "consultationRequestId": "existing-uuid",
+  "message": "이미 접수된 상담 신청입니다."
 }
 ```
 
@@ -205,6 +232,54 @@ AI가 구조안전성이나 장애물 여부를 확정했다고 표현하지 않
 보조금은 `경기 주택태양광 지원사업` 단일 기준이며 `subsidyStackingAllowed=false`다.
 대출은 예상 시나리오이며 실제 승인은 금융기관 심사가 필요하다.
 
+## 테스트 데이터 표시 컬럼 SQL
+
+아래 SQL은 수동 운영 테스트 row와 실제 사용자 row를 구분하기 위한 마이그레이션이다.
+Supabase SQL Editor에서 1회 적용한다.
+
+```sql
+alter table public.analysis_results
+  add column if not exists is_test boolean not null default false,
+  add column if not exists source text;
+
+alter table public.consultation_requests
+  add column if not exists is_test boolean not null default false,
+  add column if not exists source text;
+
+alter table public.simulation_training_samples
+  add column if not exists is_test boolean not null default false,
+  add column if not exists source text;
+
+alter table public.profit_reports
+  add column if not exists is_test boolean not null default false,
+  add column if not exists source text;
+
+alter table public.loan_scenarios
+  add column if not exists is_test boolean not null default false,
+  add column if not exists source text;
+```
+
+수동 테스트 row 정리 SQL:
+
+```sql
+delete from public.loan_scenarios
+where is_test = true or source = 'manual-production-test';
+
+delete from public.profit_reports
+where is_test = true or source = 'manual-production-test';
+
+delete from public.consultation_requests
+where is_test = true or source = 'manual-production-test';
+
+delete from public.simulation_training_samples
+where is_test = true or source = 'manual-production-test';
+
+delete from public.analysis_results
+where is_test = true or source = 'manual-production-test';
+```
+
+`consultation_requests`의 `name`, `contact`는 개인정보다. 테스트 row 조회나 정리 결과를 공개 화면/API에 노출하지 않는다.
+
 ## AI 수익 리포트 테이블 SQL
 
 아래 SQL은 Supabase SQL Editor에서 수동으로 적용한다.
@@ -226,7 +301,9 @@ create table if not exists public.profit_reports (
   loan_scenario jsonb,
   report_json jsonb,
   report_markdown text,
-  disclaimer text
+  disclaimer text,
+  is_test boolean not null default false,
+  source text
 );
 
 alter table public.profit_reports enable row level security;
@@ -264,7 +341,9 @@ create table if not exists public.loan_scenarios (
   annual_revenue_basis_krw bigint,
   monthly_payment_estimate_krw bigint,
   note text,
-  raw_payload jsonb
+  raw_payload jsonb,
+  is_test boolean not null default false,
+  source text
 );
 
 alter table public.loan_scenarios enable row level security;
@@ -279,6 +358,8 @@ select
   analysis_result_id,
   report_type,
   report_status,
+  is_test,
+  source,
   report_json->'fourMetrics' as four_metrics
 from public.profit_reports
 order by created_at desc
@@ -295,7 +376,9 @@ select
   loan_years,
   loan_coverage_ratio,
   estimated_loan_limit_krw,
-  monthly_payment_estimate_krw
+  monthly_payment_estimate_krw,
+  is_test,
+  source
 from public.loan_scenarios
 order by created_at desc
 limit 5;
@@ -331,10 +414,16 @@ GET /api/db-health
   "tables": {
     "analysis_results": true,
     "consultation_requests": true,
-    "simulation_training_samples": true
+    "simulation_training_samples": true,
+    "profit_reports": true,
+    "subsidy_programs": true,
+    "loan_scenarios": true
   }
 }
 ```
+
+테이블이 아직 생성되지 않았거나 권한 문제로 읽을 수 없으면 해당 테이블 값만 `false`로 내려오며, endpoint 자체는 실패하지 않는다.
+`canConnect`는 Supabase가 활성화되어 있고 위 6개 테이블을 모두 읽을 수 있을 때 `true`다.
 
 응답에는 Supabase URL이나 service role key를 포함하지 않는다.
 
@@ -353,7 +442,9 @@ select
   road_address,
   annual_generation_kwh,
   suitability_score,
-  suitability_grade
+  suitability_grade,
+  is_test,
+  source
 from public.analysis_results
 order by created_at desc
 limit 5;
@@ -370,6 +461,7 @@ select
   panel_count,
   install_capacity_kw,
   annual_generation_kwh,
+  is_test,
   source
 from public.simulation_training_samples
 order by created_at desc
@@ -387,7 +479,9 @@ select
   consultation_type,
   road_address,
   analysis_result_id,
-  status
+  status,
+  is_test,
+  source
 from public.consultation_requests
 order by created_at desc
 limit 5;

@@ -16,6 +16,8 @@ select
   analysis_result_id,
   report_type,
   report_status,
+  is_test,
+  source,
   report_json->'fourMetrics' as four_metrics,
   report_json->'netInvestment' as net_investment
 from public.profit_reports
@@ -30,7 +32,9 @@ select
   loan_coverage_ratio,
   estimated_loan_limit_krw,
   annual_revenue_basis_krw,
-  monthly_payment_estimate_krw
+  monthly_payment_estimate_krw,
+  is_test,
+  source
 from public.loan_scenarios
 order by created_at desc
 limit 5;

@@ -27,6 +27,19 @@ export type AdminConsultationRow = {
   paybackYears: number | null;
   subsidyProgramName: string | null;
   loanApprovalStatus: string | null;
+  isTest: boolean;
+  source: string | null;
+};
+
+export type AdminConsultationProfitReport = {
+  ok: true;
+  consultationId: string;
+  analysisResultId: string | null;
+  profitReportId: string | null;
+  report: Record<string, unknown>;
+  reportMarkdown: string;
+  loanScenario: Record<string, unknown> | null;
+  createdAt: string | null;
 };
 
 type AdminStatusUpdateResponse = {
@@ -104,6 +117,8 @@ function normalizeConsultationRow(value: unknown): AdminConsultationRow | null {
     paybackYears: normalizeNumber(value.paybackYears),
     subsidyProgramName: normalizeText(value.subsidyProgramName),
     loanApprovalStatus: normalizeText(value.loanApprovalStatus),
+    isTest: value.isTest === true,
+    source: normalizeText(value.source),
   };
 }
 
@@ -169,4 +184,42 @@ export async function updateAdminConsultationStatus(
   }
 
   throw new Error(readErrorMessage(payload, `상담 상태 변경 실패: HTTP ${response.status}`));
+}
+
+export async function getConsultationProfitReport(
+  consultationId: string,
+  adminKey: string,
+): Promise<AdminConsultationProfitReport> {
+  const baseUrl = getClimateBackendBaseUrl();
+
+  if (!baseUrl) {
+    throw new Error('관리자 API 서버 주소가 설정되지 않았습니다.');
+  }
+
+  const response = await fetch(`${baseUrl}/api/admin/consultations/${consultationId}/profit-report`, {
+    method: 'GET',
+    headers: createAdminHeaders(adminKey),
+  });
+  const payload = (await response.json().catch(() => null)) as unknown;
+
+  if (
+    response.ok &&
+    isRecord(payload) &&
+    payload.ok === true &&
+    typeof payload.consultationId === 'string' &&
+    isRecord(payload.report)
+  ) {
+    return {
+      ok: true,
+      consultationId: payload.consultationId,
+      analysisResultId: normalizeText(payload.analysisResultId),
+      profitReportId: normalizeText(payload.profitReportId),
+      report: payload.report,
+      reportMarkdown: normalizeText(payload.reportMarkdown) ?? '',
+      loanScenario: isRecord(payload.loanScenario) ? payload.loanScenario : null,
+      createdAt: normalizeText(payload.createdAt),
+    };
+  }
+
+  throw new Error(readErrorMessage(payload, `수익 리포트 요청 실패: HTTP ${response.status}`));
 }

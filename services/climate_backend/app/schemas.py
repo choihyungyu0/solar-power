@@ -15,6 +15,8 @@ class ClimateAnalysisRequest(BaseModel):
     cellsPerPanel: int = 2
     includePvAnalysis: bool = False
     mode: Literal["fast", "full"] = "fast"
+    isTest: bool = False
+    source: Optional[str] = None
 
 
 class ClimateAnalysisResponse(BaseModel):
@@ -55,6 +57,8 @@ class ConsultationRequest(BaseModel):
     privacyAgreed: bool = False
     thirdPartyAgreed: bool = False
     agentPayload: Optional[dict[str, Any]] = None
+    isTest: bool = False
+    source: Optional[str] = None
 
 
 class ProfitReportFinanceInput(BaseModel):
@@ -69,6 +73,8 @@ class ProfitReportRequest(BaseModel):
     agentPayload: Optional[dict[str, Any]] = None
     userFinanceInput: Optional[ProfitReportFinanceInput] = None
     forceRegenerate: bool = False
+    isTest: bool = False
+    source: Optional[str] = None
 
 
 class AdminConsultationStatusUpdateRequest(BaseModel):

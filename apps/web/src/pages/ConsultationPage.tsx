@@ -16,6 +16,12 @@ import './ConsultationPage.css';
 const LEGACY_CONSULTATION_INQUIRY_STORAGE_KEY = 'solarmate:consultationInquiry';
 const SERVICE_CONSULTATION_INQUIRY_STORAGE_KEY = 'solarmate:serviceConsultationInquiry';
 const TEMPORARY_SAVE_MESSAGE = '서버 저장에 실패하여 임시 저장되었습니다. 네트워크 상태를 확인해주세요.';
+const CONSULTATION_INPUT_LIMITS = {
+  name: 50,
+  contact: 50,
+  email: 120,
+  content: 2000,
+};
 
 const consultationTypes = [
   '설치 가능 여부 상담',
@@ -249,6 +255,16 @@ export default function ConsultationPage() {
       return;
     }
 
+    if (
+      trimmedFormValues.name.length > CONSULTATION_INPUT_LIMITS.name ||
+      trimmedFormValues.contact.length > CONSULTATION_INPUT_LIMITS.contact ||
+      trimmedFormValues.email.length > CONSULTATION_INPUT_LIMITS.email ||
+      trimmedFormValues.content.length > CONSULTATION_INPUT_LIMITS.content
+    ) {
+      window.alert('입력 가능한 글자 수를 초과했습니다.');
+      return;
+    }
+
     const selectedSimulationContext = getSelectedSimulationContext();
     const agentPayloadWithProfitReport = {
       ...(selectedSimulationContext.agentPayload ?? {}),
@@ -261,11 +277,12 @@ export default function ConsultationPage() {
           }
         : {}),
     };
-    const contentWithProfitReport = selectedSimulationContext.profitReportSummary
+    const rawContentWithProfitReport = selectedSimulationContext.profitReportSummary
       ? `${trimmedFormValues.content || 'AI 수익 리포트 기반 상담을 요청합니다.'}\n\nAI 수익 리포트 요약: ${
           selectedSimulationContext.profitReportSummary
         }`
       : trimmedFormValues.content;
+    const contentWithProfitReport = rawContentWithProfitReport.slice(0, CONSULTATION_INPUT_LIMITS.content);
     const inquiry: ServiceConsultationInquiry = {
       ...trimmedFormValues,
       content: contentWithProfitReport,
@@ -302,6 +319,7 @@ export default function ConsultationPage() {
         ...inquiry,
         consultationRequestId: response.consultationRequestId,
         serverSaveStatus: 'saved',
+        serverSaveMessage: response.message,
       });
       navigate('/consultation/complete');
       return;
@@ -339,6 +357,7 @@ export default function ConsultationPage() {
                   name="name"
                   type="text"
                   value={formValues.name}
+                  maxLength={CONSULTATION_INPUT_LIMITS.name}
                   placeholder="이름을 입력해주세요."
                   onChange={handleChange}
                 />
@@ -351,6 +370,7 @@ export default function ConsultationPage() {
                   name="contact"
                   type="text"
                   value={formValues.contact}
+                  maxLength={CONSULTATION_INPUT_LIMITS.contact}
                   placeholder="연락처를 입력해주세요."
                   onChange={handleChange}
                 />
@@ -363,6 +383,7 @@ export default function ConsultationPage() {
                   name="email"
                   type="email"
                   value={formValues.email}
+                  maxLength={CONSULTATION_INPUT_LIMITS.email}
                   placeholder="선택 입력"
                   onChange={handleChange}
                 />
@@ -397,6 +418,7 @@ export default function ConsultationPage() {
                   id="consultation-content"
                   name="content"
                   value={formValues.content}
+                  maxLength={CONSULTATION_INPUT_LIMITS.content}
                   placeholder="상담 내용을 입력해주세요."
                   onChange={handleChange}
                 />

@@ -2,21 +2,31 @@ import { Fragment, useCallback, useMemo, useState, type ChangeEvent, type FormEv
 import {
   LuChevronDown,
   LuChevronUp,
+  LuFileText,
   LuRefreshCw,
   LuSearch,
   LuShieldCheck,
+  LuX,
 } from 'react-icons/lu';
 import SolarMateHeader from '../components/SolarMateHeader';
 import {
   ADMIN_CONSULTATION_STATUSES,
   fetchAdminConsultations,
+  getConsultationProfitReport,
   updateAdminConsultationStatus,
   type AdminConsultationRow,
+  type AdminConsultationProfitReport,
   type AdminConsultationStatus,
 } from '../lib/adminConsultationClient';
 import './AdminConsultationsPage.css';
 
 type StatusFilter = AdminConsultationStatus | 'all';
+type ProfitReportModalState = {
+  row: AdminConsultationRow;
+  report: AdminConsultationProfitReport | null;
+  isLoading: boolean;
+  errorMessage: string;
+};
 
 const statusLabels: Record<AdminConsultationStatus, string> = {
   received: '접수',
@@ -70,6 +80,34 @@ function formatYears(value: number | null) {
   return `약 ${value.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}년`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getPathValue(value: unknown, path: string[]) {
+  return path.reduce<unknown>((current, key) => (isRecord(current) ? current[key] : undefined), value);
+}
+
+function getPathNumber(value: unknown, path: string[]) {
+  const candidate = getPathValue(value, path);
+
+  return typeof candidate === 'number' && Number.isFinite(candidate) ? candidate : null;
+}
+
+function getPathText(value: unknown, path: string[]) {
+  const candidate = getPathValue(value, path);
+
+  return typeof candidate === 'string' && candidate.trim() ? candidate.trim() : null;
+}
+
+function getPathTextArray(value: unknown, path: string[]) {
+  const candidate = getPathValue(value, path);
+
+  return Array.isArray(candidate)
+    ? candidate.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+}
+
 function includesSearchText(row: AdminConsultationRow, searchText: string) {
   if (!searchText) {
     return true;
@@ -83,6 +121,8 @@ function includesSearchText(row: AdminConsultationRow, searchText: string) {
     row.roadAddress,
     row.status,
     row.suitabilityGrade,
+    row.source,
+    row.isTest ? '테스트 데이터' : '',
   ]
     .filter(Boolean)
     .join(' ')
@@ -96,28 +136,35 @@ export default function AdminConsultationsPage() {
   const [rows, setRows] = useState<AdminConsultationRow[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [searchValue, setSearchValue] = useState('');
+  const [showTestData, setShowTestData] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [profitReportModal, setProfitReportModal] = useState<ProfitReportModalState | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [lastLoadedAt, setLastLoadedAt] = useState<string | null>(null);
 
+  const visibleRows = useMemo(
+    () => rows.filter((row) => showTestData || row.isTest !== true),
+    [rows, showTestData],
+  );
+
   const filteredRows = useMemo(() => {
     const searchText = searchValue.trim().toLowerCase();
 
-    return rows.filter((row) => {
+    return visibleRows.filter((row) => {
       const matchesStatus = statusFilter === 'all' || row.status === statusFilter;
 
       return matchesStatus && includesSearchText(row, searchText);
     });
-  }, [rows, searchValue, statusFilter]);
+  }, [visibleRows, searchValue, statusFilter]);
 
   const statusCounts = useMemo(() => {
     return ADMIN_CONSULTATION_STATUSES.reduce<Record<AdminConsultationStatus, number>>(
       (counts, status) => ({
         ...counts,
-        [status]: rows.filter((row) => row.status === status).length,
+        [status]: visibleRows.filter((row) => row.status === status).length,
       }),
       {
         received: 0,
@@ -127,7 +174,7 @@ export default function AdminConsultationsPage() {
         closed: 0,
       },
     );
-  }, [rows]);
+  }, [visibleRows]);
 
   const loadConsultations = useCallback(async () => {
     setIsLoading(true);
@@ -177,6 +224,37 @@ export default function AdminConsultationsPage() {
     if (nextStatus !== row.status) {
       void handleStatusChange(row.id, nextStatus);
     }
+  };
+
+  const handleProfitReportOpen = async (row: AdminConsultationRow) => {
+    setProfitReportModal({
+      row,
+      report: null,
+      isLoading: true,
+      errorMessage: '',
+    });
+
+    try {
+      const report = await getConsultationProfitReport(row.id, adminKey);
+
+      setProfitReportModal({
+        row,
+        report,
+        isLoading: false,
+        errorMessage: '',
+      });
+    } catch (error) {
+      setProfitReportModal({
+        row,
+        report: null,
+        isLoading: false,
+        errorMessage: error instanceof Error ? error.message : '수익 리포트를 불러오지 못했습니다.',
+      });
+    }
+  };
+
+  const handleProfitReportClose = () => {
+    setProfitReportModal(null);
   };
 
   return (
@@ -249,6 +327,15 @@ export default function AdminConsultationsPage() {
             {filteredRows.length.toLocaleString('ko-KR')}건
             {lastLoadedAt ? ` · ${formatDate(lastLoadedAt)} 기준` : ''}
           </p>
+
+          <label className="admin-consultations-test-toggle">
+            <input
+              type="checkbox"
+              checked={showTestData}
+              onChange={(event) => setShowTestData(event.target.checked)}
+            />
+            테스트 데이터 보기
+          </label>
         </section>
 
         {errorMessage && (
@@ -284,6 +371,7 @@ export default function AdminConsultationsPage() {
                     <td>
                       <strong>{row.name || '-'}</strong>
                       <span>{row.contact || '-'}</span>
+                      {row.isTest && <em className="admin-consultations-test-badge">테스트</em>}
                     </td>
                     <td>{row.consultationType || '-'}</td>
                     <td>{row.roadAddress || '-'}</td>
@@ -306,14 +394,24 @@ export default function AdminConsultationsPage() {
                       </select>
                     </td>
                     <td>
-                      <button
-                        type="button"
-                        className="admin-consultations-detail-button"
-                        onClick={() => setExpandedId(expandedId === row.id ? null : row.id)}
-                      >
-                        {expandedId === row.id ? <LuChevronUp aria-hidden="true" /> : <LuChevronDown aria-hidden="true" />}
-                        보기
-                      </button>
+                      <div className="admin-consultations-row-actions">
+                        <button
+                          type="button"
+                          className="admin-consultations-detail-button"
+                          onClick={() => setExpandedId(expandedId === row.id ? null : row.id)}
+                        >
+                          {expandedId === row.id ? <LuChevronUp aria-hidden="true" /> : <LuChevronDown aria-hidden="true" />}
+                          보기
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-consultations-report-button"
+                          onClick={() => void handleProfitReportOpen(row)}
+                        >
+                          <LuFileText aria-hidden="true" />
+                          수익 리포트 보기
+                        </button>
+                      </div>
                     </td>
                   </tr>
 
@@ -357,6 +455,14 @@ export default function AdminConsultationsPage() {
                             <dt>대출 상태</dt>
                             <dd>{row.loanApprovalStatus || '-'}</dd>
                           </div>
+                          <div>
+                            <dt>데이터 구분</dt>
+                            <dd>{row.isTest ? '테스트 데이터' : '운영 데이터'}</dd>
+                          </div>
+                          <div>
+                            <dt>source</dt>
+                            <dd>{row.source || '-'}</dd>
+                          </div>
                         </dl>
                       </td>
                     </tr>
@@ -375,6 +481,120 @@ export default function AdminConsultationsPage() {
           </table>
         </section>
       </main>
+
+      {profitReportModal && (
+        <ProfitReportModal modalState={profitReportModal} onClose={handleProfitReportClose} />
+      )}
+    </div>
+  );
+}
+
+function ProfitReportModal({
+  modalState,
+  onClose,
+}: {
+  modalState: ProfitReportModalState;
+  onClose: () => void;
+}) {
+  const report = modalState.report?.report ?? null;
+  const markdown = modalState.report?.reportMarkdown ?? '';
+  const suitabilityGrade = getPathText(report, ['fourMetrics', 'subsidyAndSuitability', 'installationSuitabilityGrade']);
+  const suitabilityScore = getPathNumber(report, ['fourMetrics', 'subsidyAndSuitability', 'installationSuitabilityScore']);
+  const suitabilityLabel = getPathText(report, ['fourMetrics', 'subsidyAndSuitability', 'installationSuitabilityLabel']);
+  const annualGenerationKwh = getPathNumber(report, ['fourMetrics', 'expectedGeneration', 'annualGenerationKwh']);
+  const annualSavingKrw = getPathNumber(report, ['fourMetrics', 'payback', 'annualSavingKrw']);
+  const installCostKrw = getPathNumber(report, ['netInvestment', 'estimatedInstallCostKrw']);
+  const subsidyKrw = getPathNumber(report, ['netInvestment', 'subsidyEstimateKrw']);
+  const loanLimitKrw = getPathNumber(report, ['loanSupportScenario', 'estimatedLoanLimitKrw']);
+  const monthlyPaymentKrw = getPathNumber(report, ['loanSupportScenario', 'monthlyPaymentEstimateKrw']);
+  const loanApprovalStatus = getPathText(report, ['loanSupportScenario', 'loanApprovalStatus']);
+  const cashNeededKrw = getPathNumber(report, ['netInvestment', 'cashNeededKrw']);
+  const paybackYears = getPathNumber(report, ['netInvestment', 'paybackYears']);
+  const disclaimers = getPathTextArray(report, ['riskDisclaimers']);
+
+  return (
+    <div className="admin-report-modal-backdrop" role="presentation">
+      <section
+        className="admin-report-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="admin-profit-report-title"
+      >
+        <div className="admin-report-modal-header">
+          <div>
+            <span>AI 수익·보조금·금융 리포트</span>
+            <h2 id="admin-profit-report-title">수익 리포트 상세</h2>
+            <p>{modalState.row.name || '상담 신청'} · {modalState.row.roadAddress || '주소 확인 필요'}</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="수익 리포트 닫기">
+            <LuX aria-hidden="true" />
+          </button>
+        </div>
+
+        {modalState.isLoading && <p className="admin-report-modal-status">수익 리포트를 불러오는 중입니다.</p>}
+
+        {modalState.errorMessage && (
+          <p className="admin-report-modal-error" role="alert">
+            {modalState.errorMessage}
+          </p>
+        )}
+
+        {report && (
+          <>
+            <dl className="admin-report-card-grid">
+              <div>
+                <dt>AI 적합도</dt>
+                <dd>
+                  {suitabilityGrade || '-'}
+                  {suitabilityScore !== null ? ` · ${suitabilityScore}점` : ''}
+                </dd>
+                <p>{suitabilityLabel || '검토 필요'}</p>
+              </div>
+              <div>
+                <dt>예상 발전량</dt>
+                <dd>{formatNumber(annualGenerationKwh, 'kWh')}</dd>
+                <p>연 절감/수익 {formatKrw(annualSavingKrw)} 추정</p>
+              </div>
+              <div>
+                <dt>설치비/보조금</dt>
+                <dd>{formatKrw(installCostKrw)}</dd>
+                <p>보조금 {formatKrw(subsidyKrw)} · 확인 필요</p>
+              </div>
+              <div>
+                <dt>대출 검토 시나리오</dt>
+                <dd>{formatKrw(loanLimitKrw)}</dd>
+                <p>{loanApprovalStatus || '금융기관 심사 필요'} · 월 {formatKrw(monthlyPaymentKrw)} 추정</p>
+              </div>
+              <div>
+                <dt>실투자금/회수기간</dt>
+                <dd>{formatKrw(cashNeededKrw)}</dd>
+                <p>{formatYears(paybackYears)} 추정</p>
+              </div>
+            </dl>
+
+            <section className="admin-report-warning-box">
+              <strong>주의사항</strong>
+              <ul>
+                {(disclaimers.length > 0 ? disclaimers : ['보조금, 대출, 발전량은 예상·추정 값이며 실제 확인이 필요합니다.']).map(
+                  (item) => (
+                    <li key={item}>{item}</li>
+                  ),
+                )}
+              </ul>
+            </section>
+
+            <details className="admin-report-preview">
+              <summary>reportMarkdown 보기</summary>
+              <pre>{markdown || 'Markdown 리포트가 없습니다.'}</pre>
+            </details>
+
+            <details className="admin-report-preview">
+              <summary>개발자 JSON 보기</summary>
+              <pre>{JSON.stringify(report, null, 2)}</pre>
+            </details>
+          </>
+        )}
+      </section>
     </div>
   );
 }

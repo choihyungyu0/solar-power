@@ -104,12 +104,29 @@ $analysisPayload = @'
   "panelAngle": 35,
   "panelType": 1,
   "cellsPerPanel": 2,
-  "mode": "fast"
+  "mode": "fast",
+  "isTest": true,
+  "source": "manual-production-test"
 }
 '@
 
 $health = (Invoke-JsonRequest -Method "GET" -Url "$BackendBaseUrl/api/db-health").Json
 Assert-Condition ($health.ok -eq $true) "DB health endpoint did not return ok:true."
+
+$requiredTables = @(
+  "analysis_results",
+  "consultation_requests",
+  "simulation_training_samples",
+  "profit_reports",
+  "subsidy_programs",
+  "loan_scenarios"
+)
+
+foreach ($tableName in $requiredTables) {
+  $tableProperty = $health.tables.PSObject.Properties[$tableName]
+  Assert-Condition ($null -ne $tableProperty) "DB health response is missing table key: $tableName"
+  Assert-Condition ($tableProperty.Value -eq $true) "DB health table check failed for: $tableName"
+}
 
 $openApi = (Invoke-JsonRequest -Method "GET" -Url "$BackendBaseUrl/openapi.json").Json
 $openApiHasProfitReportEndpoint = $null -ne $openApi.paths.PSObject.Properties["/api/ai-profit-report"]
@@ -121,6 +138,8 @@ Assert-Condition (-not [string]::IsNullOrWhiteSpace($analysis.analysisResultId))
 
 $profitPayload = @{
   analysisResultId = $analysis.analysisResultId
+  isTest = $true
+  source = "manual-production-test"
   userFinanceInput = @{
     availableCashKrw = 5000000
     preferredLoanYears = 5
@@ -148,6 +167,8 @@ $consultationPayload = @{
   profitReportId = $profit.profitReportId
   privacyAgreed = $true
   thirdPartyAgreed = $false
+  isTest = $true
+  source = "manual-production-test"
   agentPayload = @{
     analysisResultId = $analysis.analysisResultId
     profitReportId = $profit.profitReportId
@@ -166,6 +187,7 @@ $summary = [pscustomobject]@{
   dbHealthOk = $health.ok
   supabaseEnabled = $health.supabaseEnabled
   canConnect = $health.canConnect
+  dbHealthTables = $health.tables
   openApiHasProfitReportEndpoint = $openApiHasProfitReportEndpoint
   analysisResultId = $analysis.analysisResultId
   profitReportId = $profit.profitReportId
