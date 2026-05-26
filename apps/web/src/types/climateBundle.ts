@@ -109,6 +109,29 @@ export type ProfitReportFourMetrics = {
   };
 };
 
+export type ProfitReportSubsidyRagMatch = {
+  chunkText?: string | null;
+  programName?: string | null;
+  regionSido?: string | null;
+  regionSigungu?: string | null;
+  subsidyAmountKrw?: number | null;
+  subsidyRate?: number | null;
+  maxSubsidyKrw?: number | null;
+  selfPaymentKrw?: number | null;
+  stackingAllowed?: boolean | null;
+  sourceTitle?: string | null;
+  sourceUrl?: string | null;
+  sourceYear?: number | null;
+  similarity?: number | null;
+};
+
+export type ProfitReportSourceReference = {
+  sourceTitle?: string | null;
+  sourceUrl?: string | null;
+  sourceYear?: number | null;
+  evidenceSummary?: string | null;
+};
+
 export type ProfitReportJson = {
   schemaVersion: string;
   reportType: 'solar_profit_report' | string;
@@ -138,6 +161,15 @@ export type ProfitReportJson = {
     paybackYears: number;
     calculation?: string;
   };
+  subsidyRagContext?: {
+    enabled?: boolean;
+    ragEnabled?: boolean;
+    query?: string;
+    matches?: ProfitReportSubsidyRagMatch[];
+    message?: string;
+    errorType?: string;
+  };
+  sourceReferences?: ProfitReportSourceReference[];
   reportNarrative: {
     headline: string;
     summary: string;

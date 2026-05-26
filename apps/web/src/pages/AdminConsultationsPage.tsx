@@ -80,6 +80,14 @@ function formatYears(value: number | null) {
   return `약 ${value.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}년`;
 }
 
+function formatSimilarity(value: number | null) {
+  if (value === null) {
+    return '-';
+  }
+
+  return value.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -106,6 +114,12 @@ function getPathTextArray(value: unknown, path: string[]) {
   return Array.isArray(candidate)
     ? candidate.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
     : [];
+}
+
+function getPathRecordArray(value: unknown, path: string[]) {
+  const candidate = getPathValue(value, path);
+
+  return Array.isArray(candidate) ? candidate.filter(isRecord) : [];
 }
 
 function includesSearchText(row: AdminConsultationRow, searchText: string) {
@@ -516,6 +530,13 @@ function ProfitReportModal({
 }) {
   const report = modalState.report?.report ?? null;
   const markdown = modalState.report?.reportMarkdown ?? '';
+  const narrativeHeadline = getPathText(report, ['reportNarrative', 'headline']);
+  const narrativeSummary = getPathText(report, ['reportNarrative', 'summary']);
+  const narrativeSalesMessage = getPathText(report, ['reportNarrative', 'salesMessage']);
+  const narrativeSource = getPathText(report, ['reportNarrativeSource']);
+  const subsidyRagEnabled = getPathValue(report, ['subsidyRagContext', 'enabled']) === true;
+  const subsidyRagMatches = getPathRecordArray(report, ['subsidyRagContext', 'matches']);
+  const sourceReferences = getPathRecordArray(report, ['sourceReferences']);
   const suitabilityGrade = getPathText(report, ['fourMetrics', 'subsidyAndSuitability', 'installationSuitabilityGrade']);
   const suitabilityScore = getPathNumber(report, ['fourMetrics', 'subsidyAndSuitability', 'installationSuitabilityScore']);
   const suitabilityLabel = getPathText(report, ['fourMetrics', 'subsidyAndSuitability', 'installationSuitabilityLabel']);
@@ -559,6 +580,15 @@ function ProfitReportModal({
 
         {report && (
           <>
+            <section className="admin-report-narrative-box">
+              <div>
+                <span>{narrativeSource === 'llm-structured-output' ? 'LLM narrative' : 'deterministic narrative'}</span>
+                <strong>{narrativeHeadline || '수익 리포트 문장 요약'}</strong>
+              </div>
+              {narrativeSummary && <p>{narrativeSummary}</p>}
+              {narrativeSalesMessage && <p>{narrativeSalesMessage}</p>}
+            </section>
+
             <dl className="admin-report-card-grid">
               <div>
                 <dt>AI 적합도</dt>
@@ -589,6 +619,50 @@ function ProfitReportModal({
                 <p>{formatYears(paybackYears)} 추정</p>
               </div>
             </dl>
+
+            <section className="admin-report-rag-box">
+              <div>
+                <span>보조금 RAG 근거</span>
+                <strong>
+                  {subsidyRagEnabled && subsidyRagMatches.length > 0
+                    ? getPathText(sourceReferences[0], ['sourceTitle']) || getPathText(subsidyRagMatches[0], ['sourceTitle']) || '검색된 보조금 근거'
+                    : '정책 매트릭스 기준 표시'}
+                </strong>
+              </div>
+              {subsidyRagEnabled && subsidyRagMatches.length > 0 ? (
+                <ul>
+                  {subsidyRagMatches.slice(0, 3).map((match, index) => {
+                    const similarity = getPathNumber(match, ['similarity']);
+
+                    return (
+                      <li key={`${getPathText(match, ['sourceTitle']) || 'source'}-${index}`}>
+                        <strong>{getPathText(match, ['programName']) || '경기 주택태양광 지원사업'}</strong>
+                        <p>
+                          {[getPathText(match, ['regionSido']), getPathText(match, ['regionSigungu'])]
+                            .filter(Boolean)
+                            .join(' ')}
+                          {' · '}
+                          유사도 {formatSimilarity(similarity)}
+                        </p>
+                        <p>
+                          보조금 {formatKrw(getPathNumber(match, ['subsidyAmountKrw']) ?? getPathNumber(match, ['maxSubsidyKrw']))}
+                          {' · '}
+                          자부담 {formatKrw(getPathNumber(match, ['selfPaymentKrw']))}
+                          {' · '}
+                          중복지원 {getPathValue(match, ['stackingAllowed']) === true ? '검토 필요' : '불가'}
+                        </p>
+                        <details>
+                          <summary>근거 chunk 보기</summary>
+                          <pre>{getPathText(match, ['chunkText']) || '근거 텍스트가 없습니다.'}</pre>
+                        </details>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p>보조금 RAG 근거가 없어 정책 매트릭스 기준으로 표시합니다.</p>
+              )}
+            </section>
 
             <section className="admin-report-warning-box">
               <strong>주의사항</strong>

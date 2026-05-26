@@ -22,13 +22,16 @@
 2. 태양광 설치 탭에서 AI 분석을 실행한다.
 3. `analysisResultId`가 생성되고 `dbSaveStatus.analysisResultOk`, `dbSaveStatus.trainingSampleOk`가 true인지 확인한다.
 4. `AI 수익 리포트 보기` 또는 `/simulation/result`의 `수익 리포트 생성하기`를 실행한다.
-5. `AI 태양광 도입 종합 보고서`에서 5개 카드와 주의사항을 확인한다.
-6. `PDF로 저장` 버튼으로 브라우저 인쇄 미리보기를 연다.
-7. `상담 신청하기`로 이동해 상담을 제출한다.
-8. 완료 화면에서 `접수번호`를 확인한다.
-9. `/login`의 `관리자 화면으로 이동` 버튼 또는 직접 URL로 `/admin/consultations`에 접속한다.
-10. Render에 설정한 `SOLARMATE_ADMIN_KEY`를 입력하고 `새로고침`한다.
-11. 상담 row, 상태 변경, `수익 리포트 보기` 모달을 확인한다.
+5. `reportNarrativeSource`가 `llm-structured-output`이면 OpenAI LLM이 문장 생성에 성공한 상태다. 실패하거나 비활성화되면 `deterministic-template` 문장으로 fallback된다.
+6. `AI 태양광 도입 종합 보고서`에서 LLM/템플릿 narrative, 5개 카드, `보조금 RAG 근거`, 주의사항을 확인한다.
+7. `PDF로 저장` 버튼으로 브라우저 인쇄 미리보기를 연다.
+8. 인쇄 미리보기에서 리포트 제목, narrative 문장, 5개 수익 카드, 주의사항, 상담 CTA가 보이는지 확인한다.
+9. `상담 신청하기`로 이동해 상담을 제출한다.
+10. 완료 화면에서 `접수번호`를 확인한다.
+11. `/login`의 `관리자 화면으로 이동` 버튼 또는 직접 URL로 `/admin/consultations`에 접속한다.
+12. Render에 설정한 `SOLARMATE_ADMIN_KEY`를 입력하고 `새로고침`한다.
+13. 상담 row, 상태 변경, `수익 리포트 보기` 모달을 확인한다.
+14. 관리자 수익 리포트 모달에서 narrative 문장, 5개 카드, 주의사항, Markdown/JSON 개발자 보기를 확인한다.
 
 ## 기대 DB Rows
 
@@ -37,10 +40,21 @@
 - `analysis_results`: 건물/주소, 연간 발전량, 적합도, `ai_simulation_result`, `agent_payload`
 - `simulation_training_samples`: 지붕 면적, 음영 비율, 패널 수, 설치 용량, 발전량
 - `profit_reports`: `analysis_result_id`, `subsidy_matrix`, `loan_scenario`, `report_json`, `report_markdown`
+- `subsidy_documents`, `subsidy_chunks`: 보조금 RAG 원천 문서와 pgvector chunk
 - `loan_scenarios`: 대출 검토 시나리오와 월 상환 추정치
 - `consultation_requests`: 이름, 연락처, 주소, `analysis_result_id`, `agent_payload`, 상태
 
 반복 테스트 스크립트가 만든 row는 `is_test=true`, `source='manual-production-test'`로 저장된다. 관리자 화면은 기본적으로 테스트 데이터를 숨기며, `테스트 데이터 보기`를 켜면 표시한다.
+
+`profit_reports.report_json`에는 다음 LLM narrative 상태 필드가 저장된다.
+
+- `reportNarrativeSource`: `llm-structured-output` 또는 `deterministic-template`
+- `llmEnabled`: Render 환경변수 기준 LLM 사용 여부
+- `reportNarrative.headline`, `summary`, `salesMessage`
+- `subsidyRagContext`: 검색 query와 보조금 근거 chunk
+- `sourceReferences`: 리포트에 사용한 보조금 근거 출처
+
+LLM은 narrative 문장만 생성한다. 보조금 설명은 검색된 RAG chunk를 근거로만 작성하며, 설치비, 보조금, 대출 한도, 실투자금, 회수기간은 백엔드 결정론 코드가 계산한 값을 그대로 사용한다.
 
 ## 운영 Smoke Test
 
@@ -68,6 +82,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\test-production-profit-report
 - Supabase 저장 실패: 분석 결과 자체는 가능한 범위에서 반환하고 `dbSaveStatus`에 실패 상태를 남긴다.
 - 상담 저장 실패: 프론트엔드는 sessionStorage에 임시 저장하고 `서버 저장에 실패하여 임시 저장되었습니다. 네트워크 상태를 확인해주세요.`를 보여준다.
 - 수익 리포트 생성 실패: deterministic report 생성 실패 메시지를 표시하고 상담 흐름은 기존 분석 payload로 진행할 수 있다.
+- OpenAI LLM 비활성 또는 호출 실패: `/api/ai-profit-report`는 `ok:true`를 유지하고 `reportNarrativeSource='deterministic-template'` 문장을 사용한다.
 - 관리자 키 오류: `{ ok:false, message:"관리자 권한이 필요합니다." }`만 반환하고 키 값은 노출하지 않는다.
 - 기후 분석 입력이 너무 크면 좌표 수, 지붕 면적, 셀 스캔 수 제한으로 중단하고 안전한 검증 오류 메시지를 반환한다.
 
@@ -82,6 +97,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\test-production-profit-report
 - `apps/web/.env.local`은 `.gitignore`에 포함되어 있고 Git에 추적되지 않아야 한다.
 - `services/climate_backend/.venv/`, `__pycache__/`, `*.pyc`는 추적하지 않는다.
 - `SUPABASE_SERVICE_ROLE_KEY`, `SOLARMATE_ADMIN_KEY`, `OPENAI_API_KEY` 값은 프론트엔드 env 또는 소스에 넣지 않는다.
+- `OPENAI_API_KEY`는 Render FastAPI 백엔드 환경변수에만 둔다. `VITE_OPENAI_API_KEY` 같은 프론트엔드 env는 만들지 않는다.
 - 관리자 키는 `/admin/consultations` 화면에서 직접 입력하고, localStorage/sessionStorage에 저장하지 않는다.
 - 프론트엔드는 Supabase service role key로 직접 요청하지 않는다.
 

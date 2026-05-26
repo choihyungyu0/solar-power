@@ -15,7 +15,9 @@ from .schemas import (
     ConsultationRequest,
     GeometryDebugRequest,
     ProfitReportRequest,
+    SubsidyRagSearchRequest,
 )
+from .subsidy_rag import search_subsidy_chunks
 from .supabase_client import (
     check_supabase_health,
     find_recent_duplicate_consultation_request,
@@ -106,6 +108,48 @@ def health():
 @app.get("/api/db-health")
 def db_health():
     return check_supabase_health()
+
+
+@app.post("/api/subsidy-rag/search")
+def subsidy_rag_search(payload: SubsidyRagSearchRequest):
+    region_sido = payload.regionSido.strip() if payload.regionSido else "경기도"
+    region_sigungu = payload.regionSigungu.strip() if payload.regionSigungu else None
+    query = payload.query.strip() if payload.query else ""
+
+    if not query:
+        query = " ".join(
+            part
+            for part in (
+                region_sido,
+                region_sigungu,
+                payload.buildingUsage,
+                f"{payload.installCapacityKw}kW" if payload.installCapacityKw else None,
+                "경기 주택태양광 지원사업 보조금 중복 지원 여부",
+            )
+            if part
+        )
+
+    result = search_subsidy_chunks(
+        query=query,
+        region_sido=region_sido,
+        region_sigungu=region_sigungu,
+        match_count=5,
+    )
+
+    if result.get("ok") is True:
+        return result
+
+    return JSONResponse(
+        status_code=503,
+        content={
+            "ok": False,
+            "ragEnabled": result.get("ragEnabled") is True,
+            "message": result.get("message") or "보조금 RAG가 비활성화되어 있습니다.",
+            "query": query,
+            "matches": [],
+            "errorType": result.get("errorType"),
+        },
+    )
 
 
 def _is_record(value: Any) -> bool:

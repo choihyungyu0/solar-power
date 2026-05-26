@@ -521,6 +521,85 @@
   line-height: 1.5;
 }
 
+.subsidyRagEvidenceBox {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 16px;
+  background: #eff6ff;
+}
+
+.subsidyRagEvidenceBox > div {
+  display: grid;
+  gap: 4px;
+}
+
+.subsidyRagEvidenceBox > div span {
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.subsidyRagEvidenceBox > div strong {
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 950;
+  line-height: 1.45;
+}
+
+.subsidyRagEvidenceBox p {
+  margin: 0;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.subsidyRagSourceList {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.subsidyRagSourceList li {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.subsidyRagSourceList li > div {
+  display: grid;
+  gap: 3px;
+}
+
+.subsidyRagSourceList li strong {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.subsidyRagSourceList li span,
+.subsidyRagSourceList summary {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.subsidyRagSourceList pre {
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .aiReportMetricTable dd {
   font-size: 15px;
   font-weight: 950;
@@ -2219,6 +2298,7 @@
   .resultAddressSummary,
   .aiAnalysisReport,
   .profitReportSection,
+  .subsidyRagEvidenceBox,
   .resultMetricSection,
   .resultMobileCostCard,
   .printContactCta,
@@ -2331,8 +2411,22 @@
     padding: 10px 12px !important;
   }
 
+  .subsidyRagEvidenceBox {
+    border: 1px solid #bfdbfe !important;
+    background: #eff6ff !important;
+    padding: 10px 12px !important;
+  }
+
+  .subsidyRagSourceList li {
+    border: 1px solid #dbeafe !important;
+    background: #ffffff !important;
+    break-inside: avoid;
+  }
+
   .profitDisclaimerBox strong,
-  .profitDisclaimerBox li {
+  .profitDisclaimerBox li,
+  .subsidyRagEvidenceBox p,
+  .subsidyRagSourceList li span {
     color: #7c2d12 !important;
     font-size: 9pt !important;
   }

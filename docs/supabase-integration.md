@@ -417,15 +417,133 @@ GET /api/db-health
     "simulation_training_samples": true,
     "profit_reports": true,
     "subsidy_programs": true,
-    "loan_scenarios": true
+    "loan_scenarios": true,
+    "subsidy_documents": true,
+    "subsidy_chunks": true
+  },
+  "rpcs": {
+    "match_subsidy_chunks": true
   }
 }
 ```
 
 테이블이 아직 생성되지 않았거나 권한 문제로 읽을 수 없으면 해당 테이블 값만 `false`로 내려오며, endpoint 자체는 실패하지 않는다.
-`canConnect`는 Supabase가 활성화되어 있고 위 6개 테이블을 모두 읽을 수 있을 때 `true`다.
+`canConnect`는 Supabase가 활성화되어 있고 위 기본 테이블과 RAG 테이블을 모두 읽을 수 있을 때 `true`다.
 
 응답에는 Supabase URL이나 service role key를 포함하지 않는다.
+
+## 보조금 RAG pgvector 테이블
+
+SolarMate 보조금 RAG는 정책 row/document chunk를 Supabase pgvector에 저장하고, `/api/ai-profit-report`에서 지역/건물 조건에 맞는 chunk를 검색해 `subsidyRagContext`와 `sourceReferences`로 저장한다.
+아래 SQL은 Supabase SQL Editor에서 실행한다.
+
+```sql
+create extension if not exists vector with schema extensions;
+
+create table if not exists public.subsidy_documents (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  source_type text not null,
+  source_title text not null,
+  source_url text,
+  source_year integer,
+  region_sido text,
+  region_sigungu text,
+  program_name text,
+  document_version text,
+  raw_metadata jsonb,
+  is_active boolean not null default true,
+  is_test boolean not null default false
+);
+
+create table if not exists public.subsidy_chunks (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  document_id uuid references public.subsidy_documents(id) on delete cascade,
+  chunk_index integer not null,
+  chunk_text text not null,
+  chunk_type text,
+  region_sido text,
+  region_sigungu text,
+  program_name text,
+  target_building_type text,
+  subsidy_amount_krw bigint,
+  subsidy_rate numeric,
+  max_subsidy_krw bigint,
+  self_payment_krw bigint,
+  stacking_allowed boolean,
+  eligibility_note text,
+  source_title text,
+  source_url text,
+  source_year integer,
+  embedding extensions.vector(1536),
+  raw_payload jsonb,
+  is_active boolean not null default true,
+  is_test boolean not null default false
+);
+
+alter table public.subsidy_documents enable row level security;
+alter table public.subsidy_chunks enable row level security;
+
+create or replace function public.match_subsidy_chunks (
+  query_embedding extensions.vector(1536),
+  match_count int default 5,
+  filter_region_sido text default null,
+  filter_region_sigungu text default null
+)
+returns table (
+  id uuid,
+  document_id uuid,
+  chunk_text text,
+  program_name text,
+  region_sido text,
+  region_sigungu text,
+  subsidy_amount_krw bigint,
+  subsidy_rate numeric,
+  max_subsidy_krw bigint,
+  self_payment_krw bigint,
+  stacking_allowed boolean,
+  source_title text,
+  source_url text,
+  source_year integer,
+  similarity float
+)
+language sql stable
+as $$
+  select
+    c.id,
+    c.document_id,
+    c.chunk_text,
+    c.program_name,
+    c.region_sido,
+    c.region_sigungu,
+    c.subsidy_amount_krw,
+    c.subsidy_rate,
+    c.max_subsidy_krw,
+    c.self_payment_krw,
+    c.stacking_allowed,
+    c.source_title,
+    c.source_url,
+    c.source_year,
+    1 - (c.embedding <=> query_embedding) as similarity
+  from public.subsidy_chunks c
+  where c.is_active = true
+    and (filter_region_sido is null or c.region_sido = filter_region_sido)
+    and (filter_region_sigungu is null or c.region_sigungu = filter_region_sigungu)
+  order by c.embedding <=> query_embedding
+  limit match_count;
+$$;
+```
+
+검증 SQL은 [check-subsidy-rag-tables.sql](../scripts/check-subsidy-rag-tables.sql)에 있다.
+
+```powershell
+cd services\climate_backend
+python scripts\seed_subsidy_rag_from_excel.py
+```
+
+seed는 `data/policy/태양광_지원사업_정리.xlsx`를 읽어 `subsidy_documents`, `subsidy_chunks`를 생성한다.
+`OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`는 Render 또는 로컬 백엔드 환경변수에만 둔다.
 
 ## Supabase SQL Editor 수동 확인
 

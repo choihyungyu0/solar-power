@@ -10,6 +10,8 @@ SIMULATION_TRAINING_SAMPLES_TABLE = "simulation_training_samples"
 PROFIT_REPORTS_TABLE = "profit_reports"
 SUBSIDY_PROGRAMS_TABLE = "subsidy_programs"
 LOAN_SCENARIOS_TABLE = "loan_scenarios"
+SUBSIDY_DOCUMENTS_TABLE = "subsidy_documents"
+SUBSIDY_CHUNKS_TABLE = "subsidy_chunks"
 OPTIONAL_COMPAT_COLUMNS = {"is_test", "source"}
 
 
@@ -230,6 +232,47 @@ def save_profit_report(row: dict[str, Any]) -> dict[str, Any]:
 
 def save_loan_scenario(row: dict[str, Any]) -> dict[str, Any]:
     return _insert_row(LOAN_SCENARIOS_TABLE, row)
+
+
+def insert_subsidy_document(row: dict[str, Any]) -> dict[str, Any]:
+    return _insert_row(SUBSIDY_DOCUMENTS_TABLE, row)
+
+
+def insert_subsidy_chunk(row: dict[str, Any]) -> dict[str, Any]:
+    return _insert_row(SUBSIDY_CHUNKS_TABLE, row)
+
+
+def match_subsidy_chunks(
+    *,
+    query_embedding: list[float],
+    match_count: int = 5,
+    filter_region_sido: str | None = None,
+    filter_region_sigungu: str | None = None,
+) -> dict[str, Any]:
+    client, disabled_or_failed = _get_enabled_client()
+
+    if disabled_or_failed:
+        return disabled_or_failed
+
+    try:
+        response = client.rpc(
+            "match_subsidy_chunks",
+            {
+                "query_embedding": query_embedding,
+                "match_count": match_count,
+                "filter_region_sido": filter_region_sido,
+                "filter_region_sigungu": filter_region_sigungu,
+            },
+        ).execute()
+        data = response.data if isinstance(response.data, list) else []
+
+        return {
+            "ok": True,
+            "enabled": True,
+            "matches": [row for row in data if isinstance(row, dict)],
+        }
+    except Exception as error:
+        return _safe_failure_result(error)
 
 
 def get_latest_profit_report_by_analysis_result(analysis_result_id: str) -> dict[str, Any]:
@@ -621,6 +664,20 @@ def _check_table_readable(table_name: str) -> bool:
     if disabled_or_failed or client is None:
         return False
 
+
+def _check_rpc_available(rpc_name: str) -> bool:
+    if rpc_name != "match_subsidy_chunks":
+        return False
+
+    result = match_subsidy_chunks(
+        query_embedding=[0.0] * 1536,
+        match_count=1,
+        filter_region_sido=None,
+        filter_region_sigungu=None,
+    )
+
+    return result.get("ok") is True
+
     try:
         client.table(table_name).select("id").limit(1).execute()
         return True
@@ -641,16 +698,23 @@ def check_supabase_health() -> dict[str, Any]:
         PROFIT_REPORTS_TABLE: False,
         SUBSIDY_PROGRAMS_TABLE: False,
         LOAN_SCENARIOS_TABLE: False,
+        SUBSIDY_DOCUMENTS_TABLE: False,
+        SUBSIDY_CHUNKS_TABLE: False,
+    }
+    rpcs = {
+        "match_subsidy_chunks": False,
     }
 
     if enabled:
         tables = {table_name: _check_table_readable(table_name) for table_name in tables}
+        rpcs = {rpc_name: _check_rpc_available(rpc_name) for rpc_name in rpcs}
 
     return {
         "ok": True,
         "supabaseEnabled": enabled,
         "canConnect": enabled and any(tables.values()) and all(tables.values()),
         "tables": tables,
+        "rpcs": rpcs,
     }
 
 

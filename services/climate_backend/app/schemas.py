@@ -77,6 +77,14 @@ class ProfitReportRequest(BaseModel):
     source: Optional[str] = None
 
 
+class SubsidyRagSearchRequest(BaseModel):
+    regionSido: Optional[str] = "경기도"
+    regionSigungu: Optional[str] = None
+    buildingUsage: Optional[str] = None
+    installCapacityKw: Optional[float] = None
+    query: Optional[str] = None
+
+
 class AdminConsultationStatusUpdateRequest(BaseModel):
     status: Literal[
         "received",

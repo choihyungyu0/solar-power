@@ -180,6 +180,16 @@ function formatKrw(value: number) {
   return `${Math.round(value).toLocaleString('ko-KR')}원`;
 }
 
+function formatOptionalKrw(value: number | null | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) ? formatKrw(value) : '확인 필요';
+}
+
+function formatSimilarity(value: number | null | undefined) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : '확인 필요';
+}
+
 function formatPercent(value: number) {
   return `${value.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 }
@@ -368,6 +378,8 @@ function ProfitReportSection({
         </ul>
       </div>
 
+      <SubsidyRagEvidence report={report} />
+
       <details className="agentPayloadPreview">
         <summary>개발자 JSON · profitReport</summary>
         <pre>{JSON.stringify(report, null, 2)}</pre>
@@ -377,6 +389,55 @@ function ProfitReportSection({
         <summary>개발자 Markdown · profitReport</summary>
         <pre>{profitReport.reportMarkdown}</pre>
       </details>
+    </section>
+  );
+}
+
+function SubsidyRagEvidence({ report }: { report: NonNullable<StoredProfitReport['report']> }) {
+  const ragContext = report.subsidyRagContext;
+  const matches = ragContext?.matches ?? [];
+  const references = report.sourceReferences ?? [];
+
+  if (!ragContext?.enabled || matches.length === 0) {
+    return (
+      <section className="subsidyRagEvidenceBox">
+        <div>
+          <span>보조금 RAG 근거</span>
+          <strong>정책 매트릭스 기준 표시</strong>
+        </div>
+        <p>보조금 RAG 근거가 없어 정책 매트릭스 기준으로 표시합니다. 실제 지원 여부는 최신 공고 확인이 필요합니다.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="subsidyRagEvidenceBox">
+      <div>
+        <span>보조금 RAG 근거</span>
+        <strong>{references[0]?.sourceTitle || matches[0]?.sourceTitle || '검색된 보조금 근거'}</strong>
+      </div>
+      <ul className="subsidyRagSourceList">
+        {matches.slice(0, 3).map((match, index) => (
+          <li key={`${match.sourceTitle ?? 'source'}-${index}`}>
+            <div>
+              <strong>{match.programName || '경기 주택태양광 지원사업'}</strong>
+              <span>
+                {[match.regionSido, match.regionSigungu].filter(Boolean).join(' ')}
+                {match.sourceYear ? ` · ${match.sourceYear}` : ''}
+                {` · 유사도 ${formatSimilarity(match.similarity)}`}
+              </span>
+            </div>
+            <p>
+              보조금 {formatOptionalKrw(match.subsidyAmountKrw ?? match.maxSubsidyKrw)} · 자부담{' '}
+              {formatOptionalKrw(match.selfPaymentKrw)} · 중복지원 {match.stackingAllowed ? '검토 필요' : '불가'}
+            </p>
+            <details>
+              <summary>근거 chunk 보기</summary>
+              <pre>{match.chunkText || '근거 텍스트가 없습니다.'}</pre>
+            </details>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

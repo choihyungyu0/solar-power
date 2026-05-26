@@ -334,6 +334,23 @@ def _build_llm_sanitized_input(report_json: dict[str, Any]) -> dict[str, Any]:
     loan = report_json.get("loanSupportScenario") if isinstance(report_json.get("loanSupportScenario"), dict) else {}
     net = report_json.get("netInvestment") if isinstance(report_json.get("netInvestment"), dict) else {}
     disclaimers = report_json.get("riskDisclaimers") if isinstance(report_json.get("riskDisclaimers"), list) else []
+    rag_context = (
+        report_json.get("subsidyRagContext")
+        if isinstance(report_json.get("subsidyRagContext"), dict)
+        else {}
+    )
+    references = report_json.get("sourceReferences") if isinstance(report_json.get("sourceReferences"), list) else []
+    rag_matches = rag_context.get("matches") if isinstance(rag_context.get("matches"), list) else []
+    rag_context = (
+        report_json.get("subsidyRagContext")
+        if isinstance(report_json.get("subsidyRagContext"), dict)
+        else {}
+    )
+    source_references = (
+        report_json.get("sourceReferences")
+        if isinstance(report_json.get("sourceReferences"), list)
+        else []
+    )
 
     return {
         "suitability": {
@@ -378,6 +395,32 @@ def _build_llm_sanitized_input(report_json: dict[str, Any]) -> dict[str, Any]:
             "loanApprovalStatus": loan.get("loanApprovalStatus"),
             "note": loan.get("note"),
         },
+        "subsidyRagContext": {
+            "enabled": rag_context.get("enabled") is True,
+            "query": rag_context.get("query"),
+            "matches": [
+                {
+                    "chunkText": match.get("chunkText"),
+                    "programName": match.get("programName"),
+                    "regionSido": match.get("regionSido"),
+                    "regionSigungu": match.get("regionSigungu"),
+                    "subsidyAmountKrw": match.get("subsidyAmountKrw"),
+                    "maxSubsidyKrw": match.get("maxSubsidyKrw"),
+                    "selfPaymentKrw": match.get("selfPaymentKrw"),
+                    "stackingAllowed": match.get("stackingAllowed"),
+                    "sourceTitle": match.get("sourceTitle"),
+                    "sourceYear": match.get("sourceYear"),
+                    "similarity": match.get("similarity"),
+                }
+                for match in rag_context.get("matches", [])
+                if isinstance(match, dict)
+            ],
+        },
+        "sourceReferences": [
+            reference
+            for reference in source_references
+            if isinstance(reference, dict)
+        ],
         "disclaimers": [str(item) for item in disclaimers if isinstance(item, str)],
         "fixedCta": "우리 아파트 태양광 설치하기",
     }
@@ -505,6 +548,10 @@ def generate_llm_report_narrative(report_json: dict[str, Any]) -> dict[str, Any]
                         "한국어만 사용한다. 제공된 숫자를 재계산하거나 변경하지 말고, "
                         "제공된 formatted text 값을 그대로 인용한다. "
                         "'예상', '추정', '가능성', '검토', '확인 필요' 표현을 사용한다. "
+                        "보조금 설명은 subsidyRagContext의 retrieved chunk와 sourceReferences만 근거로 사용한다. "
+                        "retrieved context가 없으면 보조금 근거는 확인 필요라고 말한다. "
+                        "검색된 근거에 없는 보조금 사업을 만들지 않는다. "
+                        "국가 보조금과 경기도 보조금을 중복 합산하지 않는다. "
                         "보조금, 대출 승인, 절감액, 구조안전성, 장애물 상태를 보장하거나 확정하지 않는다. "
                         "출력은 반드시 요청된 JSON schema만 따른다."
                     ),
@@ -562,6 +609,84 @@ def generate_llm_report_narrative(report_json: dict[str, Any]) -> dict[str, Any]
         }
 
 
+def _build_source_references(subsidy_rag_context: dict[str, Any]) -> list[dict[str, Any]]:
+    references: list[dict[str, Any]] = []
+    seen_keys: set[tuple[str, str, str]] = set()
+    matches = subsidy_rag_context.get("matches") if isinstance(subsidy_rag_context.get("matches"), list) else []
+
+    for match in matches:
+        if not isinstance(match, dict):
+            continue
+
+        source_title = str(match.get("sourceTitle") or "보조금 RAG 근거").strip()
+        source_url = str(match.get("sourceUrl") or "").strip()
+        source_year = str(match.get("sourceYear") or "").strip()
+        key = (source_title, source_url, source_year)
+
+        if key in seen_keys:
+            continue
+
+        seen_keys.add(key)
+        evidence_parts = [
+            str(match.get("programName") or SUBSIDY_PROGRAM_NAME),
+            str(match.get("regionSido") or ""),
+            str(match.get("regionSigungu") or ""),
+        ]
+        evidence_summary = " ".join(part for part in evidence_parts if part).strip()
+
+        subsidy_amount = _money(match.get("subsidyAmountKrw")) if match.get("subsidyAmountKrw") is not None else None
+        self_payment = _money(match.get("selfPaymentKrw")) if match.get("selfPaymentKrw") is not None else None
+
+        if subsidy_amount is not None:
+            evidence_summary = f"{evidence_summary} 보조금 {subsidy_amount:,}원".strip()
+
+        if self_payment is not None:
+            evidence_summary = f"{evidence_summary} 자부담 {self_payment:,}원".strip()
+
+        references.append(
+            {
+                "sourceTitle": source_title,
+                "sourceUrl": source_url or None,
+                "sourceYear": match.get("sourceYear"),
+                "evidenceSummary": evidence_summary or "보조금 근거 확인 필요",
+            }
+        )
+
+    return references
+
+
+def _load_subsidy_rag_context(agent_payload: dict[str, Any], report_input_metrics: dict[str, Any]) -> dict[str, Any]:
+    try:
+        from .subsidy_rag import (
+            build_subsidy_rag_context,
+            build_subsidy_rag_query,
+            search_subsidy_chunks,
+        )
+
+        rag_query = build_subsidy_rag_query(agent_payload, report_input_metrics)
+        matches_result = search_subsidy_chunks(
+            query=rag_query["query"],
+            region_sido=rag_query.get("regionSido"),
+            region_sigungu=rag_query.get("regionSigungu"),
+            match_count=5,
+        )
+        context = build_subsidy_rag_context(matches_result)
+
+        if not context.get("query"):
+            context["query"] = rag_query["query"]
+
+        return context
+    except Exception as error:
+        return {
+            "enabled": False,
+            "ragEnabled": False,
+            "query": "",
+            "matches": [],
+            "message": "보조금 RAG 검색을 건너뛰었습니다.",
+            "errorType": type(error).__name__,
+        }
+
+
 def build_profit_report(
     agent_payload: dict[str, Any],
     ai_simulation_result: dict[str, Any],
@@ -578,6 +703,8 @@ def build_profit_report(
     net_investment = calculate_net_investment(report_input_metrics, subsidy_matrix, loan_scenario)
     narrative = _build_report_narrative(report_input_metrics, subsidy_matrix, loan_scenario, net_investment)
     risk_disclaimers = _build_risk_disclaimers(agent_payload)
+    subsidy_rag_context = _load_subsidy_rag_context(agent_payload, report_input_metrics)
+    source_references = _build_source_references(subsidy_rag_context)
     report = {
         "schemaVersion": SCHEMA_VERSION,
         "reportType": REPORT_TYPE,
@@ -593,6 +720,8 @@ def build_profit_report(
         "subsidyMatrix": subsidy_matrix,
         "loanSupportScenario": loan_scenario,
         "netInvestment": net_investment,
+        "subsidyRagContext": subsidy_rag_context,
+        "sourceReferences": source_references,
         "reportNarrative": narrative,
         "reportNarrativeSource": DETERMINISTIC_REPORT_NARRATIVE_SOURCE,
         "llmEnabled": False,
@@ -674,6 +803,22 @@ def build_profit_report_markdown(report_json: dict[str, Any]) -> str:
         "## 상담 메시지",
         "",
         str(narrative.get("salesMessage") or ""),
+        "",
+        "## 보조금 RAG 근거",
+        "",
+        (
+            "보조금 RAG 근거가 검색되었습니다."
+            if rag_context.get("enabled") is True and rag_matches
+            else "보조금 RAG 근거가 없어 정책 매트릭스 기준으로 표시합니다."
+        ),
+        "",
+        *[
+            f"- {reference.get('sourceTitle') or '보조금 근거'}"
+            + (f" ({reference.get('sourceYear')})" if reference.get("sourceYear") else "")
+            + (f": {reference.get('evidenceSummary')}" if reference.get("evidenceSummary") else "")
+            for reference in references
+            if isinstance(reference, dict)
+        ],
         "",
         "## 확인 필요",
         "",
