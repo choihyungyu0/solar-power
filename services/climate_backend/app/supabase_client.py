@@ -664,6 +664,12 @@ def _check_table_readable(table_name: str) -> bool:
     if disabled_or_failed or client is None:
         return False
 
+    try:
+        client.table(table_name).select("id").limit(1).execute()
+        return True
+    except Exception:
+        return False
+
 
 def _check_rpc_available(rpc_name: str) -> bool:
     if rpc_name != "match_subsidy_chunks":
@@ -677,12 +683,6 @@ def _check_rpc_available(rpc_name: str) -> bool:
     )
 
     return result.get("ok") is True
-
-    try:
-        client.table(table_name).select("id").limit(1).execute()
-        return True
-    except Exception:
-        return False
 
 
 def check_supabase_health() -> dict[str, Any]:

@@ -3,6 +3,7 @@
 -- Frontend keys must be VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY only.
 
 create extension if not exists pgcrypto;
+create extension if not exists vector with schema extensions;
 
 -- 1. User profile linked to Supabase Auth users.
 create table if not exists public.profiles (
@@ -105,7 +106,63 @@ create table if not exists public.subsidy_programs (
   unique (title, region)
 );
 
--- 6. Public demo/review content.
+-- 6. Subsidy RAG source documents and searchable pgvector chunks.
+-- These tables are written/read by the production backend with a service-role key.
+create table if not exists public.subsidy_documents (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  source_type text not null,
+  source_title text not null,
+  source_url text,
+  source_year integer,
+  region_sido text,
+  region_sigungu text,
+  program_name text,
+  document_version text,
+  raw_metadata jsonb,
+  is_active boolean not null default true,
+  is_test boolean not null default false
+);
+
+create table if not exists public.subsidy_chunks (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  document_id uuid references public.subsidy_documents(id) on delete cascade,
+  chunk_index integer not null,
+  chunk_text text not null,
+  chunk_type text,
+  region_sido text,
+  region_sigungu text,
+  program_name text,
+  target_building_type text,
+  subsidy_amount_krw bigint,
+  subsidy_rate numeric,
+  max_subsidy_krw bigint,
+  self_payment_krw bigint,
+  stacking_allowed boolean,
+  eligibility_note text,
+  source_title text,
+  source_url text,
+  source_year integer,
+  embedding extensions.vector(1536),
+  raw_payload jsonb,
+  is_active boolean not null default true,
+  is_test boolean not null default false
+);
+
+create index if not exists subsidy_documents_active_idx
+  on public.subsidy_documents(is_active);
+
+create index if not exists subsidy_chunks_document_id_idx
+  on public.subsidy_chunks(document_id);
+
+create index if not exists subsidy_chunks_region_idx
+  on public.subsidy_chunks(region_sido, region_sigungu);
+
+create index if not exists subsidy_chunks_active_idx
+  on public.subsidy_chunks(is_active);
+
+-- 7. Public demo/review content.
 create table if not exists public.install_reviews (
   id uuid primary key default gen_random_uuid(),
   apartment_name text,
@@ -181,7 +238,59 @@ alter table public.apartment_solar_requests enable row level security;
 alter table public.solar_simulations enable row level security;
 alter table public.notification_preferences enable row level security;
 alter table public.subsidy_programs enable row level security;
+alter table public.subsidy_documents enable row level security;
+alter table public.subsidy_chunks enable row level security;
 alter table public.install_reviews enable row level security;
+
+create or replace function public.match_subsidy_chunks (
+  query_embedding extensions.vector(1536),
+  match_count int default 5,
+  filter_region_sido text default null,
+  filter_region_sigungu text default null
+)
+returns table (
+  id uuid,
+  document_id uuid,
+  chunk_text text,
+  program_name text,
+  region_sido text,
+  region_sigungu text,
+  subsidy_amount_krw bigint,
+  subsidy_rate numeric,
+  max_subsidy_krw bigint,
+  self_payment_krw bigint,
+  stacking_allowed boolean,
+  source_title text,
+  source_url text,
+  source_year integer,
+  similarity float
+)
+language sql stable
+as $$
+  select
+    c.id,
+    c.document_id,
+    c.chunk_text,
+    c.program_name,
+    c.region_sido,
+    c.region_sigungu,
+    c.subsidy_amount_krw,
+    c.subsidy_rate,
+    c.max_subsidy_krw,
+    c.self_payment_krw,
+    c.stacking_allowed,
+    c.source_title,
+    c.source_url,
+    c.source_year,
+    1 - (c.embedding <=> query_embedding) as similarity
+  from public.subsidy_chunks c
+  where c.is_active = true
+    and c.embedding is not null
+    and (filter_region_sido is null or c.region_sido = filter_region_sido)
+    and (filter_region_sigungu is null or c.region_sigungu = filter_region_sigungu)
+  order by c.embedding <=> query_embedding
+  limit match_count;
+$$;
 
 drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own"
