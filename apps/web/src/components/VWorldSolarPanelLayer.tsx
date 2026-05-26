@@ -1,10 +1,14 @@
 import { useEffect, useRef } from 'react';
 import { getPolygonCentroid, type Coordinate, type PolygonCoordinates } from '../lib/roofGeometry';
+import { getViewerDebugId } from '../lib/vworldCesiumViewer';
+
+export type VWorldSolarPanelSource = 'self' | 'climate-live' | 'static-poc';
 
 export type VWorldSolarPanelLayerStatus = {
   state: 'idle' | 'rendered' | 'fallback' | 'error';
   message: string;
   panelPolygonCount: number;
+  panelEntityCount: number;
   firstPanelCoordinates: PolygonCoordinates | null;
   entityCountBefore: number | null;
   entityCountAfter: number | null;
@@ -16,8 +20,13 @@ export type VWorldSolarPanelLayerStatus = {
   depthTestAgainstTerrain: boolean | null;
   viewerCanvasSize: { width: number; height: number } | null;
   viewerEntityCount: number | null;
+  viewerDebugId: string | null;
   debugEntityAdded: boolean;
+  debugLiftApplied: boolean;
   heightMessage?: string;
+  selectedBuildingId?: string | null;
+  selectedAnalysisSessionId?: string | null;
+  panelSource?: VWorldSolarPanelSource;
 };
 
 export type VWorldSolarPanelBuildingFeature = {
@@ -29,6 +38,8 @@ type VWorldSolarPanelLayerProps = {
   map: VWorldMapInstance | null;
   selectedBuildingFeature: VWorldSolarPanelBuildingFeature | null;
   selectedBuildingId: string | null;
+  selectedAnalysisSessionId: string | null;
+  panelSource: VWorldSolarPanelSource;
   selectedBuildingCentroid?: Coordinate | null;
   panelPolygons: PolygonCoordinates[];
   roofHeightM?: number;
@@ -79,11 +90,58 @@ const DEFAULT_ROOF_HEIGHT_M = 20;
 const PANEL_ROOF_CLEARANCE_M = 2;
 const DEBUG_PANEL_HEIGHT_OFFSET_M = 80;
 const DEBUG_ENTITY_HEIGHT_OFFSET_M = 20;
+const DEBUG_PANEL_LIFT_M = 20;
 const PANEL_DEBUG_NOTE = '지형 높이 미확인 시 디버그 높이로 패널을 표시합니다.';
 const SHOW_PANEL_DEBUG_ENTITY = import.meta.env.VITE_SHOW_PANEL_DEBUG_ENTITY === 'true';
+const LIFT_SOLAR_PANELS_FOR_DEBUG = import.meta.env.VITE_LIFT_SOLAR_PANELS_DEBUG === 'true';
 const CONSTRUCTOR_ERROR_MESSAGE =
   '태양광 패널을 지도 좌표 객체로 표시하려면 VWorld 또는 Cesium polygon 객체 연결이 필요합니다.';
 const DEFAULT_HEIGHT_MESSAGE = '건물 높이 정보가 없어 기본 높이로 패널을 표시합니다.';
+const PANEL_ENTITY_PREFIXES = [
+  'solarmate-self-panel-',
+  'solarmate-panel-',
+  'solarmate-panel-debug-',
+];
+
+function getPanelEntityPrefix(panelSource: VWorldSolarPanelSource) {
+  if (panelSource === 'climate-live') {
+    return 'solarmate-backend-panel';
+  }
+
+  if (panelSource === 'static-poc') {
+    return 'solarmate-poc-panel';
+  }
+
+  return 'solarmate-self-panel';
+}
+
+function sanitizeEntityIdPart(value: string | null | undefined, fallback: string) {
+  const raw = value?.trim() || fallback;
+
+  return raw.replace(/[^A-Za-z0-9_-]/g, '_');
+}
+
+function createPanelEntityId({
+  panelSource,
+  selectedBuildingId,
+  selectedAnalysisSessionId,
+  index,
+}: {
+  panelSource: VWorldSolarPanelSource;
+  selectedBuildingId: string;
+  selectedAnalysisSessionId: string | null;
+  index: number | 'debug';
+}) {
+  const prefix = getPanelEntityPrefix(panelSource);
+  const safeBuildingId = sanitizeEntityIdPart(selectedBuildingId, 'selected');
+  const safeSessionId = sanitizeEntityIdPart(selectedAnalysisSessionId, 'self');
+
+  if (panelSource === 'climate-live') {
+    return `${prefix}-${safeBuildingId}-${safeSessionId}-${index}`;
+  }
+
+  return `${prefix}-${safeBuildingId}-${index}`;
+}
 
 function createEmptyStatus(
   state: VWorldSolarPanelLayerStatus['state'],
@@ -97,20 +155,28 @@ function createEmptyStatus(
       VWorldSolarPanelLayerStatus,
       | 'entityCountBefore'
       | 'entityCountAfter'
+      | 'panelEntityCount'
       | 'terrainHeightM'
       | 'finalPanelHeightM'
       | 'renderMode'
       | 'depthTestAgainstTerrain'
       | 'viewerCanvasSize'
       | 'viewerEntityCount'
+      | 'viewerDebugId'
       | 'debugEntityAdded'
+      | 'debugLiftApplied'
     >
+  > = {},
+  identity: Pick<
+    VWorldSolarPanelLayerStatus,
+    'selectedBuildingId' | 'selectedAnalysisSessionId' | 'panelSource'
   > = {},
 ): VWorldSolarPanelLayerStatus {
   return {
     state,
     message,
     panelPolygonCount: panelPolygons.length,
+    panelEntityCount: 0,
     firstPanelCoordinates: panelPolygons[0] ?? null,
     entityCountBefore: null,
     entityCountAfter: null,
@@ -122,8 +188,11 @@ function createEmptyStatus(
     depthTestAgainstTerrain: null,
     viewerCanvasSize: null,
     viewerEntityCount: null,
+    viewerDebugId: null,
     debugEntityAdded: false,
+    debugLiftApplied: false,
     heightMessage,
+    ...identity,
     ...diagnostics,
   };
 }
@@ -244,13 +313,21 @@ function getCesiumSdk() {
 function getTerrainHeightM(viewer: CesiumViewerLike | null, coordinate: Coordinate | null) {
   const cesium = getCesiumSdk();
 
-  if (!viewer?.scene?.globe?.getHeight || !coordinate || !cesium?.Cartographic?.fromDegrees) {
+  let getHeight: ((cartographic: unknown) => number | undefined) | undefined;
+
+  try {
+    getHeight = viewer?.scene?.globe?.getHeight;
+  } catch {
+    getHeight = undefined;
+  }
+
+  if (!getHeight || !coordinate || !cesium?.Cartographic?.fromDegrees) {
     return null;
   }
 
   try {
     const cartographic = cesium.Cartographic.fromDegrees(coordinate[0], coordinate[1]);
-    const terrainHeightM = viewer.scene.globe.getHeight(cartographic);
+    const terrainHeightM = getHeight.call(viewer?.scene?.globe, cartographic);
 
     return typeof terrainHeightM === 'number' && Number.isFinite(terrainHeightM) ? terrainHeightM : null;
   } catch {
@@ -274,15 +351,20 @@ function getPanelHeightDiagnostics({
     typeof terrainHeightM === 'number'
       ? terrainHeightM + roofHeightM + PANEL_ROOF_CLEARANCE_M
       : roofHeightM + DEBUG_PANEL_HEIGHT_OFFSET_M;
+  const debugLiftM = LIFT_SOLAR_PANELS_FOR_DEBUG ? DEBUG_PANEL_LIFT_M : 0;
   const resolvedHeightMessage =
-    typeof terrainHeightM === 'number'
-      ? heightMessage
-      : [heightMessage, PANEL_DEBUG_NOTE].filter(Boolean).join(' ');
+    [
+      typeof terrainHeightM === 'number' ? heightMessage : [heightMessage, PANEL_DEBUG_NOTE].filter(Boolean).join(' '),
+      LIFT_SOLAR_PANELS_FOR_DEBUG ? `패널 디버그 리프트 +${DEBUG_PANEL_LIFT_M}m 적용 중입니다.` : undefined,
+    ]
+      .filter(Boolean)
+      .join(' ');
 
   return {
     terrainHeightM,
-    finalPanelHeightM,
+    finalPanelHeightM: finalPanelHeightM + debugLiftM,
     heightMessage: resolvedHeightMessage || undefined,
+    debugLiftApplied: LIFT_SOLAR_PANELS_FOR_DEBUG,
   };
 }
 
@@ -291,9 +373,13 @@ function hasCesiumEntityCollection(value: unknown): value is CesiumViewerLike {
     return false;
   }
 
-  const record = value as Record<string, unknown>;
+  try {
+    const record = value as Record<string, unknown>;
 
-  return Boolean((record.entities as CesiumViewerLike['entities'])?.add);
+    return Boolean((record.entities as CesiumViewerLike['entities'])?.add);
+  } catch {
+    return false;
+  }
 }
 
 function pushUniqueViewerCandidate(candidates: CesiumViewerLike[], value: unknown) {
@@ -302,6 +388,14 @@ function pushUniqueViewerCandidate(candidates: CesiumViewerLike[], value: unknow
   }
 
   candidates.push(value);
+}
+
+function readObjectValue(record: Record<string, unknown>, key: string) {
+  try {
+    return record[key];
+  } catch {
+    return undefined;
+  }
 }
 
 function getCesiumViewerCandidates(value: unknown): CesiumViewerLike[] {
@@ -316,13 +410,13 @@ function getCesiumViewerCandidates(value: unknown): CesiumViewerLike[] {
   pushUniqueViewerCandidate(candidates, value);
 
   for (const key of ['viewer', '_viewer', 'cesiumViewer', '_cesiumViewer', 'sceneViewer', 'mapViewer']) {
-    const candidate = record[key];
+    const candidate = readObjectValue(record, key);
 
     pushUniqueViewerCandidate(candidates, candidate);
   }
 
   for (const key of ['getViewer', 'getCesiumViewer', 'getCesium', 'getMap']) {
-    const method = record[key];
+    const method = readObjectValue(record, key);
 
     if (typeof method !== 'function') {
       continue;
@@ -341,7 +435,11 @@ function getCesiumViewerCandidates(value: unknown): CesiumViewerLike[] {
 }
 
 function getViewerCanvas(viewer: CesiumViewerLike): CanvasLike | null {
-  return viewer.scene?.canvas ?? viewer.canvas ?? null;
+  try {
+    return viewer.scene?.canvas ?? viewer.canvas ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function getViewerCanvasSize(viewer: CesiumViewerLike): VWorldSolarPanelLayerStatus['viewerCanvasSize'] {
@@ -423,7 +521,7 @@ function getCesiumEntityCount(viewer: CesiumViewerLike) {
 }
 
 function isSolarPanelEntityId(id: unknown) {
-  return typeof id === 'string' && (id.startsWith('solarmate-panel-') || id.startsWith('solarmate-panel-debug-'));
+  return typeof id === 'string' && PANEL_ENTITY_PREFIXES.some((prefix) => id.startsWith(prefix));
 }
 
 function removeSolarPanelEntities(viewer: CesiumViewerLike) {
@@ -476,12 +574,16 @@ function createDebugPolygonAtCentroid(centroid: Coordinate, sizeM = 24): Polygon
 function addPanelEntitiesWithCesium({
   viewer,
   selectedBuildingId,
+  selectedAnalysisSessionId,
+  panelSource,
   selectedBuildingCentroid,
   panelPolygons,
   finalPanelHeightM,
 }: {
   viewer: CesiumViewerLike;
   selectedBuildingId: string;
+  selectedAnalysisSessionId: string | null;
+  panelSource: VWorldSolarPanelSource;
   selectedBuildingCentroid: Coordinate | null;
   panelPolygons: PolygonCoordinates[];
   finalPanelHeightM: number;
@@ -508,21 +610,31 @@ function addPanelEntitiesWithCesium({
   const addEntity = entities.add.bind(entities);
   const addedObjects: AddedMapObject[] = [];
   const fillMaterial =
-    cesium.Color?.BLUE?.withAlpha?.(0.85) ??
-    cesium.Color?.fromCssColorString?.('#0000ff')?.withAlpha?.(0.85) ??
-    cesium.Color?.fromCssColorString?.('#0000ff');
-  const outlineMaterial = cesium.Color?.CYAN ?? cesium.Color?.fromCssColorString?.('#00ffff');
+    cesium.Color?.fromCssColorString?.('#06145f')?.withAlpha?.(0.94) ??
+    cesium.Color?.BLUE?.withAlpha?.(0.94) ??
+    cesium.Color?.fromCssColorString?.('#06145f');
+  const outlineMaterial =
+    cesium.Color?.fromCssColorString?.('#22d3ee')?.withAlpha?.(1) ??
+    cesium.Color?.CYAN ??
+    cesium.Color?.fromCssColorString?.('#22d3ee');
   const heightReferenceNone = cesium.HeightReference?.NONE;
 
   let panelEntityCount = 0;
 
   panelPolygons.forEach((panelPolygon, index) => {
-    const id = `solarmate-panel-${selectedBuildingId}-${index}`;
+    const id = createPanelEntityId({
+      panelSource,
+      selectedBuildingId,
+      selectedAnalysisSessionId,
+      index,
+    });
+    const outlineId = `${id}-outline`;
     const flatDegreesWithHeight = createLonLatHeightArray(panelPolygon, finalPanelHeightM);
     const polygonPositions = cesium.Cartesian3.fromDegreesArrayHeights(flatDegreesWithHeight);
     const hierarchy = cesium.PolygonHierarchy ? new cesium.PolygonHierarchy(polygonPositions) : polygonPositions;
 
     entities.removeById?.(id);
+    entities.removeById?.(outlineId);
 
     const panelEntity = addEntity({
       id,
@@ -535,17 +647,39 @@ function addPanelEntitiesWithCesium({
         ...(heightReferenceNone !== undefined ? { heightReference: heightReferenceNone } : {}),
       },
     });
+    const outlineEntity = addEntity({
+      id: outlineId,
+      polyline: {
+        positions: polygonPositions,
+        width: 2.2,
+        material:
+          cesium.Color?.fromCssColorString?.('#f8fdff')?.withAlpha?.(1) ??
+          cesium.Color?.WHITE ??
+          outlineMaterial,
+        clampToGround: false,
+        depthFailMaterial: outlineMaterial,
+      },
+    });
 
     if (panelEntity) {
       panelEntityCount += 1;
       addedObjects.push({ id, object: panelEntity, renderMethod: 'Cesium entities' });
+    }
+
+    if (outlineEntity) {
+      addedObjects.push({ id: outlineId, object: outlineEntity, renderMethod: 'Cesium entities' });
     }
   });
 
   let debugEntityAdded = false;
 
   if (SHOW_PANEL_DEBUG_ENTITY && selectedBuildingCentroid) {
-    const debugId = `solarmate-panel-debug-${selectedBuildingId}`;
+    const debugId = createPanelEntityId({
+      panelSource,
+      selectedBuildingId,
+      selectedAnalysisSessionId,
+      index: 'debug',
+    });
     const debugPolygon = createDebugPolygonAtCentroid(selectedBuildingCentroid);
     const debugPositions = cesium.Cartesian3.fromDegreesArrayHeights(
       createLonLatHeightArray(debugPolygon, finalPanelHeightM + DEBUG_ENTITY_HEIGHT_OFFSET_M),
@@ -591,6 +725,7 @@ function addPanelEntitiesWithCesium({
     renderMode: 'Cesium entities / fromDegreesArrayHeights / perPositionHeight',
     viewerCanvasSize,
     viewerEntityCount: entityCountAfter,
+    viewerDebugId: getViewerDebugId(viewer),
     cleanup: () => {
       addedObjects.forEach((addedObject) => {
         try {
@@ -642,10 +777,10 @@ function createVWorldPanelStyle() {
   }
 
   const style = new vw.style.Style();
-  const fill = new vw.style.Fill('rgba(30, 58, 138, 0.78)');
-  const stroke = new vw.style.Stroke('#67e8f9');
+  const fill = new vw.style.Fill('rgba(6, 20, 95, 0.94)');
+  const stroke = new vw.style.Stroke('#f8fdff');
 
-  stroke.setWidth?.(2);
+  stroke.setWidth?.(2.2);
   fill.setStroke?.(stroke);
   style.fill = fill;
   style.stroke = stroke;
@@ -718,17 +853,26 @@ function removeVWorldObject(map: VWorldMapInstance, addedObject: AddedMapObject)
 function addPanelFeaturesWithVWorld({
   map,
   selectedBuildingId,
+  selectedAnalysisSessionId,
+  panelSource,
   panelPolygons,
   heightM,
 }: {
   map: VWorldMapInstance;
   selectedBuildingId: string;
+  selectedAnalysisSessionId: string | null;
+  panelSource: VWorldSolarPanelSource;
   panelPolygons: PolygonCoordinates[];
   heightM: number;
 }) {
   const style = createVWorldPanelStyle();
   const addedObjects = panelPolygons.flatMap((panelPolygon, index) => {
-    const id = `solarmate-panel-${selectedBuildingId}-${index}`;
+    const id = createPanelEntityId({
+      panelSource,
+      selectedBuildingId,
+      selectedAnalysisSessionId,
+      index,
+    });
 
     try {
       map.removeObjectById?.(id);
@@ -754,10 +898,16 @@ function addPanelFeaturesWithVWorld({
     renderMode: 'VWorld Feature layer / CoordZ absolute height',
     viewerCanvasSize: null,
     viewerEntityCount: null,
+    viewerDebugId: null,
     cleanup: () => {
       addedObjects.forEach((addedObject) => removeVWorldObject(map, addedObject));
       panelPolygons.forEach((_, index) => {
-        const id = `solarmate-panel-${selectedBuildingId}-${index}`;
+        const id = createPanelEntityId({
+          panelSource,
+          selectedBuildingId,
+          selectedAnalysisSessionId,
+          index,
+        });
 
         try {
           map.removeObjectById?.(id);
@@ -775,6 +925,8 @@ function VWorldSolarPanelLayer({
   map,
   selectedBuildingFeature,
   selectedBuildingId,
+  selectedAnalysisSessionId,
+  panelSource,
   selectedBuildingCentroid,
   panelPolygons,
   roofHeightM,
@@ -786,9 +938,19 @@ function VWorldSolarPanelLayer({
   useEffect(() => {
     cleanupRef.current?.();
     cleanupRef.current = null;
+    const cleanupViewer = map ? findCesiumViewer(map) : null;
+
+    if (cleanupViewer) {
+      removeSolarPanelEntities(cleanupViewer);
+    }
 
     const heightEstimate = getResolvedRoofHeightM(selectedBuildingFeature, roofHeightM);
     const stableBuildingId = getSafeSelectedBuildingId(selectedBuildingId, selectedBuildingFeature);
+    const layerIdentity = {
+      selectedBuildingId: stableBuildingId,
+      selectedAnalysisSessionId,
+      panelSource,
+    };
     const heightCoordinate = getPanelHeightCoordinate(panelPolygons, selectedBuildingCentroid);
     const fallbackHeightDiagnostics = getPanelHeightDiagnostics({
       viewer: null,
@@ -809,7 +971,9 @@ function VWorldSolarPanelLayer({
           {
             terrainHeightM: fallbackHeightDiagnostics.terrainHeightM,
             finalPanelHeightM: fallbackHeightDiagnostics.finalPanelHeightM,
+            debugLiftApplied: fallbackHeightDiagnostics.debugLiftApplied,
           },
+          layerIdentity,
         ),
       );
       return undefined;
@@ -827,7 +991,9 @@ function VWorldSolarPanelLayer({
           {
             terrainHeightM: fallbackHeightDiagnostics.terrainHeightM,
             finalPanelHeightM: fallbackHeightDiagnostics.finalPanelHeightM,
+            debugLiftApplied: fallbackHeightDiagnostics.debugLiftApplied,
           },
+          layerIdentity,
         ),
       );
       return undefined;
@@ -845,7 +1011,9 @@ function VWorldSolarPanelLayer({
           {
             terrainHeightM: fallbackHeightDiagnostics.terrainHeightM,
             finalPanelHeightM: fallbackHeightDiagnostics.finalPanelHeightM,
+            debugLiftApplied: fallbackHeightDiagnostics.debugLiftApplied,
           },
+          layerIdentity,
         ),
       );
       return undefined;
@@ -863,6 +1031,8 @@ function VWorldSolarPanelLayer({
         ? addPanelEntitiesWithCesium({
             viewer: cesiumViewer,
             selectedBuildingId: stableBuildingId,
+            selectedAnalysisSessionId,
+            panelSource,
             selectedBuildingCentroid: selectedBuildingCentroid ?? heightCoordinate,
             panelPolygons,
             finalPanelHeightM: heightDiagnostics.finalPanelHeightM,
@@ -877,6 +1047,8 @@ function VWorldSolarPanelLayer({
           : addPanelFeaturesWithVWorld({
               map,
               selectedBuildingId: stableBuildingId,
+              selectedAnalysisSessionId,
+              panelSource,
               panelPolygons,
               heightM: heightDiagnostics.finalPanelHeightM,
             });
@@ -901,8 +1073,11 @@ function VWorldSolarPanelLayer({
               depthTestAgainstTerrain: cesiumResult?.depthTestAgainstTerrain ?? null,
               viewerCanvasSize: cesiumResult?.viewerCanvasSize ?? getViewerCanvasSize(cesiumViewer ?? {}),
               viewerEntityCount: cesiumResult?.viewerEntityCount ?? null,
+              viewerDebugId: cesiumResult?.viewerDebugId ?? null,
               debugEntityAdded: cesiumResult?.debugEntityAdded ?? false,
+              debugLiftApplied: heightDiagnostics.debugLiftApplied,
             },
+            layerIdentity,
           ),
         );
         return undefined;
@@ -916,6 +1091,7 @@ function VWorldSolarPanelLayer({
           heightEstimate.usedDefault ? ` ${DEFAULT_HEIGHT_MESSAGE}` : ''
         }`,
         panelPolygonCount: panelPolygons.length,
+        panelEntityCount: renderResult.addedCount,
         firstPanelCoordinates: panelPolygons[0] ?? null,
         entityCountBefore: renderResult.entityCountBefore,
         entityCountAfter: renderResult.entityCountAfter,
@@ -927,8 +1103,11 @@ function VWorldSolarPanelLayer({
         depthTestAgainstTerrain: renderResult.depthTestAgainstTerrain,
         viewerCanvasSize: renderResult.viewerCanvasSize,
         viewerEntityCount: renderResult.viewerEntityCount,
+        viewerDebugId: renderResult.viewerDebugId,
         debugEntityAdded: renderResult.debugEntityAdded,
+        debugLiftApplied: heightDiagnostics.debugLiftApplied,
         heightMessage: heightDiagnostics.heightMessage,
+        ...layerIdentity,
       });
 
       return () => {
@@ -949,7 +1128,9 @@ function VWorldSolarPanelLayer({
           {
             terrainHeightM: fallbackHeightDiagnostics.terrainHeightM,
             finalPanelHeightM: fallbackHeightDiagnostics.finalPanelHeightM,
+            debugLiftApplied: fallbackHeightDiagnostics.debugLiftApplied,
           },
+          layerIdentity,
         ),
       );
       return undefined;
@@ -958,7 +1139,9 @@ function VWorldSolarPanelLayer({
     map,
     onStatusChange,
     panelPolygons,
+    panelSource,
     roofHeightM,
+    selectedAnalysisSessionId,
     selectedBuildingCentroid,
     selectedBuildingFeature,
     selectedBuildingId,

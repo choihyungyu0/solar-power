@@ -3,11 +3,14 @@ import {
   createFallbackPvAnalysisResult,
   createSafePvAnalysisInputSummary,
   normalizePvAnalysisResponse,
-} from '../src/lib/normalizePvAnalysis';
-import type { PvAnalysisInput, PvAnalysisProxyResponse } from '../src/types/pvAnalysis';
+  type PvAnalysisInput,
+  type PvAnalysisProxyResponse,
+} from './_shared/normalizePvAnalysis';
 
 const PV_ANALYSIS_API_URL = 'https://climate.gg.go.kr/spsvc/pv/analysis';
 const PV_ANALYSIS_TIMEOUT_MS = 8000;
+
+export const maxDuration = 60;
 
 class ValidationError extends Error {
   constructor(message: string) {
@@ -182,4 +185,3 @@ export default async function handler(request: Request) {
     clearTimeout(timeoutId);
   }
 }
-

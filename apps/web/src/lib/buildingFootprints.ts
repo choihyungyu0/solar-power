@@ -24,6 +24,8 @@ export type BuildingFootprintLookupStatus =
   | 'not_found'
   | 'error';
 
+export type BuildingFootprintSelectionMode = 'polygon' | 'nearest';
+
 export type BuildingAdmdongIndexEntry = {
   admdongName: string;
   filename: string;
@@ -49,6 +51,11 @@ export type BuildingFootprintDiagnostics = {
   searchedFeatureCount: number;
   matchedBuildingId: string | null;
   matchedAddress: string | null;
+  selectionMode: BuildingFootprintSelectionMode | null;
+  nearestDistanceM: number | null;
+  nearestBuildingId: string | null;
+  nearestBuildingAddress: string | null;
+  selectionToleranceM: number | null;
   selectedGeometryType: 'Polygon' | 'MultiPolygon' | null;
   indexUrl: string;
   metaUrl: string;
@@ -71,7 +78,13 @@ export type BuildingFootprintMatch = {
     address: string;
     name: string;
     geometryType: 'Polygon' | 'MultiPolygon';
+    selectionMode?: BuildingFootprintSelectionMode;
+    distanceMeters?: number | null;
   };
+};
+
+export type BuildingFootprintSelectionOptions = {
+  cameraHeightM?: number | null;
 };
 
 export type BuildingFootprintSelectionResult =
@@ -87,6 +100,22 @@ export type BuildingFootprintSelectionResult =
       match: null;
       diagnostics: BuildingFootprintDiagnostics;
       candidateFeatures: BuildingFootprintFeature[];
+      message: string;
+    };
+
+export type BuildingFootprintTextSearchResult =
+  | {
+      status: 'found';
+      match: BuildingFootprintMatch;
+      candidateFeatures: BuildingFootprintFeature[];
+      diagnostics: BuildingFootprintDiagnostics;
+      message: string;
+    }
+  | {
+      status: 'not_found' | 'error';
+      match: null;
+      candidateFeatures: BuildingFootprintFeature[];
+      diagnostics: BuildingFootprintDiagnostics;
       message: string;
     };
 
@@ -107,7 +136,28 @@ const BUILDING_POLYGON_UNCONFIGURED_MESSAGE = '화성시 건물 polygon 데이�
 const ADMDONG_SOURCE_LABEL = 'VWorld GIS건물통합정보 AL_D010, 화성시 필터, 행정동 분할';
 const PROJECTED_COORDINATE_MIN = 100_000;
 const PROJECTED_COORDINATE_MAX = 1_000_000;
-const NEAREST_FOOTPRINT_SELECTION_DISTANCE_M = 55;
+const LOCAL_BUILDING_EDGE_SELECTION_TOLERANCE_M = 55;
+const PRODUCTION_BUILDING_EDGE_SELECTION_TOLERANCE_M = 80;
+const HIGH_CAMERA_BUILDING_EDGE_SELECTION_TOLERANCE_M = 120;
+const DYNAMIC_TOLERANCE_MIN_CAMERA_HEIGHT_M = 800;
+const DYNAMIC_TOLERANCE_MAX_CAMERA_HEIGHT_M = 3000;
+const ADMDONG_BBOX_CLICK_TOLERANCE_M = 180;
+const NEAREST_BBOX_CANDIDATE_LIMIT = 4;
+const NEAREST_BBOX_MAX_DISTANCE_M = 3000;
+const TEXT_SEARCH_FILE_LIMIT = 12;
+const TEXT_SEARCH_STOPWORDS = new Set([
+  '경기도',
+  '화성시',
+  '동탄구',
+  '만세구',
+  '효행구',
+  '아파트',
+  '공동주택',
+  '근처',
+  '인근',
+  '주변',
+  '주소',
+]);
 
 type TurfPolygonInput = Parameters<typeof booleanPointInPolygon>[1];
 
@@ -258,7 +308,11 @@ function readIndexEntries(value: unknown): BuildingAdmdongIndexEntry[] {
   });
 }
 
-function createMatch(feature: BuildingFootprintFeature): BuildingFootprintMatch {
+function createMatch(
+  feature: BuildingFootprintFeature,
+  selectionMode: BuildingFootprintSelectionMode = 'polygon',
+  distanceMeters: number | null = null,
+): BuildingFootprintMatch {
   const properties = feature.properties;
 
   return {
@@ -276,8 +330,117 @@ function createMatch(feature: BuildingFootprintFeature): BuildingFootprintMatch 
         '건물명 정보 없음',
       ),
       geometryType: feature.geometry.type,
+      selectionMode,
+      distanceMeters,
     },
   };
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .toLocaleLowerCase('ko-KR')
+    .replace(/[^\p{Letter}\p{Number}]+/gu, '')
+    .trim();
+}
+
+function getSearchTokens(value: string) {
+  return value
+    .toLocaleLowerCase('ko-KR')
+    .split(/[^\p{Letter}\p{Number}]+/u)
+    .map((token) => normalizeSearchText(token))
+    .filter((token) => token.length >= 2 && !TEXT_SEARCH_STOPWORDS.has(token));
+}
+
+function getFeatureText(feature: BuildingFootprintFeature) {
+  const match = createMatch(feature);
+  const properties = feature.properties ?? {};
+  const propertyValues = [
+    properties.address,
+    properties.admdong_name,
+    properties.jibun,
+    properties.name,
+    properties.building_name,
+    properties.bldg_name,
+    properties.apartment_name,
+    properties.dong_name,
+    properties.usage_name,
+    properties.bld_id,
+    properties.pnu,
+  ]
+    .filter((value) => typeof value === 'string' || typeof value === 'number')
+    .join(' ');
+
+  return normalizeSearchText(
+    `${match.metadata.address} ${match.metadata.name} ${match.metadata.buildingId} ${propertyValues}`,
+  );
+}
+
+function scoreFeatureTextMatch(feature: BuildingFootprintFeature, normalizedQuery: string, tokens: string[]) {
+  const featureText = getFeatureText(feature);
+
+  if (normalizedQuery && featureText.includes(normalizedQuery)) {
+    return 1000 + normalizedQuery.length;
+  }
+
+  if (tokens.length === 0) {
+    return 0;
+  }
+
+  const matchedTokenCount = tokens.filter((token) => featureText.includes(token)).length;
+
+  if (matchedTokenCount === tokens.length) {
+    return 500 + matchedTokenCount * 20;
+  }
+
+  if (tokens.length >= 2 && matchedTokenCount >= tokens.length - 1) {
+    return 200 + matchedTokenCount * 10;
+  }
+
+  return matchedTokenCount >= 1 && tokens.some((token) => token.length >= 4 && featureText.includes(token))
+    ? 100 + matchedTokenCount * 10
+    : 0;
+}
+
+function findBestTextMatch(features: BuildingFootprintFeature[], query: string) {
+  const normalizedQuery = normalizeSearchText(query);
+  const tokens = getSearchTokens(query);
+  let bestFeature: BuildingFootprintFeature | null = null;
+  let bestScore = 0;
+
+  for (const feature of features) {
+    const score = scoreFeatureTextMatch(feature, normalizedQuery, tokens);
+
+    if (score > bestScore) {
+      bestFeature = feature;
+      bestScore = score;
+    }
+  }
+
+  return bestFeature ? createMatch(bestFeature, 'polygon', 0) : null;
+}
+
+function getTextSearchCandidateEntries(index: BuildingAdmdongIndex, query: string) {
+  const normalizedQuery = normalizeSearchText(query);
+  const tokens = getSearchTokens(query);
+
+  return index.entries
+    .map((entry) => {
+      const entryText = normalizeSearchText(`${entry.admdongName} ${entry.filename}`);
+      const directScore =
+        normalizedQuery.includes(normalizeSearchText(entry.admdongName)) || entryText.includes(normalizedQuery)
+          ? 1000
+          : 0;
+      const tokenScore = tokens.filter((token) => entryText.includes(token)).length * 100;
+
+      return {
+        entry,
+        score: directScore + tokenScore,
+      };
+    })
+    .filter((item) => item.score > 0)
+    .sort((left, right) => right.score - left.score || left.entry.featureCount - right.entry.featureCount)
+    .slice(0, TEXT_SEARCH_FILE_LIMIT)
+    .map((item) => item.entry);
 }
 
 function isPointInsideFeature(feature: BuildingFootprintFeature, coordinate: [longitude: number, latitude: number]) {
@@ -401,7 +564,7 @@ function getDistanceToFeatureMeters(
   );
 }
 
-function findNearestBuildingFootprint(
+function findNearbyBuildingFootprint(
   features: BuildingFootprintFeature[],
   coordinate: [longitude: number, latitude: number],
 ) {
@@ -421,7 +584,7 @@ function findNearestBuildingFootprint(
     }
   }
 
-  if (!nearestFeature || nearestDistanceMeters > NEAREST_FOOTPRINT_SELECTION_DISTANCE_M) {
+  if (!nearestFeature) {
     return null;
   }
 
@@ -431,11 +594,64 @@ function findNearestBuildingFootprint(
   };
 }
 
-function containsCoordinate(entry: BuildingAdmdongIndexEntry, coordinate: [longitude: number, latitude: number]) {
+export function getDynamicBuildingSelectionToleranceM(cameraHeightM?: number | null) {
+  const baseToleranceM = import.meta.env.PROD
+    ? PRODUCTION_BUILDING_EDGE_SELECTION_TOLERANCE_M
+    : LOCAL_BUILDING_EDGE_SELECTION_TOLERANCE_M;
+
+  if (!cameraHeightM || !Number.isFinite(cameraHeightM) || cameraHeightM <= DYNAMIC_TOLERANCE_MIN_CAMERA_HEIGHT_M) {
+    return baseToleranceM;
+  }
+
+  if (cameraHeightM >= DYNAMIC_TOLERANCE_MAX_CAMERA_HEIGHT_M) {
+    return HIGH_CAMERA_BUILDING_EDGE_SELECTION_TOLERANCE_M;
+  }
+
+  const cameraProgress =
+    (cameraHeightM - DYNAMIC_TOLERANCE_MIN_CAMERA_HEIGHT_M) /
+    (DYNAMIC_TOLERANCE_MAX_CAMERA_HEIGHT_M - DYNAMIC_TOLERANCE_MIN_CAMERA_HEIGHT_M);
+
+  return Math.round(
+    baseToleranceM + cameraProgress * (HIGH_CAMERA_BUILDING_EDGE_SELECTION_TOLERANCE_M - baseToleranceM),
+  );
+}
+
+function getLongitudeToleranceDegrees(latitude: number, meters: number) {
+  const metersPerDegreeLat = 111_320;
+  const metersPerDegreeLon = metersPerDegreeLat * Math.cos((latitude * Math.PI) / 180);
+
+  return meters / Math.max(metersPerDegreeLon, 1);
+}
+
+function containsCoordinate(
+  entry: BuildingAdmdongIndexEntry,
+  coordinate: [longitude: number, latitude: number],
+  toleranceMeters = 0,
+) {
   const [longitude, latitude] = coordinate;
   const [minLon, minLat, maxLon, maxLat] = entry.bbox;
+  const latTolerance = toleranceMeters / 111_320;
+  const lonTolerance = getLongitudeToleranceDegrees(latitude, toleranceMeters);
 
-  return longitude >= minLon && longitude <= maxLon && latitude >= minLat && latitude <= maxLat;
+  return (
+    longitude >= minLon - lonTolerance &&
+    longitude <= maxLon + lonTolerance &&
+    latitude >= minLat - latTolerance &&
+    latitude <= maxLat + latTolerance
+  );
+}
+
+function getDistanceToBboxMeters(entry: BuildingAdmdongIndexEntry, coordinate: [longitude: number, latitude: number]) {
+  if (containsCoordinate(entry, coordinate)) {
+    return 0;
+  }
+
+  const [longitude, latitude] = coordinate;
+  const [minLon, minLat, maxLon, maxLat] = entry.bbox;
+  const clampedLon = Math.max(minLon, Math.min(maxLon, longitude));
+  const clampedLat = Math.max(minLat, Math.min(maxLat, latitude));
+
+  return getDistanceMeters(coordinate, [clampedLon, clampedLat]);
 }
 
 function getAdmdongFileUrl(indexUrl: string, filename: string) {
@@ -513,6 +729,11 @@ export function createBuildingFootprintDiagnostics(
     searchedFeatureCount: 0,
     matchedBuildingId: null,
     matchedAddress: null,
+    selectionMode: null,
+    nearestDistanceM: null,
+    nearestBuildingId: null,
+    nearestBuildingAddress: null,
+    selectionToleranceM: null,
     selectedGeometryType: null,
     indexUrl: getBuildingAdmdongIndexUrl(),
     metaUrl: getBuildingMetaUrl(),
@@ -641,18 +862,188 @@ async function loadAdmdongBuildingFile(entry: BuildingAdmdongIndexEntry, indexUr
   return loadPromise;
 }
 
+export async function searchBuildingFootprintsByText({
+  query,
+  collection,
+  index,
+}: {
+  query: string;
+  collection?: BuildingFootprintCollection | null;
+  index?: BuildingAdmdongIndex | null;
+}): Promise<BuildingFootprintTextSearchResult> {
+  const trimmedQuery = query.trim();
+  const indexUrl = getBuildingAdmdongIndexUrl();
+  const metaUrl = getBuildingMetaUrl();
+
+  if (!trimmedQuery) {
+    const message = '검색할 주소 또는 아파트명을 입력해주세요.';
+
+    return {
+      status: 'not_found',
+      match: null,
+      candidateFeatures: [],
+      diagnostics: createBuildingFootprintDiagnostics({
+        status: 'not_found',
+        indexUrl,
+        metaUrl,
+        message,
+      }),
+      message,
+    };
+  }
+
+  if (collection) {
+    const match = findBestTextMatch(collection.features, trimmedQuery);
+    const message = match
+      ? '입력 주소와 일치하는 건물 footprint를 선택했습니다.'
+      : '입력 주소와 일치하는 건물 footprint를 찾지 못했습니다.';
+
+    return {
+      status: match ? 'found' : 'not_found',
+      match,
+      candidateFeatures: collection.features,
+      diagnostics: createBuildingFootprintDiagnostics({
+        sourceMode: 'geojson',
+        status: match ? 'selected' : 'not_found',
+        indexLoaded: true,
+        indexEntryCount: 1,
+        searchedFeatureCount: collection.features.length,
+        matchedBuildingId: match?.metadata.buildingId ?? null,
+        matchedAddress: match?.metadata.address ?? null,
+        selectionMode: match ? 'polygon' : null,
+        nearestDistanceM: match ? 0 : null,
+        nearestBuildingId: match?.metadata.buildingId ?? null,
+        nearestBuildingAddress: match?.metadata.address ?? null,
+        selectedGeometryType: match?.metadata.geometryType ?? null,
+        message,
+      }),
+      message,
+    } as BuildingFootprintTextSearchResult;
+  }
+
+  if (!index) {
+    const message = '건물 polygon index를 아직 불러오지 못했습니다. 잠시 뒤 다시 검색해주세요.';
+
+    return {
+      status: 'error',
+      match: null,
+      candidateFeatures: [],
+      diagnostics: createBuildingFootprintDiagnostics({
+        status: 'error',
+        indexUrl,
+        metaUrl,
+        message,
+      }),
+      message,
+    };
+  }
+
+  const candidateEntries = getTextSearchCandidateEntries(index, trimmedQuery);
+
+  if (candidateEntries.length === 0) {
+    const message = '주소에서 행정동 후보를 찾지 못했습니다. 예: "동탄구 반송동 88-12"처럼 동 이름을 포함해 주세요.';
+
+    return {
+      status: 'not_found',
+      match: null,
+      candidateFeatures: [],
+      diagnostics: createBuildingFootprintDiagnostics({
+        status: 'not_found',
+        indexLoaded: true,
+        indexEntryCount: index.entries.length,
+        loadedFileNames: getLoadedAdmdongFileNames(),
+        indexUrl,
+        metaUrl,
+        message,
+      }),
+      message,
+    };
+  }
+
+  const loadedCollections = await Promise.all(
+    candidateEntries.map(async (entry) => {
+      try {
+        return {
+          entry,
+          collection: await loadAdmdongBuildingFile(entry, index.url),
+          errorMessage: null,
+        };
+      } catch (error) {
+        return {
+          entry,
+          collection: null,
+          errorMessage: error instanceof Error ? error.message : `행정동 건물 GeoJSON 로드 실패: ${entry.filename}`,
+        };
+      }
+    }),
+  );
+  const loadedItems = loadedCollections.filter(
+    (item): item is { entry: BuildingAdmdongIndexEntry; collection: BuildingFootprintCollection; errorMessage: null } =>
+      Boolean(item.collection),
+  );
+  const candidateFeatures = loadedItems.flatMap((item) => item.collection.features);
+  const match = findBestTextMatch(candidateFeatures, trimmedQuery);
+  const fileErrors = loadedCollections.flatMap((item) => (item.errorMessage ? [item.errorMessage] : []));
+  const message = match
+    ? `입력 주소와 가장 가까운 건물 footprint를 선택했습니다. 후보 파일 ${candidateEntries.length.toLocaleString(
+        'ko-KR',
+      )}개를 확인했습니다.`
+    : fileErrors.length > 0 && loadedItems.length === 0
+      ? fileErrors.join(' ')
+      : '입력 주소와 일치하는 건물 footprint를 찾지 못했습니다. 지번 또는 건물명을 더 구체적으로 입력해 주세요.';
+
+  return {
+    status: match ? 'found' : fileErrors.length > 0 && loadedItems.length === 0 ? 'error' : 'not_found',
+    match,
+    candidateFeatures,
+    diagnostics: createBuildingFootprintDiagnostics({
+      status: match ? 'selected' : fileErrors.length > 0 && loadedItems.length === 0 ? 'error' : 'not_found',
+      indexLoaded: true,
+      indexEntryCount: index.entries.length,
+      candidateFileCount: candidateEntries.length,
+      loadedFileNames: getLoadedAdmdongFileNames(),
+      searchedFeatureCount: candidateFeatures.length,
+      matchedBuildingId: match?.metadata.buildingId ?? null,
+      matchedAddress: match?.metadata.address ?? null,
+      selectionMode: match ? 'polygon' : null,
+      nearestDistanceM: match ? 0 : null,
+      nearestBuildingId: match?.metadata.buildingId ?? null,
+      nearestBuildingAddress: match?.metadata.address ?? null,
+      selectedGeometryType: match?.metadata.geometryType ?? null,
+      indexUrl,
+      metaUrl,
+      message,
+    }),
+    message,
+  } as BuildingFootprintTextSearchResult;
+}
+
 export function getCandidateAdmdongEntries(
   index: BuildingAdmdongIndex,
   coordinate: [longitude: number, latitude: number],
 ) {
-  return index.entries.filter((entry) => containsCoordinate(entry, coordinate));
+  return index.entries.filter((entry) => containsCoordinate(entry, coordinate, ADMDONG_BBOX_CLICK_TOLERANCE_M));
+}
+
+function getNearestAdmdongEntries(index: BuildingAdmdongIndex, coordinate: [longitude: number, latitude: number]) {
+  return index.entries
+    .map((entry) => ({
+      entry,
+      distanceMeters: getDistanceToBboxMeters(entry, coordinate),
+    }))
+    .filter((item) => item.distanceMeters <= NEAREST_BBOX_MAX_DISTANCE_M)
+    .sort((left, right) => left.distanceMeters - right.distanceMeters)
+    .slice(0, NEAREST_BBOX_CANDIDATE_LIMIT)
+    .map((item) => item.entry);
 }
 
 export async function findBuildingFootprintInAdmdongIndex(
   coordinate: [longitude: number, latitude: number],
+  options: BuildingFootprintSelectionOptions = {},
 ): Promise<BuildingFootprintSelectionResult> {
   const indexUrl = getBuildingAdmdongIndexUrl();
   const metaUrl = getBuildingMetaUrl();
+  const selectionToleranceM = getDynamicBuildingSelectionToleranceM(options.cameraHeightM);
   let index: BuildingAdmdongIndex;
 
   try {
@@ -674,7 +1065,8 @@ export async function findBuildingFootprintInAdmdongIndex(
     };
   }
 
-  const candidates = getCandidateAdmdongEntries(index, coordinate);
+  const bboxCandidates = getCandidateAdmdongEntries(index, coordinate);
+  const candidates = bboxCandidates.length > 0 ? bboxCandidates : getNearestAdmdongEntries(index, coordinate);
 
   if (candidates.length === 0) {
     const message = '선택 좌표를 포함하는 행정동 bbox 후보가 없습니다.';
@@ -692,6 +1084,7 @@ export async function findBuildingFootprintInAdmdongIndex(
         loadedFileNames: getLoadedAdmdongFileNames(),
         indexUrl,
         metaUrl,
+        selectionToleranceM,
         message,
       }),
     };
@@ -727,8 +1120,10 @@ export async function findBuildingFootprintInAdmdongIndex(
       searchedFeatureCount += 1;
 
       if (isPointInsideFeature(feature, coordinate)) {
-        const match = createMatch(feature);
-        const message = `행정동 bbox 후보 ${candidates.length.toLocaleString('ko-KR')}개 파일에서 건물 footprint를 선택했습니다.`;
+        const match = createMatch(feature, 'polygon', 0);
+        const message = `건물 선택 완료: polygon 내부 선택. 행정동 bbox 후보 ${candidates.length.toLocaleString(
+          'ko-KR',
+        )}개 파일에서 건물 footprint를 선택했습니다.`;
 
         return {
           status: 'selected',
@@ -744,6 +1139,11 @@ export async function findBuildingFootprintInAdmdongIndex(
             searchedFeatureCount,
             matchedBuildingId: match.metadata.buildingId,
             matchedAddress: match.metadata.address,
+            selectionMode: 'polygon',
+            nearestDistanceM: 0,
+            nearestBuildingId: match.metadata.buildingId,
+            nearestBuildingAddress: match.metadata.address,
+            selectionToleranceM,
             selectedGeometryType: match.metadata.geometryType,
             indexUrl,
             metaUrl,
@@ -754,31 +1154,37 @@ export async function findBuildingFootprintInAdmdongIndex(
     }
   }
 
-  const nearestMatch = findNearestBuildingFootprint(candidateFeatures, coordinate);
+  const nearbyMatch = findNearbyBuildingFootprint(candidateFeatures, coordinate);
+  const nearestMatch = nearbyMatch ? createMatch(nearbyMatch.feature, 'nearest', nearbyMatch.distanceMeters) : null;
 
-  if (nearestMatch) {
-    const match = createMatch(nearestMatch.feature);
-    const message = `클릭 좌표에서 약 ${Math.round(nearestMatch.distanceMeters).toLocaleString(
+  if (nearbyMatch && nearbyMatch.distanceMeters <= selectionToleranceM) {
+    const match = nearestMatch ?? createMatch(nearbyMatch.feature, 'nearest', nearbyMatch.distanceMeters);
+    const message = `클릭 좌표가 건물 외곽선에서 약 ${Math.round(nearbyMatch.distanceMeters).toLocaleString(
       'ko-KR',
-    )}m 이내의 가장 가까운 건물 footprint를 선택했습니다.`;
+    )}m 이내여서 근접 건물 선택으로 해당 건물 footprint를 선택했습니다.`;
 
     return {
       status: 'selected',
       match,
-      message,
-      candidateFeatures,
-      diagnostics: createBuildingFootprintDiagnostics({
-        status: 'selected',
-        indexLoaded: true,
-        indexEntryCount: index.entries.length,
-        candidateFileCount: candidates.length,
-        loadedFileNames: getLoadedAdmdongFileNames(),
-        searchedFeatureCount,
-        matchedBuildingId: match.metadata.buildingId,
-        matchedAddress: match.metadata.address,
-        selectedGeometryType: match.metadata.geometryType,
-        indexUrl,
-        metaUrl,
+        message,
+        candidateFeatures,
+        diagnostics: createBuildingFootprintDiagnostics({
+          status: 'selected',
+          indexLoaded: true,
+          indexEntryCount: index.entries.length,
+          candidateFileCount: candidates.length,
+          loadedFileNames: getLoadedAdmdongFileNames(),
+          searchedFeatureCount: Math.max(searchedFeatureCount, candidateFeatures.length),
+          matchedBuildingId: match.metadata.buildingId,
+          matchedAddress: match.metadata.address,
+          selectionMode: 'nearest',
+          nearestDistanceM: nearbyMatch.distanceMeters,
+          nearestBuildingId: match.metadata.buildingId,
+          nearestBuildingAddress: match.metadata.address,
+          selectionToleranceM,
+          selectedGeometryType: match.metadata.geometryType,
+          indexUrl,
+          metaUrl,
         message,
       }),
     };
@@ -799,6 +1205,10 @@ export async function findBuildingFootprintInAdmdongIndex(
         candidateFileCount: candidates.length,
         loadedFileNames: getLoadedAdmdongFileNames(),
         searchedFeatureCount,
+        nearestDistanceM: nearbyMatch?.distanceMeters ?? null,
+        nearestBuildingId: nearestMatch?.metadata.buildingId ?? null,
+        nearestBuildingAddress: nearestMatch?.metadata.address ?? null,
+        selectionToleranceM,
         indexUrl,
         metaUrl,
         message,
@@ -809,23 +1219,27 @@ export async function findBuildingFootprintInAdmdongIndex(
   const message =
     fileErrors.length > 0
       ? `후보 파일 일부를 읽지 못했고, 로드된 후보에서 클릭 좌표를 포함하는 건물 polygon을 찾지 못했습니다. ${fileErrors.join(' ')}`
-      : '행정동 후보 파일에서 클릭 좌표를 포함하는 건물 polygon을 찾지 못했습니다.';
+      : '선택 좌표 주변에서 건물 polygon을 찾지 못했습니다. 지도를 확대하거나 건물 중심을 다시 클릭해주세요.';
 
   return {
     status: 'not_found',
     match: null,
     message,
     candidateFeatures,
-    diagnostics: createBuildingFootprintDiagnostics({
-      status: 'not_found',
-      indexLoaded: true,
-      indexEntryCount: index.entries.length,
-      candidateFileCount: candidates.length,
-      loadedFileNames: getLoadedAdmdongFileNames(),
-      searchedFeatureCount,
-      indexUrl,
-      metaUrl,
-      message,
+      diagnostics: createBuildingFootprintDiagnostics({
+        status: 'not_found',
+        indexLoaded: true,
+        indexEntryCount: index.entries.length,
+        candidateFileCount: candidates.length,
+        loadedFileNames: getLoadedAdmdongFileNames(),
+        searchedFeatureCount: Math.max(searchedFeatureCount, candidateFeatures.length),
+        nearestDistanceM: nearbyMatch?.distanceMeters ?? null,
+        nearestBuildingId: nearestMatch?.metadata.buildingId ?? null,
+        nearestBuildingAddress: nearestMatch?.metadata.address ?? null,
+        selectionToleranceM,
+        indexUrl,
+        metaUrl,
+        message,
     }),
   };
 }

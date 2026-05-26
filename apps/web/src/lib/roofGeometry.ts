@@ -105,6 +105,7 @@ export function getPolygonCentroid(polygon: PolygonCoordinates): Coordinate {
     return polygon[0] ?? [0, 0];
   }
 
+  const origin = closed[0];
   let twiceArea = 0;
   let centroidX = 0;
   let centroidY = 0;
@@ -112,21 +113,28 @@ export function getPolygonCentroid(polygon: PolygonCoordinates): Coordinate {
   for (let index = 0; index < closed.length - 1; index += 1) {
     const current = closed[index];
     const next = closed[index + 1];
-    const cross = current[0] * next[1] - next[0] * current[1];
+    const currentX = current[0] - origin[0];
+    const currentY = current[1] - origin[1];
+    const nextX = next[0] - origin[0];
+    const nextY = next[1] - origin[1];
+    const cross = currentX * nextY - nextX * currentY;
+
     twiceArea += cross;
-    centroidX += (current[0] + next[0]) * cross;
-    centroidY += (current[1] + next[1]) * cross;
+    centroidX += (currentX + nextX) * cross;
+    centroidY += (currentY + nextY) * cross;
   }
 
   if (Math.abs(twiceArea) < 1e-12) {
-    const sum = polygon.reduce<Coordinate>(
+    const uniqueCoordinates = closed.slice(0, -1);
+    const sum = uniqueCoordinates.reduce<Coordinate>(
       ([lonSum, latSum], [lon, lat]) => [lonSum + lon, latSum + lat],
       [0, 0],
     );
-    return [sum[0] / polygon.length, sum[1] / polygon.length];
+
+    return [sum[0] / uniqueCoordinates.length, sum[1] / uniqueCoordinates.length];
   }
 
-  return [centroidX / (3 * twiceArea), centroidY / (3 * twiceArea)];
+  return [origin[0] + centroidX / (3 * twiceArea), origin[1] + centroidY / (3 * twiceArea)];
 }
 
 export function estimateRoofPolygonFromFootprint(

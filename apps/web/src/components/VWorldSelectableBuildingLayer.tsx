@@ -1,9 +1,24 @@
 import { useEffect } from 'react';
-import type { PolygonCoordinates } from '../lib/roofGeometry';
+import { getPolygonCentroid, type PolygonCoordinates } from '../lib/roofGeometry';
+import {
+  closePolygon,
+  createLonLatHeightArray,
+  findVisibleCesiumViewer,
+  getCesiumEntityCount,
+  getCesiumSdk,
+  getTerrainHeightM,
+  getViewerDebugId,
+  removeCesiumEntitiesByIdPrefix,
+  type CesiumViewerLike,
+} from '../lib/vworldCesiumViewer';
 
 export type VWorldSelectableBuildingLayerStatus = {
   state: 'idle' | 'rendered' | 'fallback';
   message: string;
+  candidateEntityCount: number;
+  renderMethod: string;
+  viewerDebugId: string | null;
+  viewerEntityCount: number | null;
 };
 
 type VWorldSelectableBuildingLayerProps = {
@@ -20,6 +35,119 @@ type AddedVWorldObject = {
 
 const CONSTRUCTOR_ERROR_MESSAGE =
   '선택 가능한 건물 테두리를 지도 좌표 레이어로 표시하려면 VWorld polygon 객체 생성 연결이 필요합니다.';
+const CANDIDATE_BUILDING_ENTITY_PREFIX = 'solarmate-candidate-building-';
+const CANDIDATE_HEIGHT_ABOVE_TERRAIN_M = 35;
+const CANDIDATE_DEBUG_HEIGHT_M = 120;
+
+function createStatus(
+  state: VWorldSelectableBuildingLayerStatus['state'],
+  message: string,
+  candidateEntityCount = 0,
+  renderMethod = '-',
+  diagnostics: Partial<Pick<VWorldSelectableBuildingLayerStatus, 'viewerDebugId' | 'viewerEntityCount'>> = {},
+): VWorldSelectableBuildingLayerStatus {
+  return {
+    state,
+    message,
+    candidateEntityCount,
+    renderMethod,
+    viewerDebugId: null,
+    viewerEntityCount: null,
+    ...diagnostics,
+  };
+}
+
+function getCandidateHeightM(viewer: CesiumViewerLike, polygon: PolygonCoordinates) {
+  const terrainHeightM = getTerrainHeightM(viewer, getPolygonCentroid(polygon));
+
+  return typeof terrainHeightM === 'number' ? terrainHeightM + CANDIDATE_HEIGHT_ABOVE_TERRAIN_M : CANDIDATE_DEBUG_HEIGHT_M;
+}
+
+function addSelectableOutlinesWithCesium(viewer: CesiumViewerLike, polygons: PolygonCoordinates[]) {
+  const cesium = getCesiumSdk();
+  const entities = viewer.entities;
+
+  if (!cesium?.Cartesian3?.fromDegreesArrayHeights || !entities?.add) {
+    return null;
+  }
+
+  removeCesiumEntitiesByIdPrefix(viewer, [CANDIDATE_BUILDING_ENTITY_PREFIX]);
+
+  const fillMaterial =
+    cesium.Color?.fromCssColorString?.('#67e8f9')?.withAlpha?.(0.07) ??
+    cesium.Color?.CYAN?.withAlpha?.(0.07) ??
+    cesium.Color?.CYAN;
+  const outlineMaterial =
+    cesium.Color?.fromCssColorString?.('#67e8f9')?.withAlpha?.(0.46) ??
+    cesium.Color?.CYAN?.withAlpha?.(0.46) ??
+    cesium.Color?.CYAN;
+  const heightReferenceNone = cesium.HeightReference?.NONE;
+  const addEntity = entities.add.bind(entities);
+  const addedObjects: unknown[] = [];
+  let candidateEntityCount = 0;
+
+  polygons.forEach((polygon, index) => {
+    const id = `${CANDIDATE_BUILDING_ENTITY_PREFIX}${index}`;
+    const outlineId = `${id}-outline`;
+    const closedPolygon = closePolygon(polygon);
+    const heightM = getCandidateHeightM(viewer, closedPolygon);
+    const positions = cesium.Cartesian3.fromDegreesArrayHeights(createLonLatHeightArray(closedPolygon, heightM));
+    const hierarchy = cesium.PolygonHierarchy ? new cesium.PolygonHierarchy(positions) : positions;
+
+    entities.removeById?.(id);
+    entities.removeById?.(outlineId);
+
+    const fillEntity = addEntity({
+      id,
+      polygon: {
+        hierarchy,
+        perPositionHeight: true,
+        material: fillMaterial,
+        outline: false,
+        ...(heightReferenceNone !== undefined ? { heightReference: heightReferenceNone } : {}),
+      },
+    });
+    const outlineEntity = addEntity({
+      id: outlineId,
+      polyline: {
+        positions,
+        width: 1.5,
+        material: outlineMaterial,
+        clampToGround: false,
+        ...(outlineMaterial ? { depthFailMaterial: outlineMaterial } : {}),
+      },
+    });
+
+    if (fillEntity) {
+      candidateEntityCount += 1;
+      addedObjects.push(fillEntity);
+    }
+
+    if (outlineEntity) {
+      addedObjects.push(outlineEntity);
+    }
+  });
+
+  viewer.scene?.requestRender?.();
+
+  return {
+    addedCount: candidateEntityCount,
+    renderMethod: 'Cesium entities',
+    viewerDebugId: getViewerDebugId(viewer),
+    viewerEntityCount: getCesiumEntityCount(viewer),
+    cleanup: () => {
+      addedObjects.forEach((entity) => {
+        try {
+          entities.remove?.(entity);
+        } catch {
+          // Keep cleanup best-effort across Cesium/VWorld builds.
+        }
+      });
+      removeCesiumEntitiesByIdPrefix(viewer, [CANDIDATE_BUILDING_ENTITY_PREFIX]);
+      viewer.scene?.requestRender?.();
+    },
+  };
+}
 
 function createVWorldPolygonGeometry(polygon: PolygonCoordinates) {
   const vw = window.vw;
@@ -45,10 +173,10 @@ function createVWorldStyle() {
   }
 
   const style = new vw.style.Style();
-  const fill = new vw.style.Fill('rgba(14, 165, 233, 0.12)');
-  const stroke = new vw.style.Stroke('#22d3ee');
+  const fill = new vw.style.Fill('rgba(103, 232, 249, 0.06)');
+  const stroke = new vw.style.Stroke('rgba(103, 232, 249, 0.48)');
 
-  stroke.setWidth?.(3);
+  stroke.setWidth?.(2);
   fill.setStroke?.(stroke);
   style.fill = fill;
   style.stroke = stroke;
@@ -130,6 +258,9 @@ function addSelectableOutlinesToVWorldMap(map: VWorldMapInstance, polygons: Poly
 
   return {
     addedCount: addedObjects.length,
+    renderMethod: 'VWorld Feature layer',
+    viewerDebugId: null,
+    viewerEntityCount: null,
     cleanup: () => {
       addedObjects.forEach((addedObject) => removeVWorldObject(map, addedObject));
       polygons.forEach((_, index) => {
@@ -152,31 +283,38 @@ function VWorldSelectableBuildingLayer({
 }: VWorldSelectableBuildingLayerProps) {
   useEffect(() => {
     if (!isActive || polygons.length === 0) {
-      onStatusChange({ state: 'idle', message: '건물에 가까이 접근하거나 건물을 선택하면 주변 건물 테두리를 표시합니다.' });
+      onStatusChange(createStatus('idle', '건물에 가까이 접근하거나 건물을 선택하면 주변 건물 테두리를 표시합니다.'));
       return undefined;
     }
 
     if (!map) {
-      onStatusChange({ state: 'fallback', message: '지도가 준비되면 주변 건물 테두리를 지도 좌표에 맞춰 표시합니다.' });
+      onStatusChange(createStatus('fallback', '지도가 준비되면 주변 건물 테두리를 지도 좌표에 맞춰 표시합니다.'));
       return undefined;
     }
 
     try {
-      const { addedCount, cleanup } = addSelectableOutlinesToVWorldMap(map, polygons);
+      const cesiumViewer = findVisibleCesiumViewer(map);
+      const cesiumResult = cesiumViewer ? addSelectableOutlinesWithCesium(cesiumViewer, polygons) : null;
+      const vworldResult = cesiumResult?.addedCount ? null : addSelectableOutlinesToVWorldMap(map, polygons);
+      const renderResult = cesiumResult?.addedCount ? cesiumResult : vworldResult;
 
-      if (addedCount === 0) {
-        onStatusChange({ state: 'fallback', message: CONSTRUCTOR_ERROR_MESSAGE });
+      if (!renderResult || renderResult.addedCount === 0) {
+        onStatusChange(createStatus('fallback', CONSTRUCTOR_ERROR_MESSAGE));
         return undefined;
       }
 
       onStatusChange({
         state: 'rendered',
-        message: `근접 후보 건물 ${addedCount.toLocaleString('ko-KR')}개를 지도 좌표 테두리로 표시했습니다.`,
+        message: `근접 후보 건물 ${renderResult.addedCount.toLocaleString('ko-KR')}개를 옅은 cyan 지도 객체로 표시했습니다.`,
+        candidateEntityCount: renderResult.addedCount,
+        renderMethod: renderResult.renderMethod,
+        viewerDebugId: renderResult.viewerDebugId,
+        viewerEntityCount: renderResult.viewerEntityCount,
       });
 
-      return cleanup;
+      return renderResult.cleanup;
     } catch {
-      onStatusChange({ state: 'fallback', message: CONSTRUCTOR_ERROR_MESSAGE });
+      onStatusChange(createStatus('fallback', CONSTRUCTOR_ERROR_MESSAGE));
       return undefined;
     }
   }, [isActive, map, onStatusChange, polygons]);

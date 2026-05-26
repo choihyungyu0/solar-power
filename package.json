@@ -8,6 +8,7 @@
     "web:build": "npm --prefix apps/web run build",
     "web:preview": "npm --prefix apps/web run preview",
     "sync:hwaseong": "node scripts/sync-hwaseong-buildings-to-public.mjs",
+    "sync:climate-poc": "node scripts/sync-climate-poc-to-public.mjs",
     "validate:geojson": "node scripts/validate-hwaseong-geojson.mjs",
     "api:dev": "cd apps/api && uvicorn main:app --reload --port 8000"
   }

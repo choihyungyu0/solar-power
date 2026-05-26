@@ -262,8 +262,8 @@ function addSolarPanelsToVWorldMap({
   }
 
   panelPolygons.forEach((panelPolygon, index) => {
-    const panelFeature = createFeature(`solarmate-panel-${index}`, panelPolygon, panelStyle);
-    const addedPanel = addFeatureToMap(map, `solarmate-panel-layer-${index}`, panelFeature, panelStyle);
+    const panelFeature = createFeature(`solarmate-poc-panel-${index}`, panelPolygon, panelStyle);
+    const addedPanel = addFeatureToMap(map, `solarmate-poc-panel-layer-${index}`, panelFeature, panelStyle);
 
     if (addedPanel) {
       addedObjects.push(addedPanel);
@@ -287,6 +287,12 @@ function addSolarPanelsToVWorldMap({
         map.removeObjectById?.('solarmate-solar-label');
         map.removeObjectById?.('solarmate-selected-building');
         map.removeObjectById?.('solarmate-selected-roof');
+        panelPolygons.forEach((_, index) => {
+          map.removeObjectById?.(`solarmate-poc-panel-${index}`);
+          map.removeObjectById?.(`solarmate-poc-panel-layer-${index}`);
+          map.removeObjectById?.(`solarmate-panel-${index}`);
+          map.removeObjectById?.(`solarmate-panel-layer-${index}`);
+        });
       } catch {
         // Cleanup should not break React rendering.
       }

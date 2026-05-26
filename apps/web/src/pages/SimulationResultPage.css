@@ -1,0 +1,2073 @@
+.simulationResultPage {
+  min-height: 100vh;
+  background: #ffffff;
+  color: #111827;
+}
+
+.resultSiteHeader {
+  min-height: 78px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  border-bottom: 1px solid #e3e8ef;
+  padding: 0 64px;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.resultLogo {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+.resultLogoMark {
+  width: 50px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.resultLogoMark img {
+  width: 50px;
+  height: 44px;
+  object-fit: contain;
+}
+
+.resultLogo strong {
+  display: grid;
+  gap: 2px;
+  color: #06133d;
+  font-size: 28px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.resultLogoKorean {
+  color: #06133d;
+}
+
+.resultLogo small {
+  color: #1687ff;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.resultMobileHeaderActions {
+  display: none;
+}
+
+.resultNav {
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  gap: clamp(18px, 3vw, 58px);
+  color: #111827;
+  font-size: 16px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.resultNav a {
+  transition: color 0.18s ease;
+}
+
+.resultNav a:hover {
+  color: #0b6ee6;
+}
+
+.resultHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 0 0 auto;
+}
+
+.resultLoginButton,
+.resultHeaderCta,
+.mapBackButton,
+.consultApplyButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  border-radius: 8px;
+  padding: 0 20px;
+  font-size: 15px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.resultLoginButton {
+  border: 1px solid #d7dee8;
+  background: #ffffff;
+}
+
+.resultHeaderCta,
+.consultApplyButton {
+  background: linear-gradient(180deg, #ffc900 0%, #ffb800 100%);
+  box-shadow: 0 10px 20px rgba(234, 179, 8, 0.22);
+}
+
+.simulationResultMain {
+  width: min(1700px, calc(100% - 80px));
+  margin: 0 auto;
+  padding: 24px 0 28px;
+}
+
+.resultTitleArea {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+
+.resultSourcePill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  padding: 0 12px;
+  background: #eff6ff;
+  color: #0758c7;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.resultSourcePill.isDemo {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #b45309;
+}
+
+.resultTitleArea h1 {
+  margin: 10px 0 8px;
+  color: #05070b;
+  font-size: clamp(32px, 2.3vw, 42px);
+  font-weight: 950;
+  line-height: 1.14;
+  letter-spacing: 0;
+}
+
+.resultTitleArea p {
+  margin: 0;
+  color: #334155;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.mapBackButton {
+  border: 1px solid #d8e0ea;
+  background: #ffffff;
+  color: #1f3b66;
+}
+
+.simulationResultLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 410px;
+  gap: 36px;
+  align-items: start;
+}
+
+.simulationResultContent {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.resultMetricGrid,
+.resultChartGrid {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.resultAddressSummary,
+.aiAnalysisReport,
+.resultMetricSection,
+.ecoResultCard,
+.resultChartCard,
+.resultCostPanel {
+  border: 1px solid #d9e1ec;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.resultAddressSummary {
+  min-height: 78px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 14px 24px;
+}
+
+.addressHeaderLine {
+  display: none;
+}
+
+.addressRows {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.addressRows div {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.addressRows span {
+  color: #28334d;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.addressRows strong {
+  min-width: 0;
+  color: #1e293b;
+  font-size: 16px;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.resultBadgeGroup {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.resultBadge {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 6px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.resultBadge svg {
+  width: 16px;
+  height: 16px;
+}
+
+.resultBadge.badge1 {
+  border: 1px solid #9ecbff;
+  background: #e9f3ff;
+  color: #0969c3;
+}
+
+.resultBadge.badge2 {
+  border: 1px solid #abe6b3;
+  background: #ecfdf3;
+  color: #138a34;
+}
+
+.resultBadge.badge3 {
+  border: 1px solid #cbb8ff;
+  background: #f2edff;
+  color: #5b21b6;
+}
+
+.aiAnalysisReport {
+  display: grid;
+  gap: 14px;
+  padding: 18px 20px;
+}
+
+.aiReportHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.aiReportHeader span {
+  color: #15803d;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.aiReportHeader h2 {
+  margin: 4px 0 0;
+  color: #0f172a;
+  font-size: 20px;
+  font-weight: 950;
+}
+
+.aiReportHeader > strong {
+  min-width: 84px;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #ecfdf3;
+  color: #166534;
+  font-size: 24px;
+  font-weight: 950;
+  text-align: center;
+}
+
+.aiReportSummary {
+  margin: 0;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.aiReportGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.aiReportGrid div {
+  min-width: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.aiReportGrid dt {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.aiReportGrid dd {
+  margin: 5px 0 0;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1.45;
+}
+
+.aiReportList {
+  display: grid;
+  gap: 8px;
+}
+
+.aiReportList strong {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.aiReportList ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.agentPayloadPreview {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 12px;
+}
+
+.agentPayloadPreview summary {
+  cursor: pointer;
+  color: #166534;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.agentPayloadPreview pre {
+  max-height: 300px;
+  overflow: auto;
+  margin: 10px 0 0;
+  border-radius: 8px;
+  padding: 12px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.resultMetricSection {
+  overflow: hidden;
+}
+
+.metricSectionHeader {
+  min-height: 30px;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: 950;
+}
+
+.metricSectionHeader strong {
+  font: inherit;
+}
+
+.metricSectionIcon {
+  display: none;
+}
+
+.metricSectionHeader.is-orange {
+  background: linear-gradient(90deg, #ff8a00 0%, #ef3f00 100%);
+}
+
+.metricSectionHeader.is-green {
+  background: linear-gradient(90deg, #31b52c 0%, #098926 100%);
+}
+
+.metricSectionHeader.is-blue {
+  background: linear-gradient(90deg, #1d7cff 0%, #0758d3 100%);
+}
+
+.metricSectionBody {
+  min-height: 92px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 152px;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 18px 12px;
+}
+
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.metricItem {
+  min-width: 0;
+  border-right: 1px solid #d8e0ea;
+  padding: 4px 24px;
+}
+
+.metricItem:first-child {
+  padding-left: 6px;
+}
+
+.metricItem:last-child {
+  border-right: 0;
+}
+
+.metricItem span {
+  display: block;
+  margin-bottom: 8px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.metricItem strong {
+  display: block;
+  color: #0f172a;
+  font-size: clamp(21px, 1.45vw, 27px);
+  font-weight: 950;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+
+.metricItem .tone-orange {
+  color: #ff4b00;
+}
+
+.metricItem .tone-green {
+  color: #0a9d2a;
+}
+
+.metricItem .tone-blue {
+  color: #075ee8;
+}
+
+.metricItem .tone-navy {
+  color: #07358f;
+}
+
+.sectionResultImage {
+  width: 136px;
+  height: 82px;
+  justify-self: end;
+  object-fit: contain;
+}
+
+.ecoCardGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.ecoResultCard {
+  min-height: 76px;
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  padding: 10px 22px;
+}
+
+.ecoResultCard img {
+  width: 72px;
+  height: 56px;
+  object-fit: contain;
+}
+
+.ecoResultCard span {
+  display: block;
+  margin-bottom: 4px;
+  color: #334155;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.ecoResultCard strong {
+  color: #09a329;
+  font-size: clamp(23px, 1.6vw, 29px);
+  font-weight: 950;
+  line-height: 1.1;
+}
+
+.resultChartCard {
+  min-width: 0;
+  padding: 14px 18px 12px;
+}
+
+.resultChartCard h2 {
+  margin: 0 0 10px;
+  color: #1f2937;
+  font-size: 17px;
+  font-weight: 950;
+}
+
+.chartCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.chartCardHeader h2 {
+  margin: 0;
+}
+
+.chartCardHeader span {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.trendLegend {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin-bottom: 6px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.trendLegend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.trendLegend span::before {
+  content: "";
+  width: 18px;
+  height: 4px;
+  border-radius: 999px;
+}
+
+.legendNet::before {
+  background: #1163ff;
+}
+
+.legendSaving::before {
+  background: #ff1f24;
+}
+
+.trendChartSvg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+.trendGridLine {
+  stroke: #e5ebf3;
+  stroke-width: 1;
+}
+
+.trendAxisLabel,
+.trendYearLabel {
+  fill: #475569;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.trendLine {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.trendLineNet {
+  stroke: #1163ff;
+}
+
+.trendLineSaving {
+  stroke: #ff1f24;
+}
+
+.trendDot {
+  stroke: #ffffff;
+  stroke-width: 2;
+}
+
+.trendDotNet {
+  fill: #1163ff;
+}
+
+.trendDotSaving {
+  fill: #ff1f24;
+}
+
+.trendEndLabel {
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.trendEndNet {
+  fill: #1163ff;
+}
+
+.trendEndSaving {
+  fill: #ff1f24;
+}
+
+.resultMobileCostCard {
+  display: none;
+}
+
+.chartScrollArea {
+  display: grid;
+  grid-template-columns: 80px minmax(760px, 1fr);
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 3px;
+}
+
+.chartAxis {
+  height: 154px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: #46546a;
+  font-size: 11px;
+  font-weight: 850;
+  text-align: right;
+}
+
+.chartPlot {
+  position: relative;
+  min-width: 760px;
+  height: 154px;
+  border-bottom: 1px solid #b8c3d1;
+}
+
+.chartGridLines {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.chartGridLines span {
+  height: 1px;
+  background: #e5ebf3;
+}
+
+.chartBars {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.chartBarItem {
+  height: 100%;
+  min-width: 28px;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.chartBarTrack {
+  width: 100%;
+  flex: 1;
+  display: flex;
+  align-items: end;
+  justify-content: center;
+}
+
+.chartBar {
+  position: relative;
+  width: min(36px, 100%);
+  height: var(--bar-height);
+  min-height: 8px;
+  border-radius: 5px 5px 0 0;
+  background: linear-gradient(180deg, #ffc400 0%, #ffae00 100%);
+  box-shadow: inset -5px 0 0 rgba(255, 130, 0, 0.16);
+}
+
+.chartBar em {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  color: #111827;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 950;
+  line-height: 1;
+  white-space: nowrap;
+  writing-mode: vertical-rl;
+  transform: translateX(-50%) rotate(180deg);
+}
+
+.chartBarItem strong {
+  margin-top: 6px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.chartNotice {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  margin: 10px 0 0;
+  border-radius: 6px;
+  padding: 6px 16px;
+  background: #fff2c2;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.resultCostPanel {
+  position: sticky;
+  top: 18px;
+  overflow: hidden;
+}
+
+.costPanelHeader {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 26px;
+  background: linear-gradient(135deg, #064eb4 0%, #003278 100%);
+  color: #ffffff;
+}
+
+.costPanelHeader img {
+  width: 48px;
+  height: 44px;
+  object-fit: contain;
+}
+
+.costPanelHeader strong {
+  font-size: 26px;
+  font-weight: 950;
+}
+
+.costPanelList {
+  margin: 0;
+  padding: 18px 28px 4px;
+}
+
+.costPanelList div {
+  display: grid;
+  gap: 10px;
+  border-bottom: 1px dashed #c9d3e1;
+  padding: 18px 0 22px;
+}
+
+.costPanelList dt,
+.costPanelList dd {
+  margin: 0;
+}
+
+.costPanelList dt {
+  color: #111827;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.costPanelList dd {
+  color: #05070b;
+  font-size: 25px;
+  font-weight: 950;
+  line-height: 1.15;
+}
+
+.policyInfoBox {
+  display: grid;
+  gap: 8px;
+  margin: 22px 28px 28px;
+  border-radius: 8px;
+  padding: 20px;
+  background: #f1f4f8;
+}
+
+.policyInfoBox span {
+  color: #4b5870;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.policyInfoBox p,
+.policyInfoBox strong {
+  margin: 0;
+  color: #4b5870;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.policyInfoBox strong {
+  color: #27324f;
+  font-weight: 850;
+}
+
+.policyInfoBox button {
+  justify-self: start;
+  padding: 0;
+  background: transparent;
+  color: #006be6;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.consultApplyButton {
+  width: calc(100% - 56px);
+  min-height: 60px;
+  margin: 0 28px 28px;
+  color: #111827;
+  font-size: 18px;
+}
+
+.resultBottomNote {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 12px 0 0;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 750;
+  text-align: right;
+}
+
+.resultBottomNote svg {
+  width: 18px;
+  height: 18px;
+  color: #1268ef;
+}
+
+@media (max-width: 1400px) {
+  .resultSiteHeader {
+    padding: 0 32px;
+  }
+
+  .resultNav {
+    gap: 22px;
+    font-size: 15px;
+  }
+
+  .simulationResultLayout {
+    grid-template-columns: minmax(0, 1fr) 370px;
+    gap: 24px;
+  }
+
+  .metricItem {
+    padding-inline: 16px;
+  }
+}
+
+@media (max-width: 1120px) {
+  .resultSiteHeader {
+    min-height: auto;
+    flex-wrap: wrap;
+    padding: 18px 24px;
+  }
+
+  .resultNav {
+    order: 3;
+    width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .simulationResultLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .resultCostPanel {
+    position: static;
+  }
+
+  .resultBottomNote {
+    text-align: left;
+  }
+}
+
+@media (max-width: 760px) {
+  .simulationResultMain {
+    width: calc(100% - 32px);
+    padding-top: 20px;
+  }
+
+  .resultTitleArea {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .resultHeaderActions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 86px minmax(0, 1fr);
+  }
+
+  .resultLoginButton,
+  .resultHeaderCta {
+    width: 100%;
+    padding-inline: 12px;
+    font-size: 14px;
+  }
+
+  .resultAddressSummary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .addressRows,
+  .addressRows div {
+    width: 100%;
+  }
+
+  .addressRows div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .resultBadgeGroup {
+    justify-content: flex-start;
+  }
+
+  .metricSectionBody {
+    grid-template-columns: 1fr;
+  }
+
+  .metricGrid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .metricItem,
+  .metricItem:first-child {
+    border-right: 0;
+    border-bottom: 1px solid #e5ebf3;
+    padding: 0 0 14px;
+  }
+
+  .metricItem:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .sectionResultImage {
+    justify-self: center;
+  }
+
+  .ecoCardGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .chartScrollArea {
+    grid-template-columns: 62px minmax(620px, 1fr);
+  }
+
+  .chartPlot {
+    min-width: 620px;
+  }
+
+  .costPanelList dd {
+    font-size: 22px;
+  }
+}
+
+@media (max-width: 460px) {
+  .resultSiteHeader {
+    padding: 16px;
+  }
+
+  .resultLogo strong {
+    font-size: 24px;
+  }
+
+  .resultLogoMark {
+    width: 36px;
+    height: 36px;
+  }
+
+  .ecoResultCard {
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px 16px;
+  }
+
+  .ecoResultCard img {
+    width: 60px;
+    height: 48px;
+  }
+}
+
+@media (min-width: 1200px) {
+  .simulationResultPage {
+    min-height: 100dvh;
+  }
+
+  .resultSiteHeader {
+    min-height: 76px;
+    padding-inline: clamp(40px, 3.4vw, 64px);
+  }
+
+  .simulationResultMain {
+    width: 100%;
+    max-width: none;
+    padding: 22px clamp(32px, 2.8vw, 54px) 28px;
+  }
+
+  .simulationResultLayout {
+    grid-template-columns: minmax(0, 1fr) clamp(390px, 22vw, 430px);
+    gap: clamp(24px, 2vw, 38px);
+  }
+
+  .resultCostPanel {
+    top: 96px;
+    max-height: calc(100dvh - 116px);
+    overflow: auto;
+  }
+}
+
+@media (min-width: 1600px) and (max-height: 1100px) {
+  .resultSiteHeader {
+    min-height: 68px;
+  }
+
+  .simulationResultMain {
+    padding-top: 10px;
+    padding-bottom: 16px;
+  }
+
+  .resultTitleArea {
+    margin-bottom: 8px;
+  }
+
+  .resultTitleArea h1 {
+    margin-block: 5px 3px;
+    font-size: 31px;
+  }
+
+  .resultAddressSummary {
+    min-height: 58px;
+    padding-block: 8px;
+  }
+
+  .resultMetricGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .metricSectionBody {
+    min-height: 132px;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    align-content: start;
+    padding: 10px 16px;
+  }
+
+  .metricGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .metricItem,
+  .metricItem:first-child {
+    border-right: 0;
+    border-bottom: 1px solid #e5ebf3;
+    padding: 5px 0 7px;
+  }
+
+  .metricItem:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .metricItem span {
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
+
+  .metricItem strong {
+    font-size: 18px;
+  }
+
+  .sectionResultImage {
+    display: none;
+  }
+
+  .ecoResultCard {
+    min-height: 58px;
+    grid-template-columns: 64px minmax(0, 1fr);
+    padding-block: 8px;
+  }
+
+  .ecoResultCard img {
+    width: 58px;
+    height: 46px;
+  }
+
+  .ecoResultCard span {
+    margin-bottom: 2px;
+    font-size: 13px;
+  }
+
+  .ecoResultCard strong {
+    font-size: 22px;
+  }
+
+  .resultChartGrid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
+  }
+
+  .resultChartCard {
+    padding: 10px 14px 9px;
+  }
+
+  .chartCardHeader {
+    margin-bottom: 5px;
+  }
+
+  .trendLegend {
+    margin-bottom: 2px;
+  }
+
+  .trendChartSvg {
+    max-height: 178px;
+  }
+
+  .chartAxis,
+  .chartPlot {
+    height: 112px;
+  }
+
+  .chartScrollArea {
+    grid-template-columns: 66px minmax(0, 1fr);
+  }
+
+  .chartPlot {
+    min-width: 0;
+  }
+
+  .chartBars {
+    gap: 5px;
+  }
+
+  .chartBar {
+    width: min(22px, 100%);
+  }
+
+  .chartBar em {
+    display: none;
+  }
+
+  .chartNotice {
+    min-height: 24px;
+    margin-top: 6px;
+    padding-block: 4px;
+  }
+
+  .costPanelHeader {
+    min-height: 58px;
+  }
+
+  .costPanelList {
+    padding-top: 12px;
+  }
+
+  .costPanelList div {
+    padding-block: 14px 16px;
+  }
+
+  .policyInfoBox {
+    margin-block: 14px 18px;
+    padding: 16px;
+  }
+
+  .consultApplyButton {
+    min-height: 54px;
+    margin-bottom: 22px;
+  }
+}
+
+@media (max-width: 760px) {
+  .simulationResultPage {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  .resultSiteHeader {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  .simulationResultMain {
+    width: 100%;
+    max-width: none;
+    padding-inline: 16px;
+    overflow-x: hidden;
+  }
+
+  .simulationResultPage,
+  .resultSiteHeader,
+  .simulationResultMain,
+  .simulationResultLayout,
+  .simulationResultContent {
+    min-width: 0;
+  }
+
+  .resultHeaderActions {
+    grid-template-columns: minmax(74px, 86px) minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .resultHeaderCta {
+    min-width: 0;
+    padding-inline: 12px;
+  }
+
+  .resultAddressSummary,
+  .resultMetricSection,
+  .ecoCardGrid,
+  .resultChartCard,
+  .resultCostPanel {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .resultTitleArea h1,
+  .resultTitleArea p,
+  .addressRows strong,
+  .metricItem strong,
+  .costPanelList dd {
+    max-width: 100%;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .resultTitleArea h1 {
+    font-size: 31px;
+  }
+
+  .resultTitleArea p {
+    font-size: 15px;
+    line-height: 1.65;
+  }
+
+  .chartScrollArea {
+    grid-template-columns: 58px minmax(520px, 1fr);
+  }
+
+  .chartPlot {
+    min-width: 520px;
+  }
+
+  .resultHeaderCta {
+    white-space: normal;
+  }
+}
+
+@media (max-width: 460px) {
+  .resultNav {
+    gap: 18px;
+  }
+
+  .chartScrollArea {
+    grid-template-columns: 52px minmax(440px, 1fr);
+  }
+
+  .chartPlot {
+    min-width: 440px;
+  }
+}
+
+@media (max-width: 820px) {
+  .simulationResultPage {
+    max-width: 100vw;
+    overflow-x: hidden;
+    background:
+      linear-gradient(180deg, #ffffff 0%, #f6f9ff 20%, #f8fbff 100%);
+    color: #07113c;
+  }
+
+  .resultSiteHeader {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    min-height: 82px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 16px;
+    padding: 0 28px;
+    border-bottom: 1px solid #dfe6ef;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(16px);
+  }
+
+  .resultLogo {
+    min-width: 0;
+    gap: 10px;
+  }
+
+  .resultLogoMark {
+    width: 58px;
+    height: 50px;
+  }
+
+  .resultLogoMark img {
+    width: 58px;
+    height: 50px;
+  }
+
+  .resultLogo strong {
+    font-size: 27px;
+    line-height: 0.96;
+  }
+
+  .resultLogo small {
+    margin-top: 4px;
+    font-size: 13px;
+  }
+
+  .resultNav,
+  .resultHeaderActions {
+    display: none;
+  }
+
+  .resultMobileHeaderActions {
+    display: inline-flex;
+    align-items: center;
+    gap: 22px;
+  }
+
+  .resultMobileHeaderActions button {
+    width: 34px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    background: transparent;
+    color: #07113c;
+  }
+
+  .resultMobileHeaderActions svg {
+    width: 31px;
+    height: 31px;
+    stroke-width: 1.9;
+  }
+
+  .simulationResultMain {
+    width: 100%;
+    max-width: none;
+    padding: 28px 28px 18px;
+    overflow-x: hidden;
+  }
+
+  .resultTitleArea {
+    display: block;
+    margin-bottom: 16px;
+  }
+
+  .resultSourcePill,
+  .mapBackButton {
+    display: none;
+  }
+
+  .resultTitleArea h1 {
+    margin: 0 0 10px;
+    color: #08113f;
+    font-size: 31px;
+    font-weight: 850;
+    line-height: 1.18;
+    word-break: keep-all;
+    overflow-wrap: break-word;
+  }
+
+  .resultTitleArea p {
+    color: #33415f;
+    font-size: 15px;
+    font-weight: 650;
+    line-height: 1.55;
+    word-break: keep-all;
+    overflow-wrap: break-word;
+  }
+
+  .simulationResultLayout {
+    display: block;
+  }
+
+  .simulationResultContent {
+    gap: 12px;
+  }
+
+  .resultAddressSummary,
+  .resultMobileCostCard,
+  .resultMetricSection,
+  .ecoResultCard,
+  .resultChartCard,
+  .resultBottomNote {
+    width: 100%;
+    max-width: 100%;
+    border: 1px solid #dbe5f1;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 4px 13px rgba(15, 23, 42, 0.08);
+  }
+
+  .resultAddressSummary {
+    min-height: auto;
+    display: grid;
+    gap: 14px;
+    padding: 18px;
+  }
+
+  .addressHeaderLine {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .addressPinIcon {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    color: #1268ef;
+  }
+
+  .addressPinIcon svg,
+  .addressChevronIcon {
+    width: 28px;
+    height: 28px;
+    stroke-width: 2.6;
+  }
+
+  .addressHeaderLine div {
+    min-width: 0;
+  }
+
+  .addressHeaderLine strong {
+    display: block;
+    color: #08113f;
+    font-size: 21px;
+    font-weight: 850;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .addressHeaderLine p {
+    margin: 6px 0 0;
+    color: #33415f;
+    font-size: 15px;
+    font-weight: 650;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+
+  .addressChevronIcon {
+    color: #1f3155;
+  }
+
+  .addressRows {
+    display: none;
+  }
+
+  .resultBadgeGroup {
+    justify-content: flex-start;
+    gap: 8px;
+  }
+
+  .resultBadge {
+    min-height: 34px;
+    border: 0;
+    border-radius: 8px;
+    padding: 0 11px;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .resultBadge svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .resultMobileCostCard {
+    display: block;
+    padding: 16px 18px 18px;
+  }
+
+  .resultCostPanel {
+    display: none;
+  }
+
+  .mobileCostHeader {
+    min-height: 74px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) 96px;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .mobileCostHeader span {
+    align-self: center;
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    color: #1268ef;
+  }
+
+  .mobileCostHeader svg {
+    width: 30px;
+    height: 30px;
+    stroke-width: 2.5;
+  }
+
+  .mobileCostHeader strong {
+    align-self: center;
+    color: #08113f;
+    font-size: 21px;
+    font-weight: 850;
+  }
+
+  .mobileCostHeader img {
+    width: 94px;
+    height: 66px;
+    justify-self: end;
+    object-fit: contain;
+  }
+
+  .mobileCostGrid {
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .mobileCostGrid div {
+    min-width: 0;
+    display: grid;
+    justify-items: center;
+    gap: 7px;
+    border-right: 1px solid #d4dce8;
+    padding: 0 8px;
+    text-align: center;
+  }
+
+  .mobileCostGrid div:last-child {
+    border-right: 0;
+  }
+
+  .mobileCostGrid dt,
+  .mobileCostGrid dd {
+    margin: 0;
+  }
+
+  .mobileCostGrid dt {
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 750;
+    line-height: 1.2;
+  }
+
+  .mobileCostGrid dd {
+    max-width: 100%;
+    font-size: 15px;
+    font-weight: 850;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+
+  .mobileCostGrid .tone-blue {
+    color: #1268ef;
+  }
+
+  .mobileCostGrid .tone-green {
+    color: #0a8f2b;
+  }
+
+  .mobileCostGrid .tone-orange {
+    color: #ff5a00;
+  }
+
+  .mobileCostGrid .tone-navy {
+    color: #6c39e9;
+  }
+
+  .mobileConsultButton {
+    width: 100%;
+    min-height: 44px;
+    margin: 18px 0 0;
+    border-radius: 8px;
+    color: #172033;
+    font-size: 16px;
+    box-shadow: none;
+  }
+
+  .mobileConsultButton svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .resultMetricSection {
+    overflow: hidden;
+    padding: 16px 14px 15px;
+  }
+
+  .resultMetricSection.is-blue {
+    border-color: #cfe1ff;
+    background: linear-gradient(90deg, #ffffff 0%, #f5f9ff 100%);
+  }
+
+  .resultMetricSection.is-green {
+    border-color: #ccead6;
+    background: linear-gradient(90deg, #ffffff 0%, #f3fbf5 100%);
+  }
+
+  .resultMetricSection.is-orange {
+    border-color: #f3dccb;
+    background: linear-gradient(90deg, #ffffff 0%, #fff7ef 100%);
+  }
+
+  .metricSectionHeader {
+    min-height: auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 4px 8px;
+    background: transparent !important;
+    color: #08113f;
+    font-size: 19px;
+    line-height: 1.2;
+  }
+
+  .metricSectionIcon {
+    width: 54px;
+    height: 54px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    color: #ffffff;
+  }
+
+  .metricSectionIcon svg {
+    width: 31px;
+    height: 31px;
+    stroke-width: 2.5;
+  }
+
+  .metricSectionHeader.is-blue .metricSectionIcon {
+    background: linear-gradient(135deg, #1268ef 0%, #0759e0 100%);
+  }
+
+  .metricSectionHeader.is-green .metricSectionIcon {
+    background: linear-gradient(135deg, #31b84d 0%, #129837 100%);
+  }
+
+  .metricSectionHeader.is-orange .metricSectionIcon {
+    background: linear-gradient(135deg, #ff8a00 0%, #ff5a00 100%);
+  }
+
+  .metricSectionHeader strong {
+    color: inherit;
+    font-size: 19px;
+    font-weight: 850;
+  }
+
+  .metricSectionBody {
+    min-height: auto;
+    grid-template-columns: minmax(0, 1fr) 86px;
+    gap: 10px;
+    padding: 0 4px;
+  }
+
+  .metricGrid {
+    min-width: 0;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .metricItem,
+  .metricItem:first-child {
+    min-width: 0;
+    border-right: 1px solid #d7dee8;
+    border-bottom: 0;
+    padding: 0 10px;
+  }
+
+  .metricItem:first-child {
+    padding-left: 0;
+  }
+
+  .metricItem:last-child {
+    border-right: 0;
+    padding-right: 0;
+  }
+
+  .metricItem span {
+    margin-bottom: 5px;
+    color: #2f3b53;
+    font-size: 12px;
+    font-weight: 750;
+    line-height: 1.24;
+    word-break: keep-all;
+    overflow-wrap: break-word;
+  }
+
+  .metricItem strong {
+    font-size: 14px;
+    font-weight: 850;
+    line-height: 1.18;
+    overflow-wrap: anywhere;
+  }
+
+  .sectionResultImage {
+    width: 84px;
+    height: 66px;
+    align-self: center;
+    justify-self: end;
+  }
+
+  .ecoCardGrid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .ecoResultCard {
+    min-height: 86px;
+    grid-template-columns: 56px minmax(0, 1fr);
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .ecoResultCard img {
+    width: 54px;
+    height: 52px;
+  }
+
+  .ecoResultCard span {
+    margin-bottom: 4px;
+    color: #08113f;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1.25;
+    word-break: keep-all;
+    overflow-wrap: break-word;
+  }
+
+  .ecoResultCard strong {
+    font-size: 22px;
+    font-weight: 850;
+    line-height: 1.1;
+    overflow-wrap: anywhere;
+  }
+
+  .ecoResultCard:nth-child(2) strong {
+    color: #1268ef;
+  }
+
+  .resultChartCard {
+    min-width: 0;
+    padding: 16px 14px 14px;
+  }
+
+  .resultChartCard h2,
+  .chartCardHeader h2 {
+    color: #08113f;
+    font-size: 18px;
+    font-weight: 850;
+  }
+
+  .chartCardHeader {
+    margin-bottom: 8px;
+  }
+
+  .chartCardHeader span {
+    font-size: 12px;
+  }
+
+  .trendLegend {
+    gap: 18px;
+    margin-bottom: 2px;
+    padding-left: 12px;
+    font-size: 11px;
+  }
+
+  .trendChartSvg {
+    margin-top: 2px;
+  }
+
+  .trendAxisLabel,
+  .trendYearLabel {
+    font-size: 12px;
+  }
+
+  .trendEndLabel {
+    font-size: 15px;
+  }
+
+  .trendChartCard .chartNotice {
+    min-height: auto;
+    margin: 8px 0 0;
+    padding: 0;
+    background: transparent;
+    color: #526079;
+    font-size: 13px;
+  }
+
+  .chartScrollArea {
+    grid-template-columns: 74px minmax(0, 1fr);
+    gap: 8px;
+    overflow: visible;
+  }
+
+  .chartAxis,
+  .chartPlot {
+    height: 122px;
+  }
+
+  .chartAxis {
+    font-size: 11px;
+    overflow: hidden;
+    padding-right: 2px;
+    white-space: nowrap;
+  }
+
+  .chartPlot {
+    min-width: 0;
+  }
+
+  .chartBars {
+    gap: 4px;
+  }
+
+  .chartBarItem {
+    min-width: 0;
+  }
+
+  .chartBar {
+    width: min(16px, 100%);
+    border-radius: 4px 4px 0 0;
+    background: linear-gradient(180deg, #72a7ff 0%, #4e8ff8 100%);
+    box-shadow: none;
+  }
+
+  .chartBar em {
+    display: none;
+  }
+
+  .chartBarItem strong {
+    font-size: 11px;
+  }
+
+  .resultBottomNote {
+    justify-content: flex-start;
+    margin-top: 12px;
+    padding: 14px 16px;
+    color: #33415f;
+    font-size: 13px;
+    font-weight: 650;
+    line-height: 1.45;
+    text-align: left;
+  }
+}
+
+@media (max-width: 430px) {
+  .resultSiteHeader {
+    padding: 0 22px;
+  }
+
+  .resultLogoMark,
+  .resultLogoMark img {
+    width: 52px;
+    height: 46px;
+  }
+
+  .resultLogo strong {
+    font-size: 24px;
+  }
+
+  .resultMobileHeaderActions {
+    gap: 18px;
+  }
+
+  .resultMobileHeaderActions svg {
+    width: 29px;
+    height: 29px;
+  }
+
+  .simulationResultMain {
+    padding: 26px 16px 16px;
+  }
+
+  .resultTitleArea h1 {
+    font-size: 30px;
+  }
+
+  .resultTitleArea p {
+    font-size: 14px;
+  }
+
+  .resultAddressSummary {
+    padding: 16px;
+  }
+
+  .resultBadge {
+    min-height: 32px;
+    padding: 0 9px;
+    font-size: 12px;
+  }
+
+  .mobileCostHeader {
+    grid-template-columns: auto minmax(0, 1fr) 82px;
+  }
+
+  .mobileCostHeader img {
+    width: 82px;
+  }
+
+  .mobileCostGrid div {
+    padding: 0 5px;
+  }
+
+  .mobileCostGrid dt {
+    font-size: 12px;
+  }
+
+  .mobileCostGrid dd {
+    font-size: 13px;
+  }
+
+  .metricSectionBody {
+    grid-template-columns: minmax(0, 1fr) 72px;
+    gap: 7px;
+  }
+
+  .metricSectionIcon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .metricSectionIcon svg {
+    width: 28px;
+    height: 28px;
+  }
+
+  .metricSectionHeader strong {
+    font-size: 18px;
+  }
+
+  .metricItem,
+  .metricItem:first-child {
+    padding-inline: 7px;
+  }
+
+  .metricItem span {
+    font-size: 11px;
+  }
+
+  .metricItem strong {
+    font-size: 13px;
+  }
+
+  .sectionResultImage {
+    width: 72px;
+    height: 58px;
+  }
+
+  .ecoResultCard {
+    grid-template-columns: 48px minmax(0, 1fr);
+    padding: 9px 10px;
+  }
+
+  .ecoResultCard img {
+    width: 46px;
+    height: 46px;
+  }
+
+  .ecoResultCard span {
+    font-size: 12px;
+  }
+
+  .ecoResultCard strong {
+    font-size: 20px;
+  }
+
+  .trendLegend {
+    flex-wrap: wrap;
+    gap: 6px 14px;
+  }
+}
+
+@media (max-width: 360px) {
+  .mobileCostGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 0;
+  }
+
+  .mobileCostGrid div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .metricSectionBody {
+    grid-template-columns: 1fr;
+    padding-left: 0;
+  }
+
+  .sectionResultImage {
+    display: none;
+  }
+}

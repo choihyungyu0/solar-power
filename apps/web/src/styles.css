@@ -1,12 +1,56 @@
-@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css");
+@font-face {
+  font-family: "GyeonggiTitle";
+  src: url("/fonts/gyeonggi/Title_Light.woff") format("woff");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "GyeonggiTitle";
+  src: url("/fonts/gyeonggi/Title_Medium.woff") format("woff");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "GyeonggiTitle";
+  src: url("/fonts/gyeonggi/Title_Bold.woff") format("woff");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "GyeonggiTitleV";
+  src: url("/fonts/gyeonggi/TitleV.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "GyeonggiBatang";
+  src: url("/fonts/gyeonggi/Batang_Regular.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "GyeonggiBatang";
+  src: url("/fonts/gyeonggi/Batang_Bold.woff") format("woff");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
   --font-sans:
-    "Pretendard Variable",
+    "GyeonggiTitle",
     Pretendard,
     "Noto Sans KR",
-    SUIT,
-    "Wanted Sans",
     "Apple SD Gothic Neo",
     "Malgun Gothic",
     -apple-system,
@@ -14,6 +58,11 @@
     "Segoe UI",
     system-ui,
     sans-serif;
+  --font-serif:
+    "GyeonggiBatang",
+    "GyeonggiTitle",
+    "Noto Sans KR",
+    serif;
 }
 
 :root {
@@ -31,17 +80,70 @@
 }
 
 html {
+  min-height: 100%;
   scroll-behavior: smooth;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
 }
 
 body {
   margin: 0;
   min-width: 320px;
+  min-height: 100dvh;
   background: #ffffff;
   overflow-x: hidden;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+body,
+button,
+input,
+select,
+textarea {
+  font-family:
+    "GyeonggiTitle",
+    Pretendard,
+    "Noto Sans KR",
+    "Apple SD Gothic Neo",
+    system-ui,
+    sans-serif;
+}
+
+h1,
+h2,
+h3,
+nav,
+button,
+.solar-page-title,
+.risk-map-title,
+.member-dashboard-title {
+  font-family:
+    "GyeonggiTitle",
+    Pretendard,
+    "Noto Sans KR",
+    sans-serif;
+  letter-spacing: 0;
+}
+
+.notice-content,
+.report-summary,
+.policy-description {
+  font-family:
+    "GyeonggiBatang",
+    "GyeonggiTitle",
+    "Noto Sans KR",
+    serif;
+}
+
+#root {
+  min-height: 100dvh;
 }
 
 a {
@@ -290,6 +392,60 @@ img {
 .heroActions {
   margin-top: 34px;
   flex-wrap: wrap;
+}
+
+.heroAddressForm {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  flex: 1 1 590px;
+  min-width: min(100%, 590px);
+}
+
+.heroAddressField {
+  min-width: 310px;
+  flex: 1 1 auto;
+  display: grid;
+  gap: 4px;
+  border: 1px solid #dbe3ed;
+  border-radius: 17px;
+  padding: 10px 18px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+}
+
+.heroAddressField span {
+  color: #4b5f78;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.heroAddressField input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #111827;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 850;
+  outline: 0;
+}
+
+.heroAddressField input::placeholder {
+  color: #94a3b8;
+}
+
+.heroAddressForm .primaryButton {
+  min-width: 190px;
+  gap: 8px;
+  border: 0;
+}
+
+.heroAddressForm .primaryButton svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
 }
 
 .heroVisual {
@@ -3678,6 +3834,313 @@ img {
   .introProcessText h3 {
     font-size: 20px;
     line-height: 1.22;
+  }
+}
+
+/* Keep the landing route full-bleed on 1920px desktops and stable on small screens. */
+@media (min-width: 1440px) {
+  .pageShell,
+  .siteFrame {
+    min-height: 100dvh;
+  }
+
+  .landingHeader {
+    min-height: 96px;
+    padding-inline: clamp(44px, 4vw, 76px);
+  }
+
+  .heroSection {
+    min-height: calc(100dvh - 326px);
+    height: auto;
+  }
+
+  .heroCopy {
+    padding: clamp(52px, 5vh, 72px) 0 clamp(42px, 5vh, 66px) clamp(78px, 6vw, 116px);
+  }
+
+  .heroVisual,
+  .heroImage,
+  .heroVisual .imagePlaceholder {
+    min-height: 100%;
+  }
+
+  .featureCards,
+  .serviceDetailSection,
+  .processSection,
+  .serviceIntro,
+  .solarFeedInner,
+  .solarFooterInner,
+  .solarFooterBottom,
+  .footer {
+    max-width: none;
+  }
+
+  .featureCards,
+  .serviceDetailSection,
+  .processSection,
+  .serviceIntro,
+  .footer {
+    padding-inline: clamp(48px, 4.4vw, 84px);
+  }
+
+  .solarFeedInner,
+  .solarFooterInner,
+  .solarFooterBottom {
+    width: calc(100% - clamp(96px, 8.8vw, 168px));
+  }
+}
+
+@media (min-width: 1600px) and (max-height: 1100px) {
+  .heroSection {
+    min-height: 610px;
+  }
+
+  .heroCopy h1 {
+    font-size: clamp(62px, 3.8vw, 72px);
+  }
+
+  .featureCards {
+    margin-top: 0;
+    padding-bottom: 28px;
+  }
+
+  .ctaPanel {
+    min-height: 420px;
+    border-radius: 0;
+    margin-top: 0;
+    padding-inline: clamp(64px, 5vw, 96px);
+  }
+}
+
+@media (max-width: 820px) {
+  .pageShell,
+  .siteFrame {
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  .heroSection {
+    min-height: auto;
+  }
+
+  .heroCopy {
+    width: 100%;
+    max-width: none;
+    min-height: auto;
+  }
+
+  .heroActions,
+  .metricStack,
+  .featureCards {
+    width: calc(100% - 36px);
+  }
+
+  .heroActions {
+    margin-right: auto;
+    margin-left: auto;
+  }
+
+  .heroAddressForm {
+    width: 100%;
+    min-width: 0;
+    flex-direction: column;
+  }
+
+  .heroAddressField {
+    min-width: 0;
+  }
+
+  .heroAddressForm .primaryButton {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .metricCard strong {
+    white-space: normal;
+  }
+
+  .serviceIntro,
+  .solarFeedSection,
+  .solarFooter {
+    width: 100%;
+    overflow-x: hidden;
+  }
+}
+
+@media (max-width: 480px) {
+  body {
+    overflow-x: hidden;
+  }
+
+  .landingHeader {
+    width: 100%;
+  }
+
+  .heroSection {
+    min-height: auto;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  .heroCopy {
+    width: 100%;
+    max-width: 100vw;
+    min-height: auto;
+    padding: 40px 24px 20px;
+  }
+
+  .heroCopy h1,
+  .heroDescription,
+  .disclaimer {
+    max-width: min(100%, 320px);
+    word-break: keep-all;
+    overflow-wrap: break-word;
+  }
+
+  .heroVisual {
+    top: 0;
+    right: -6%;
+    bottom: 0;
+    width: 54%;
+    min-height: 100%;
+  }
+
+  .heroActions,
+  .metricStack,
+  .featureCards {
+    width: auto;
+    max-width: none;
+    margin-right: 16px;
+    margin-left: 16px;
+  }
+
+  .heroActions .primaryButton,
+  .heroActions .secondaryButton {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .metricCard {
+    max-width: 100%;
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .metricCard strong {
+    font-size: 21px;
+  }
+
+  .solarFeedCard,
+  .solarFeedCard.feedDuplicate {
+    width: min(286px, calc(100vw - 48px));
+    flex-basis: min(286px, calc(100vw - 48px));
+  }
+}
+
+@media (min-width: 821px) {
+  .heroSection {
+    display: block;
+    min-height: 760px;
+    overflow: hidden;
+  }
+
+  .heroSection::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    background:
+      linear-gradient(90deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.96) 32%, rgba(255, 255, 255, 0.82) 50%, rgba(255, 255, 255, 0.28) 68%, rgba(255, 255, 255, 0) 100%);
+    pointer-events: none;
+  }
+
+  .heroCopy {
+    width: 100%;
+    min-height: 760px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 64px clamp(32px, 5vw, 96px);
+    text-align: center;
+  }
+
+  .heroCopy h1,
+  .heroDescription,
+  .disclaimer {
+    margin-right: auto;
+    margin-left: auto;
+  }
+
+  .heroActions {
+    width: min(100%, 620px);
+    justify-content: center;
+    align-items: center;
+    margin-right: auto;
+    margin-left: auto;
+  }
+
+  .heroAddressForm {
+    width: min(100%, 590px);
+    min-width: 0;
+    flex: 0 0 auto;
+    justify-content: center;
+  }
+
+  .heroAddressField {
+    text-align: left;
+  }
+
+  .heroVisual {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    width: 100%;
+    min-height: 100%;
+  }
+
+  .heroVisual::before {
+    display: none;
+  }
+
+  .heroImage,
+  .heroVisual .imagePlaceholder {
+    width: 100%;
+    height: 100%;
+    min-height: 760px;
+    object-fit: cover;
+    object-position: center right;
+  }
+}
+
+.serviceIntro.reviewOnlyIntro {
+  min-height: auto;
+  padding: 34px clamp(48px, 4.4vw, 84px) 58px;
+  background: #f6f9fc;
+}
+
+.reviewOnlyIntro .introReviewHeader {
+  margin: 0 0 14px;
+}
+
+@media (min-width: 1600px) and (max-height: 1100px) {
+  .serviceIntro.reviewOnlyIntro {
+    min-height: auto;
+    padding-block: 28px 40px;
+  }
+
+  .reviewOnlyIntro .introReviewCard {
+    min-height: 162px;
+    grid-template-columns: 1fr 160px;
+    gap: 16px;
+    padding: 16px;
+  }
+}
+
+@media (max-width: 820px) {
+  .serviceIntro.reviewOnlyIntro {
+    margin-top: 0;
+    padding: 30px 18px 42px;
   }
 }
 

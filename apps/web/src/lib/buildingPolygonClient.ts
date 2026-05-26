@@ -16,6 +16,7 @@ import type {
 type BuildingPolygonRequestInput = {
   longitude: number;
   latitude: number;
+  cameraHeightM?: number | null;
 };
 
 async function requestBuildingPolygonFromApi({
@@ -123,9 +124,10 @@ async function requestBuildingPolygonFromGeoJson({
 async function requestBuildingPolygonFromAdmdongIndex({
   longitude,
   latitude,
+  cameraHeightM,
 }: BuildingPolygonRequestInput): Promise<BuildingPolygonSelectionResult> {
   const sourceLabel = getBuildingPolygonSourceLabel('admdong_index');
-  const result = await findBuildingFootprintInAdmdongIndex([longitude, latitude]);
+  const result = await findBuildingFootprintInAdmdongIndex([longitude, latitude], { cameraHeightM });
 
   if (result.status !== 'selected') {
     return {

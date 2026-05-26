@@ -25,17 +25,40 @@ const VWORLD_ENGINE_SCRIPT_DEFINITIONS = [
     statusKey: 'ol3WebglLoaded',
   },
 ] as const;
-const HWASEONG_INITIAL_LONGITUDE = 127.073;
-const HWASEONG_INITIAL_LATITUDE = 37.1995;
-const HWASEONG_INITIAL_HEIGHT = 8_000;
+const HWASEONG_INITIAL_LONGITUDE = 127.07271472011158;
+const HWASEONG_INITIAL_LATITUDE = 37.2059932805347;
+const HWASEONG_INITIAL_HEIGHT = 340;
+const HWASEONG_INITIAL_PITCH = -82;
+const ENABLE_VWORLD_CAMERA_FALLBACK = import.meta.env.VITE_ENABLE_VWORLD_CAMERA_FALLBACK === 'true';
+const MAP_LEFT_CLICK_SELECT_ONLY = import.meta.env.VITE_MAP_LEFT_CLICK_SELECT_ONLY !== 'false';
+const MAP_CAMERA_CONTROL_MODE = MAP_LEFT_CLICK_SELECT_ONLY ? 'left-click-select-right-drag-map' : 'default';
+const LEFT_CLICK_SELECT_MAX_MOVE_PX = 5;
+const POINTER_DRAG_SUPPRESS_CLICK_MS = 700;
 
 let vworldScriptPromise: Promise<void> | null = null;
-const scriptLoadPromises = new Map<string, Promise<void>>();
+
+type VWorldLoaderWindow = Window &
+  typeof globalThis & {
+    __solarMateScriptLoadPromises?: Map<string, Promise<void>>;
+    __solarMateVWorldScriptPromise?: Promise<void> | null;
+  };
 
 export type VWorldSelection = {
   longitude?: number;
   latitude?: number;
   rawEvent?: unknown;
+  source?: string;
+  method?: string;
+  clickPickMethod?: string;
+  clickPickStatus?: 'success' | 'fallback' | 'failed';
+  pickPositionSupported?: boolean;
+  cameraHeightM?: number | null;
+  pickAttempts?: string[];
+  cameraControlMode?: string;
+  leftDragNavigationDisabled?: boolean;
+  rightDragNavigationEnabled?: boolean;
+  lastPointerMovePx?: number;
+  lastSelectionIgnoredBecauseDrag?: boolean;
 };
 
 export type VWorldMapFocusResult = {
@@ -77,6 +100,94 @@ type InitVWorld3DMapParams = {
 };
 
 type VWorldLoadStatus = Omit<VWorldLoadDiagnostics, 'detectedGlobals' | 'jqueryLoaded' | 'dollarLoaded'>;
+
+type LonLatCoordinate = {
+  longitude: number;
+  latitude: number;
+  method: string;
+};
+
+type ClickPickDiagnostics = {
+  clickPickMethod: string;
+  clickPickStatus: 'success' | 'fallback' | 'failed';
+  pickPositionSupported: boolean;
+  cameraHeightM: number | null;
+  pickAttempts: string[];
+};
+
+type ClickPickResult = {
+  coordinate: LonLatCoordinate | null;
+  diagnostics: ClickPickDiagnostics;
+};
+
+type CameraControlDiagnostics = {
+  cameraControlMode: string;
+  leftDragNavigationDisabled: boolean;
+  rightDragNavigationEnabled: boolean;
+  lastPointerMovePx: number;
+  lastSelectionIgnoredBecauseDrag: boolean;
+};
+
+type ScreenPoint = {
+  x: number;
+  y: number;
+};
+
+type CanvasLike = {
+  clientWidth?: number;
+  clientHeight?: number;
+  width?: number;
+  height?: number;
+  isConnected?: boolean;
+  getBoundingClientRect?: () => DOMRect;
+};
+
+type CesiumEntityCollectionLike = {
+  add?: (entity: unknown) => unknown;
+};
+
+type CesiumViewerLike = {
+  canvas?: CanvasLike;
+  camera?: {
+    setView?: (options: unknown) => void;
+    flyTo?: (options: unknown) => void;
+    getPickRay?: (point: unknown) => unknown;
+    pickEllipsoid?: (point: unknown, ellipsoid?: unknown) => unknown;
+    positionCartographic?: {
+      height?: unknown;
+    };
+  };
+  entities?: CesiumEntityCollectionLike;
+  scene?: {
+    canvas?: CanvasLike;
+    screenSpaceCameraController?: Record<string, unknown>;
+    camera?: {
+      setView?: (options: unknown) => void;
+      flyTo?: (options: unknown) => void;
+      getPickRay?: (point: unknown) => unknown;
+      pickEllipsoid?: (point: unknown, ellipsoid?: unknown) => unknown;
+      positionCartographic?: {
+        height?: unknown;
+      };
+    };
+    globe?: {
+      ellipsoid?: unknown;
+      pick?: (ray: unknown, scene: unknown) => unknown;
+    };
+    pickPosition?: (point: unknown) => unknown;
+    pickPositionSupported?: boolean;
+  };
+};
+
+const KOREA_BOUNDS = {
+  minLongitude: 124,
+  maxLongitude: 132,
+  minLatitude: 33,
+  maxLatitude: 39.5,
+};
+const DUPLICATE_CLICK_WINDOW_MS = 350;
+const TOUCH_TAP_MAX_MOVE_PX = 12;
+const TOUCH_GESTURE_SUPPRESS_CLICK_MS = 700;
 
 class VWorldScriptLoadError extends Error {
   diagnostics: VWorldLoadDiagnostics;
@@ -165,9 +276,65 @@ function createVWorldDiagnostics(status: VWorldLoadStatus): VWorldLoadDiagnostic
 
 function updateVWorldDiagnostics(status: VWorldLoadStatus) {
   const diagnostics = createVWorldDiagnostics(status);
-  window.__solarMateMapDiagnostics = diagnostics;
+  window.__solarMateMapDiagnostics = {
+    ...(window.__solarMateMapDiagnostics ?? {}),
+    ...diagnostics,
+  };
 
   return diagnostics;
+}
+
+function getLoaderWindow() {
+  return window as VWorldLoaderWindow;
+}
+
+function getScriptLoadPromises() {
+  const loaderWindow = getLoaderWindow();
+
+  if (!loaderWindow.__solarMateScriptLoadPromises) {
+    loaderWindow.__solarMateScriptLoadPromises = new Map<string, Promise<void>>();
+  }
+
+  return loaderWindow.__solarMateScriptLoadPromises;
+}
+
+function rememberVWorldScriptPromise(promise: Promise<void> | null) {
+  vworldScriptPromise = promise;
+  getLoaderWindow().__solarMateVWorldScriptPromise = promise;
+}
+
+function clearVWorldScriptPromise() {
+  rememberVWorldScriptPromise(null);
+}
+
+function readCameraControlDiagnostics(): CameraControlDiagnostics {
+  const diagnostics = window.__solarMateMapDiagnostics?.selectionInputControls ?? {};
+
+  return {
+    cameraControlMode:
+      typeof diagnostics.cameraControlMode === 'string' ? diagnostics.cameraControlMode : MAP_CAMERA_CONTROL_MODE,
+    leftDragNavigationDisabled: Boolean(diagnostics.leftDragNavigationDisabled),
+    rightDragNavigationEnabled: Boolean(diagnostics.rightDragNavigationEnabled),
+    lastPointerMovePx:
+      typeof diagnostics.lastPointerMovePx === 'number' && Number.isFinite(diagnostics.lastPointerMovePx)
+        ? diagnostics.lastPointerMovePx
+        : 0,
+    lastSelectionIgnoredBecauseDrag: Boolean(diagnostics.lastSelectionIgnoredBecauseDrag),
+  };
+}
+
+function updateCameraControlDiagnostics(diagnostics: Partial<CameraControlDiagnostics>) {
+  window.__solarMateMapDiagnostics = {
+    ...(window.__solarMateMapDiagnostics ?? {}),
+    selectionInputControls: {
+      ...readCameraControlDiagnostics(),
+      ...diagnostics,
+    },
+  };
+}
+
+function getCurrentSelectionControlDiagnostics(): CameraControlDiagnostics {
+  return readCameraControlDiagnostics();
 }
 
 function findExistingScript(id: string, src: string) {
@@ -182,6 +349,7 @@ function findExistingScript(id: string, src: string) {
 }
 
 function loadScriptOnce(id: string, src: string): Promise<void> {
+  const scriptLoadPromises = getScriptLoadPromises();
   const existingPromise = scriptLoadPromises.get(id) ?? scriptLoadPromises.get(src);
 
   if (existingPromise) {
@@ -192,7 +360,35 @@ function loadScriptOnce(id: string, src: string): Promise<void> {
     const existing = findExistingScript(id, src);
 
     if (existing) {
-      resolve();
+      const loadStatus = existing.dataset.solarMateLoadStatus;
+
+      if (loadStatus === 'loaded' || (existing as HTMLScriptElement & { readyState?: string }).readyState === 'complete') {
+        resolve();
+        return;
+      }
+
+      if (loadStatus === 'error') {
+        reject(new Error(`${id} failed to load`));
+        return;
+      }
+
+      const handleLoad = () => {
+        cleanup();
+        existing.dataset.solarMateLoadStatus = 'loaded';
+        resolve();
+      };
+      const handleError = () => {
+        cleanup();
+        existing.dataset.solarMateLoadStatus = 'error';
+        reject(new Error(`${id} failed to load`));
+      };
+      const cleanup = () => {
+        existing.removeEventListener('load', handleLoad);
+        existing.removeEventListener('error', handleError);
+      };
+
+      existing.addEventListener('load', handleLoad);
+      existing.addEventListener('error', handleError);
       return;
     }
 
@@ -200,8 +396,15 @@ function loadScriptOnce(id: string, src: string): Promise<void> {
     script.id = id;
     script.src = src;
     script.async = false;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error(`${id} failed to load`));
+    script.dataset.solarMateLoadStatus = 'loading';
+    script.onload = () => {
+      script.dataset.solarMateLoadStatus = 'loaded';
+      resolve();
+    };
+    script.onerror = () => {
+      script.dataset.solarMateLoadStatus = 'error';
+      reject(new Error(`${id} failed to load`));
+    };
     document.head.appendChild(script);
   }).catch((error: unknown) => {
     scriptLoadPromises.delete(id);
@@ -271,7 +474,7 @@ async function loadVWorldScriptInternal() {
     status.bootstrapLoaded = true;
     updateVWorldDiagnostics(status);
   } catch {
-    vworldScriptPromise = null;
+    clearVWorldScriptPromise();
     throw new VWorldScriptLoadError(
       '브이월드 3D SDK 부트스트랩 스크립트 로드에 실패했습니다. API 키, SDK URL, Vercel 허용 도메인을 확인해주세요.',
       updateVWorldDiagnostics(status),
@@ -288,12 +491,12 @@ async function loadVWorldScriptInternal() {
       updateVWorldDiagnostics(status);
     }
   } catch {
-    vworldScriptPromise = null;
+    clearVWorldScriptPromise();
     throw new VWorldScriptLoadError(VWORLD_ENGINE_LOAD_FAILURE_MESSAGE, updateVWorldDiagnostics(status));
   }
 
   if (!hasExpectedVWorldGlobal()) {
-    vworldScriptPromise = null;
+    clearVWorldScriptPromise();
     throw new VWorldScriptLoadError(VWORLD_ENGINE_LOAD_FAILURE_MESSAGE, updateVWorldDiagnostics(status));
   }
 
@@ -309,22 +512,680 @@ export function loadVWorldScript() {
     return Promise.resolve();
   }
 
-  if (vworldScriptPromise) {
-    return vworldScriptPromise;
+  const rememberedPromise = vworldScriptPromise ?? getLoaderWindow().__solarMateVWorldScriptPromise ?? null;
+
+  if (rememberedPromise) {
+    vworldScriptPromise = rememberedPromise;
+    return rememberedPromise;
   }
 
-  vworldScriptPromise = loadVWorldScriptInternal();
+  const nextPromise = loadVWorldScriptInternal();
+  rememberVWorldScriptPromise(nextPromise);
 
-  return vworldScriptPromise;
+  return nextPromise;
 }
 
-function extractSelectionFromVWorldClick(args: unknown[]): VWorldSelection {
-  const cartographic = args[2] as { longitudeDD?: number; latitudeDD?: number } | undefined;
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function toDegrees(radians: number) {
+  return (radians * 180) / Math.PI;
+}
+
+function isValidLonLat(longitude: number, latitude: number) {
+  return Math.abs(longitude) <= 180 && Math.abs(latitude) <= 90;
+}
+
+function isLikelyKoreaLonLat(longitude: number, latitude: number) {
+  return (
+    longitude >= KOREA_BOUNDS.minLongitude &&
+    longitude <= KOREA_BOUNDS.maxLongitude &&
+    latitude >= KOREA_BOUNDS.minLatitude &&
+    latitude <= KOREA_BOUNDS.maxLatitude
+  );
+}
+
+function normalizeLonLat(longitude: unknown, latitude: unknown, method: string): LonLatCoordinate | null {
+  if (!isFiniteNumber(longitude) || !isFiniteNumber(latitude)) {
+    return null;
+  }
+
+  if (isValidLonLat(longitude, latitude) && isLikelyKoreaLonLat(longitude, latitude)) {
+    return { longitude, latitude, method };
+  }
+
+  const degreeLongitude = toDegrees(longitude);
+  const degreeLatitude = toDegrees(latitude);
+
+  if (isValidLonLat(degreeLongitude, degreeLatitude) && isLikelyKoreaLonLat(degreeLongitude, degreeLatitude)) {
+    return {
+      longitude: degreeLongitude,
+      latitude: degreeLatitude,
+      method: `${method}:radians`,
+    };
+  }
+
+  return null;
+}
+
+function getRecordNumber(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+
+    if (isFiniteNumber(value)) {
+      return value;
+    }
+
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function extractCoordinateFromValue(
+  value: unknown,
+  methodPrefix: string,
+  visited = new WeakSet<object>(),
+): LonLatCoordinate | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  if (visited.has(value)) {
+    return null;
+  }
+
+  visited.add(value);
+
+  if (Array.isArray(value)) {
+    if (methodPrefix !== 'vworld.args' && value.length >= 2) {
+      const arrayCoordinate = normalizeLonLat(value[0], value[1], `${methodPrefix}:array`);
+
+      if (arrayCoordinate) {
+        return arrayCoordinate;
+      }
+    }
+
+    for (const [index, item] of value.entries()) {
+      const nested = extractCoordinateFromValue(item, `${methodPrefix}[${index}]`, visited);
+
+      if (nested) {
+        return nested;
+      }
+    }
+
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const isMouseLikeRecord = isFiniteNumber(record.clientX) && isFiniteNumber(record.clientY);
+  const explicitCoordinate = normalizeLonLat(
+    getRecordNumber(record, [
+      'longitudeDD',
+      'lonDD',
+      'lngDD',
+      'longitudeDeg',
+      'lonDeg',
+      'lngDeg',
+      'longitude',
+      'lon',
+      'lng',
+      ...(isMouseLikeRecord ? [] : ['x']),
+    ]),
+    getRecordNumber(record, [
+      'latitudeDD',
+      'latDD',
+      'latitudeDeg',
+      'latDeg',
+      'latitude',
+      'lat',
+      ...(isMouseLikeRecord ? [] : ['y']),
+    ]),
+    `${methodPrefix}:fields`,
+  );
+
+  if (explicitCoordinate) {
+    return explicitCoordinate;
+  }
+
+  for (const key of [
+    'cartographic',
+    'coordinate',
+    'coord',
+    'coords',
+    'position',
+    'mapPosition',
+    'mapCoordinate',
+    'point',
+    'pickedPosition',
+    'location',
+    'data',
+    'detail',
+  ]) {
+    const nested = extractCoordinateFromValue(record[key], `${methodPrefix}.${key}`, visited);
+
+    if (nested) {
+      return nested;
+    }
+  }
+
+  return null;
+}
+
+function findMouseEvent(value: unknown, visited = new WeakSet<object>()): MouseEvent | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  if (visited.has(value)) {
+    return null;
+  }
+
+  visited.add(value);
+
+  if (value instanceof MouseEvent) {
+    return value;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  if (isFiniteNumber(record.clientX) && isFiniteNumber(record.clientY)) {
+    return value as MouseEvent;
+  }
+
+  for (const key of ['rawEvent', 'event', 'originalEvent', 'srcEvent', 'domEvent', 'nativeEvent']) {
+    const nested = findMouseEvent(record[key], visited);
+
+    if (nested) {
+      return nested;
+    }
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = findMouseEvent(item, visited);
+
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+
+  return null;
+}
+
+function getCesiumSdk() {
+  const cesium = window.Cesium;
+
+  return cesium && typeof cesium === 'object' ? (cesium as Record<string, any>) : null;
+}
+
+function hasCesiumEntityCollection(value: unknown): value is CesiumViewerLike {
+  try {
+    return Boolean(value && typeof value === 'object' && ((value as CesiumViewerLike).entities?.add));
+  } catch {
+    return false;
+  }
+}
+
+function pushUniqueViewerCandidate(candidates: CesiumViewerLike[], value: unknown) {
+  if (!hasCesiumEntityCollection(value) || candidates.includes(value)) {
+    return;
+  }
+
+  candidates.push(value);
+}
+
+function readObjectValue(record: Record<string, unknown>, key: string) {
+  try {
+    return record[key];
+  } catch {
+    return undefined;
+  }
+}
+
+function getCesiumViewerCandidates(value: unknown): CesiumViewerLike[] {
+  const candidates: CesiumViewerLike[] = [];
+
+  if (!value || typeof value !== 'object') {
+    return candidates;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  pushUniqueViewerCandidate(candidates, value);
+
+  for (const key of ['viewer', '_viewer', 'cesiumViewer', '_cesiumViewer', 'sceneViewer', 'mapViewer']) {
+    pushUniqueViewerCandidate(candidates, readObjectValue(record, key));
+  }
+
+  for (const key of ['getViewer', 'getCesiumViewer', 'getCesium', 'getMap']) {
+    const method = readObjectValue(record, key);
+
+    if (typeof method !== 'function') {
+      continue;
+    }
+
+    try {
+      pushUniqueViewerCandidate(candidates, method.call(value));
+    } catch {
+      // VWorld builds expose different internals; keep looking for a safe viewer candidate.
+    }
+  }
+
+  return candidates;
+}
+
+function getViewerCanvas(viewer: CesiumViewerLike): CanvasLike | null {
+  try {
+    return viewer.scene?.canvas ?? viewer.canvas ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function getViewerCanvasArea(viewer: CesiumViewerLike) {
+  const canvas = getViewerCanvas(viewer);
+  const rect = canvas?.getBoundingClientRect?.();
+  const width = rect?.width || canvas?.clientWidth || canvas?.width || 0;
+  const height = rect?.height || canvas?.clientHeight || canvas?.height || 0;
+
+  return width * height;
+}
+
+function isViewerCanvasVisible(viewer: CesiumViewerLike) {
+  const canvas = getViewerCanvas(viewer);
+
+  if (!canvas || canvas.isConnected === false || getViewerCanvasArea(viewer) <= 0) {
+    return false;
+  }
+
+  if (canvas instanceof HTMLElement) {
+    const style = window.getComputedStyle(canvas);
+
+    return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) !== 0;
+  }
+
+  return true;
+}
+
+function findCesiumViewer(map: VWorldMapInstance | null): CesiumViewerLike | null {
+  const candidates = [map, window.ws3d, window.VW, window.vw].flatMap(getCesiumViewerCandidates);
+  const uniqueCandidates = candidates.filter((candidate, index) => candidates.indexOf(candidate) === index);
+
+  if (uniqueCandidates.length === 0) {
+    return null;
+  }
+
+  return uniqueCandidates.sort((left, right) => {
+    const rightVisible = isViewerCanvasVisible(right) ? 1 : 0;
+    const leftVisible = isViewerCanvasVisible(left) ? 1 : 0;
+
+    return rightVisible - leftVisible || getViewerCanvasArea(right) - getViewerCanvasArea(left);
+  })[0];
+}
+
+function assignCameraEventTypes(controller: Record<string, unknown>, key: string, value: unknown) {
+  try {
+    if (!(key in controller)) {
+      return false;
+    }
+
+    controller[key] = value;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function configureCesiumCameraControls(map: VWorldMapInstance | null) {
+  if (!MAP_LEFT_CLICK_SELECT_ONLY) {
+    updateCameraControlDiagnostics({
+      cameraControlMode: MAP_CAMERA_CONTROL_MODE,
+      leftDragNavigationDisabled: false,
+      rightDragNavigationEnabled: false,
+    });
+    return { configured: false, viewerFound: false };
+  }
+
+  const cesium = getCesiumSdk();
+  const viewer = findCesiumViewer(map);
+  let controller: Record<string, unknown> | undefined;
+
+  try {
+    controller = viewer?.scene?.screenSpaceCameraController;
+  } catch {
+    controller = undefined;
+  }
+
+  const cameraEventType = cesium?.CameraEventType;
+  const keyboardModifier = cesium?.KeyboardEventModifier;
+
+  if (!viewer || !controller || !cameraEventType) {
+    updateCameraControlDiagnostics({
+      cameraControlMode: MAP_CAMERA_CONTROL_MODE,
+      leftDragNavigationDisabled: false,
+      rightDragNavigationEnabled: false,
+    });
+    return { configured: false, viewerFound: Boolean(viewer) };
+  }
+
+  const rightDrag = cameraEventType.RIGHT_DRAG;
+  const middleDrag = cameraEventType.MIDDLE_DRAG;
+  const leftDrag = cameraEventType.LEFT_DRAG;
+  const wheel = cameraEventType.WHEEL;
+  const pinch = cameraEventType.PINCH;
+  const ctrl = keyboardModifier?.CTRL;
+  const zoomEventTypes = [wheel, pinch].filter((eventType) => eventType !== undefined);
+  const tiltEventTypes = [
+    middleDrag,
+    leftDrag !== undefined && ctrl !== undefined ? { eventType: leftDrag, modifier: ctrl } : null,
+    rightDrag !== undefined && ctrl !== undefined ? { eventType: rightDrag, modifier: ctrl } : null,
+  ].filter(Boolean);
+
+  const rotateSet = rightDrag !== undefined && assignCameraEventTypes(controller, 'rotateEventTypes', rightDrag);
+  const translateSet = rightDrag !== undefined && assignCameraEventTypes(controller, 'translateEventTypes', rightDrag);
+  const zoomSet = zoomEventTypes.length > 0 && assignCameraEventTypes(controller, 'zoomEventTypes', zoomEventTypes);
+  const tiltSet = tiltEventTypes.length > 0 && assignCameraEventTypes(controller, 'tiltEventTypes', tiltEventTypes);
+  const configured = Boolean(rotateSet || translateSet || zoomSet || tiltSet);
+
+  updateCameraControlDiagnostics({
+    cameraControlMode: MAP_CAMERA_CONTROL_MODE,
+    leftDragNavigationDisabled: Boolean(rotateSet),
+    rightDragNavigationEnabled: Boolean(rotateSet || translateSet),
+  });
+
+  return { configured, viewerFound: true };
+}
+
+function scheduleCesiumCameraControlConfiguration(map: VWorldMapInstance | null) {
+  let timeoutId: number | null = null;
+  let attempts = 0;
+  const maxAttempts = 12;
+
+  const run = () => {
+    attempts += 1;
+    const result = configureCesiumCameraControls(map);
+
+    if (result.configured || attempts >= maxAttempts || !MAP_LEFT_CLICK_SELECT_ONLY) {
+      if (
+        MAP_LEFT_CLICK_SELECT_ONLY &&
+        !result.viewerFound &&
+        attempts >= maxAttempts &&
+        import.meta.env.DEV
+      ) {
+        console.warn(
+          '[EcoHat] Cesium viewer was not available, so VWorld map mouse controls kept the existing behavior.',
+        );
+      }
+      return;
+    }
+
+    timeoutId = window.setTimeout(run, 250);
+  };
+
+  run();
+
+  return () => {
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId);
+    }
+  };
+}
+
+function getScreenPointFromMouseEvent(event: MouseEvent, viewer: CesiumViewerLike): ScreenPoint | null {
+  const canvas = getViewerCanvas(viewer);
+  const rect = canvas?.getBoundingClientRect?.();
+
+  if (!rect) {
+    return null;
+  }
+
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 || x > rect.width || y > rect.height) {
+    return null;
+  }
+
+  return { x, y };
+}
+
+function getLonLatFromCartesian(cartesian: unknown, method: string): LonLatCoordinate | null {
+  const cesium = getCesiumSdk();
+
+  if (!cartesian || !cesium?.Cartographic?.fromCartesian) {
+    return null;
+  }
+
+  try {
+    const cartographic = cesium.Cartographic.fromCartesian(cartesian);
+
+    if (!cartographic) {
+      return null;
+    }
+
+    return normalizeLonLat(cartographic.longitude, cartographic.latitude, method);
+  } catch {
+    return null;
+  }
+}
+
+function getCameraHeightM(viewer: CesiumViewerLike | null) {
+  const camera = viewer?.scene?.camera ?? viewer?.camera;
+  const height = camera?.positionCartographic?.height;
+
+  return typeof height === 'number' && Number.isFinite(height) ? height : null;
+}
+
+function createClickPickDiagnostics(
+  overrides: Partial<ClickPickDiagnostics>,
+  viewer: CesiumViewerLike | null,
+): ClickPickDiagnostics {
+  return {
+    clickPickMethod: '-',
+    clickPickStatus: 'failed',
+    pickPositionSupported: Boolean(viewer?.scene?.pickPositionSupported),
+    cameraHeightM: getCameraHeightM(viewer),
+    pickAttempts: [],
+    ...overrides,
+  };
+}
+
+function createClickPickResult(
+  coordinate: LonLatCoordinate | null,
+  diagnostics: ClickPickDiagnostics,
+): ClickPickResult {
+  return {
+    coordinate,
+    diagnostics: {
+      ...diagnostics,
+      clickPickMethod: coordinate?.method ?? diagnostics.clickPickMethod,
+      clickPickStatus: coordinate ? diagnostics.clickPickStatus : 'failed',
+    },
+  };
+}
+
+function createFallbackClickPickResult(
+  fallbackCoordinate: LonLatCoordinate | null,
+  viewer: CesiumViewerLike | null,
+  pickAttempts: string[],
+): ClickPickResult {
+  return createClickPickResult(
+    fallbackCoordinate,
+    createClickPickDiagnostics(
+      {
+        clickPickMethod: fallbackCoordinate?.method ?? '-',
+        clickPickStatus: fallbackCoordinate ? 'fallback' : 'failed',
+        pickAttempts,
+      },
+      viewer,
+    ),
+  );
+}
+
+function pickCoordinateFromCesiumCanvas(
+  map: VWorldMapInstance | null,
+  event: MouseEvent | null,
+  fallbackCoordinate: LonLatCoordinate | null = null,
+): ClickPickResult {
+  const cesium = getCesiumSdk();
+  const viewer = findCesiumViewer(map);
+  const pickAttempts: string[] = [];
+
+  if (!event) {
+    return createFallbackClickPickResult(fallbackCoordinate, viewer, ['mouse-event-missing']);
+  }
+
+  const screenPoint = viewer ? getScreenPointFromMouseEvent(event, viewer) : null;
+
+  if (!cesium?.Cartesian2 || !viewer || !screenPoint) {
+    return createFallbackClickPickResult(fallbackCoordinate, viewer, [
+      !viewer ? 'cesium-viewer-missing' : 'cesium-screen-point-missing',
+    ]);
+  }
+
+  const cesiumPoint = new cesium.Cartesian2(screenPoint.x, screenPoint.y);
+  const pickPositionSupported = Boolean(viewer.scene?.pickPositionSupported && viewer.scene?.pickPosition);
+
+  if (pickPositionSupported) {
+    pickAttempts.push('cesium.scene.pickPosition');
+
+    try {
+      const pickedCartesian = viewer.scene?.pickPosition?.(cesiumPoint);
+      const pickedCoordinate = getLonLatFromCartesian(pickedCartesian, 'cesium.scene.pickPosition');
+
+      if (pickedCoordinate) {
+        return createClickPickResult(
+          pickedCoordinate,
+          createClickPickDiagnostics(
+            {
+              clickPickMethod: pickedCoordinate.method,
+              clickPickStatus: 'success',
+              pickPositionSupported,
+              pickAttempts,
+            },
+            viewer,
+          ),
+        );
+      }
+    } catch {
+      // Try globe picking next.
+    }
+  } else {
+    pickAttempts.push('cesium.scene.pickPosition:unsupported');
+  }
+
+  try {
+    pickAttempts.push('cesium.globe.pick');
+    const camera = viewer.scene?.camera ?? viewer.camera;
+    const pickRay = camera?.getPickRay?.(cesiumPoint);
+    const pickedCartesian = pickRay ? viewer.scene?.globe?.pick?.(pickRay, viewer.scene) : null;
+    const pickedCoordinate = getLonLatFromCartesian(pickedCartesian, 'cesium.globe.pick');
+
+    if (pickedCoordinate) {
+      return createClickPickResult(
+        pickedCoordinate,
+        createClickPickDiagnostics(
+          {
+            clickPickMethod: pickedCoordinate.method,
+            clickPickStatus: 'success',
+            pickPositionSupported,
+            pickAttempts,
+          },
+          viewer,
+        ),
+      );
+    }
+  } catch {
+    // Fall back to ellipsoid picking below.
+  }
+
+  try {
+    pickAttempts.push('cesium.camera.pickEllipsoid');
+    const camera = viewer.scene?.camera ?? viewer.camera;
+    const ellipsoid = viewer.scene?.globe?.ellipsoid;
+    const pickedCartesian = camera?.pickEllipsoid?.(cesiumPoint, ellipsoid);
+    const pickedCoordinate = getLonLatFromCartesian(pickedCartesian, 'cesium.camera.pickEllipsoid');
+
+    if (pickedCoordinate) {
+      return createClickPickResult(
+        pickedCoordinate,
+        createClickPickDiagnostics(
+          {
+            clickPickMethod: pickedCoordinate.method,
+            clickPickStatus: 'success',
+            pickPositionSupported,
+            pickAttempts,
+          },
+          viewer,
+        ),
+      );
+    }
+  } catch {
+    // Fall back to VWorld native coordinate payload below.
+  }
+
+  pickAttempts.push(fallbackCoordinate ? fallbackCoordinate.method : 'vworld-coordinate-missing');
+  return createFallbackClickPickResult(fallbackCoordinate, viewer, pickAttempts);
+}
+
+function extractSelectionFromVWorldClick(
+  args: unknown[],
+  map: VWorldMapInstance | null,
+  source: string,
+): VWorldSelection {
+  const coordinateFromArgs = extractCoordinateFromValue(args, 'vworld.args');
+  const rawEvent = findMouseEvent(args) ?? args[4] ?? args[0];
+  const pickResult = pickCoordinateFromCesiumCanvas(
+    map,
+    rawEvent instanceof MouseEvent ? rawEvent : null,
+    coordinateFromArgs,
+  );
+  const coordinate = pickResult.coordinate;
 
   return {
-    longitude: cartographic?.longitudeDD,
-    latitude: cartographic?.latitudeDD,
-    rawEvent: args[4] ?? args[0],
+    longitude: coordinate?.longitude,
+    latitude: coordinate?.latitude,
+    method: coordinate?.method,
+    source,
+    rawEvent,
+    clickPickMethod: pickResult.diagnostics.clickPickMethod,
+    clickPickStatus: pickResult.diagnostics.clickPickStatus,
+    pickPositionSupported: pickResult.diagnostics.pickPositionSupported,
+    cameraHeightM: pickResult.diagnostics.cameraHeightM,
+    pickAttempts: pickResult.diagnostics.pickAttempts,
+    ...getCurrentSelectionControlDiagnostics(),
+  };
+}
+
+export function createVWorldSelectionFromMouseEvent(
+  map: VWorldMapInstance | null,
+  event: MouseEvent,
+  source = 'dom.click',
+): VWorldSelection {
+  const pickResult = pickCoordinateFromCesiumCanvas(map, event);
+  const coordinate = pickResult.coordinate;
+
+  return {
+    longitude: coordinate?.longitude,
+    latitude: coordinate?.latitude,
+    method: coordinate?.method,
+    source,
+    rawEvent: event,
+    clickPickMethod: pickResult.diagnostics.clickPickMethod,
+    clickPickStatus: pickResult.diagnostics.clickPickStatus,
+    pickPositionSupported: pickResult.diagnostics.pickPositionSupported,
+    cameraHeightM: pickResult.diagnostics.cameraHeightM,
+    pickAttempts: pickResult.diagnostics.pickAttempts,
+    ...getCurrentSelectionControlDiagnostics(),
   };
 }
 
@@ -333,7 +1194,7 @@ function createVWorldCameraPosition(
   latitude = HWASEONG_INITIAL_LATITUDE,
   height = HWASEONG_INITIAL_HEIGHT,
   heading = 0,
-  pitch = -70,
+  pitch = HWASEONG_INITIAL_PITCH,
   roll = 0,
 ) {
   const vw = window.vw;
@@ -359,7 +1220,7 @@ function createVWorldCoordZ(longitude: number, latitude: number, height: number)
 }
 
 function invokeMapMethod(map: VWorldMapInstance, methodName: string, argument: unknown) {
-  const method = (map as unknown as Record<string, unknown>)[methodName];
+  const method = readObjectValue(map as unknown as Record<string, unknown>, methodName);
 
   if (typeof method !== 'function') {
     return false;
@@ -367,6 +1228,80 @@ function invokeMapMethod(map: VWorldMapInstance, methodName: string, argument: u
 
   method.call(map, argument);
   return true;
+}
+
+function focusCesiumViewerOnCoordinate(
+  map: VWorldMapInstance | null,
+  {
+    longitude,
+    latitude,
+    height,
+    heading,
+    pitch,
+    roll,
+  }: {
+    longitude: number;
+    latitude: number;
+    height: number;
+    heading: number;
+    pitch: number;
+    roll: number;
+  },
+): VWorldMapFocusResult | null {
+  const cesium = getCesiumSdk();
+  const viewer = findCesiumViewer(map);
+  let camera: CesiumViewerLike['camera'] | undefined;
+
+  try {
+    camera = viewer?.scene?.camera ?? viewer?.camera;
+  } catch {
+    camera = undefined;
+  }
+
+  if (!cesium?.Cartesian3?.fromDegrees || !camera) {
+    return null;
+  }
+
+  const destination = cesium.Cartesian3.fromDegrees(longitude, latitude, height);
+  const orientation =
+    cesium.Math?.toRadians && (heading !== 0 || pitch !== 0 || roll !== 0)
+      ? {
+          heading: cesium.Math.toRadians(heading),
+          pitch: cesium.Math.toRadians(pitch),
+          roll: cesium.Math.toRadians(roll),
+        }
+      : undefined;
+  const cameraOptions = orientation ? { destination, orientation } : { destination };
+
+  try {
+    if (typeof camera.setView === 'function') {
+      camera.setView(cameraOptions);
+
+      return {
+        moved: true,
+        method: 'cesium.camera.setView',
+        message: '선택 건물 중심으로 Cesium 카메라를 이동했습니다.',
+      };
+    }
+  } catch {
+    // Try flyTo below.
+  }
+
+  try {
+    if (typeof camera.flyTo === 'function') {
+      camera.flyTo({ ...cameraOptions, duration: 0.4 });
+
+      return {
+        moved: true,
+        method: 'cesium.camera.flyTo',
+        message: '선택 건물 중심으로 Cesium 카메라 이동을 예약했습니다.',
+      };
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 }
 
 export function focusVWorldMapOnCoordinate(
@@ -392,6 +1327,27 @@ export function focusVWorldMapOnCoordinate(
       moved: false,
       method: '',
       message: '지도 객체가 아직 준비되지 않아 선택 위치로 이동하지 못했습니다.',
+    };
+  }
+
+  const cesiumFocusResult = focusCesiumViewerOnCoordinate(map, {
+    longitude,
+    latitude,
+    height,
+    heading,
+    pitch,
+    roll,
+  });
+
+  if (cesiumFocusResult) {
+    return cesiumFocusResult;
+  }
+
+  if (!ENABLE_VWORLD_CAMERA_FALLBACK) {
+    return {
+      moved: false,
+      method: '',
+      message: 'Cesium 카메라를 찾지 못해 VWorld wrapper 이동 호출을 건너뛰었습니다.',
     };
   }
 
@@ -522,8 +1478,31 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : '알 수 없는 오류';
 }
 
+function isVWorldViewerRedefinitionError(error: unknown) {
+  return getErrorMessage(error).includes('Cannot redefine property: viewer');
+}
+
 export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWorldMapController {
   let map: VWorldMapInstance | null = null;
+  let lastSelection:
+    | {
+        longitude: number;
+        latitude: number;
+        selectedAt: number;
+      }
+    | null = null;
+  let suppressClickUntil = 0;
+  let wasMultiTouchGesture = false;
+  let activeLeftPointer:
+    | {
+        pointerId: number;
+        startX: number;
+        startY: number;
+        startedAt: number;
+        maxMovePx: number;
+      }
+    | null = null;
+  const activeTouchPointers = new Map<number, { startX: number; startY: number; maxMovePx: number }>();
 
   if (!ensureJQueryGlobal()) {
     throw new Error(VWORLD_JQUERY_FAILURE_MESSAGE);
@@ -550,30 +1529,242 @@ export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWo
 
   const initialPosition = createVWorldCameraPosition();
 
-  map.setOption?.(createVWorldMapOptions(mapId, initialPosition) as VWorldMapOptions);
-  map.setMapId?.(mapId);
-  map.setInitPosition?.(initialPosition);
-  map.setLogoVisible?.(true);
-  map.setNavigationZoomVisible?.(true);
-  map.start?.();
+  try {
+    map.setOption?.(createVWorldMapOptions(mapId, initialPosition) as VWorldMapOptions);
+    map.setMapId?.(mapId);
+    map.setInitPosition?.(initialPosition);
+    map.setLogoVisible?.(true);
+    map.setNavigationZoomVisible?.(true);
+    map.start?.();
+  } catch (error) {
+    if (!isVWorldViewerRedefinitionError(error)) {
+      throw error;
+    }
+
+    window.__solarMateMapDiagnostics = {
+      ...(window.__solarMateMapDiagnostics ?? {}),
+      vworldViewerRedefinitionIgnored: true,
+      vworldViewerRedefinitionMessage: getErrorMessage(error),
+    };
+  }
   focusVWorldMapOnCoordinate(map, {
     longitude: HWASEONG_INITIAL_LONGITUDE,
     latitude: HWASEONG_INITIAL_LATITUDE,
     height: HWASEONG_INITIAL_HEIGHT,
-    pitch: -70,
+    pitch: HWASEONG_INITIAL_PITCH,
   });
+  const cleanupCameraControlConfiguration = scheduleCesiumCameraControlConfiguration(map);
 
-  // 건물 피처 선택 API 연결 전까지는 클릭 좌표 기반의 1차 선택 흐름을 사용합니다.
+  function updateClickDiagnostics(selection: VWorldSelection, status: 'selected' | 'ignored') {
+    const selectionInputControls = getCurrentSelectionControlDiagnostics();
+
+    window.__solarMateMapDiagnostics = {
+      ...(window.__solarMateMapDiagnostics ?? {}),
+      selectionInputControls,
+      lastClickSelection: {
+        status,
+        source: selection.source ?? '-',
+        method: selection.method ?? '-',
+        clickPickMethod: selection.clickPickMethod ?? selection.method ?? '-',
+        clickPickStatus: selection.clickPickStatus ?? 'failed',
+        pickPositionSupported: selection.pickPositionSupported ?? false,
+        cameraHeightM: selection.cameraHeightM ?? null,
+        longitude: selection.longitude ?? null,
+        latitude: selection.latitude ?? null,
+        cameraControlMode: selectionInputControls.cameraControlMode,
+        leftDragNavigationDisabled: selectionInputControls.leftDragNavigationDisabled,
+        rightDragNavigationEnabled: selectionInputControls.rightDragNavigationEnabled,
+        lastPointerMovePx: selectionInputControls.lastPointerMovePx,
+        lastSelectionIgnoredBecauseDrag: selectionInputControls.lastSelectionIgnoredBecauseDrag,
+        selectedAt: new Date().toISOString(),
+      },
+    };
+  }
+
+  function isDuplicateSelection(selection: VWorldSelection) {
+    if (
+      !lastSelection ||
+      !isFiniteNumber(selection.longitude) ||
+      !isFiniteNumber(selection.latitude) ||
+      Date.now() - lastSelection.selectedAt > DUPLICATE_CLICK_WINDOW_MS
+    ) {
+      return false;
+    }
+
+    return (
+      Math.abs(lastSelection.longitude - selection.longitude) < 0.00005 &&
+      Math.abs(lastSelection.latitude - selection.latitude) < 0.00005
+    );
+  }
+
+  function emitSelection(selection: VWorldSelection) {
+    if (Date.now() < suppressClickUntil) {
+      updateClickDiagnostics(selection, 'ignored');
+      return;
+    }
+
+    if (!isFiniteNumber(selection.longitude) || !isFiniteNumber(selection.latitude)) {
+      updateClickDiagnostics(selection, 'ignored');
+      return;
+    }
+
+    if (isDuplicateSelection(selection)) {
+      updateClickDiagnostics(selection, 'ignored');
+      return;
+    }
+
+    lastSelection = {
+      longitude: selection.longitude,
+      latitude: selection.latitude,
+      selectedAt: Date.now(),
+    };
+    updateCameraControlDiagnostics({
+      lastPointerMovePx: selection.lastPointerMovePx ?? readCameraControlDiagnostics().lastPointerMovePx,
+      lastSelectionIgnoredBecauseDrag: false,
+    });
+    updateClickDiagnostics(selection, 'selected');
+    onSelect?.(selection);
+  }
+
+  // VWorld native click usually provides the most stable map-coordinate payload.
+  // React shell click capture remains as a delayed fallback from RiskMapPage.
   const clickHandler = (...args: unknown[]) => {
-    onSelect?.(extractSelectionFromVWorldClick(args));
+    emitSelection(extractSelectionFromVWorldClick(args, map, 'vworld.onClick'));
+  };
+  map.onClick?.addEventListener?.(clickHandler);
+
+  const mapElement = document.getElementById(mapId);
+
+  const markTouchGestureForSuppression = () => {
+    suppressClickUntil = Date.now() + TOUCH_GESTURE_SUPPRESS_CLICK_MS;
   };
 
-  map.onClick?.addEventListener?.(clickHandler);
+  const markLeftDragForSuppression = (movePx: number) => {
+    if (!MAP_LEFT_CLICK_SELECT_ONLY) {
+      return;
+    }
+
+    suppressClickUntil = Date.now() + POINTER_DRAG_SUPPRESS_CLICK_MS;
+    updateCameraControlDiagnostics({
+      lastPointerMovePx: Math.round(movePx * 10) / 10,
+      lastSelectionIgnoredBecauseDrag: true,
+    });
+  };
+
+  const pointerDownHandler = (event: PointerEvent) => {
+    if (MAP_LEFT_CLICK_SELECT_ONLY && event.pointerType === 'mouse' && event.button === 0) {
+      activeLeftPointer = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        startedAt: Date.now(),
+        maxMovePx: 0,
+      };
+      updateCameraControlDiagnostics({
+        lastPointerMovePx: 0,
+        lastSelectionIgnoredBecauseDrag: false,
+      });
+      return;
+    }
+
+    if (event.pointerType !== 'touch' && event.pointerType !== 'pen') {
+      return;
+    }
+
+    activeTouchPointers.set(event.pointerId, {
+      startX: event.clientX,
+      startY: event.clientY,
+      maxMovePx: 0,
+    });
+    wasMultiTouchGesture = wasMultiTouchGesture || activeTouchPointers.size > 1;
+  };
+
+  const pointerMoveHandler = (event: PointerEvent) => {
+    if (activeLeftPointer?.pointerId === event.pointerId) {
+      const movePx = Math.hypot(event.clientX - activeLeftPointer.startX, event.clientY - activeLeftPointer.startY);
+      activeLeftPointer.maxMovePx = Math.max(activeLeftPointer.maxMovePx, movePx);
+
+      if (activeLeftPointer.maxMovePx > LEFT_CLICK_SELECT_MAX_MOVE_PX) {
+        markLeftDragForSuppression(activeLeftPointer.maxMovePx);
+      }
+      return;
+    }
+
+    const pointer = activeTouchPointers.get(event.pointerId);
+
+    if (!pointer) {
+      return;
+    }
+
+    const movePx = Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY);
+    pointer.maxMovePx = Math.max(pointer.maxMovePx, movePx);
+
+    if (pointer.maxMovePx > TOUCH_TAP_MAX_MOVE_PX || activeTouchPointers.size > 1) {
+      markTouchGestureForSuppression();
+    }
+  };
+
+  const pointerUpHandler = (event: PointerEvent) => {
+    if (activeLeftPointer?.pointerId === event.pointerId) {
+      const movePx = Math.hypot(event.clientX - activeLeftPointer.startX, event.clientY - activeLeftPointer.startY);
+      activeLeftPointer.maxMovePx = Math.max(activeLeftPointer.maxMovePx, movePx);
+
+      if (activeLeftPointer.maxMovePx > LEFT_CLICK_SELECT_MAX_MOVE_PX) {
+        markLeftDragForSuppression(activeLeftPointer.maxMovePx);
+      } else {
+        updateCameraControlDiagnostics({
+          lastPointerMovePx: Math.round(activeLeftPointer.maxMovePx * 10) / 10,
+          lastSelectionIgnoredBecauseDrag: false,
+        });
+      }
+
+      activeLeftPointer = null;
+      return;
+    }
+
+    const pointer = activeTouchPointers.get(event.pointerId);
+
+    if (pointer && (pointer.maxMovePx > TOUCH_TAP_MAX_MOVE_PX || wasMultiTouchGesture)) {
+      markTouchGestureForSuppression();
+    }
+
+    activeTouchPointers.delete(event.pointerId);
+
+    if (activeTouchPointers.size === 0) {
+      wasMultiTouchGesture = false;
+    }
+  };
+
+  const touchMoveHandler = (event: TouchEvent) => {
+    if (event.touches.length > 1) {
+      markTouchGestureForSuppression();
+    }
+  };
+
+  const contextMenuHandler = (event: MouseEvent) => {
+    if (MAP_LEFT_CLICK_SELECT_ONLY) {
+      event.preventDefault();
+    }
+  };
+
+  mapElement?.addEventListener('pointerdown', pointerDownHandler, { passive: true });
+  mapElement?.addEventListener('pointermove', pointerMoveHandler, { passive: true });
+  mapElement?.addEventListener('pointerup', pointerUpHandler, { passive: true });
+  mapElement?.addEventListener('pointercancel', pointerUpHandler, { passive: true });
+  mapElement?.addEventListener('touchmove', touchMoveHandler, { passive: true });
+  mapElement?.addEventListener('contextmenu', contextMenuHandler);
 
   return {
     map,
     dispose: () => {
+      cleanupCameraControlConfiguration();
       map?.onClick?.removeEventListener?.(clickHandler);
+      mapElement?.removeEventListener('pointerdown', pointerDownHandler);
+      mapElement?.removeEventListener('pointermove', pointerMoveHandler);
+      mapElement?.removeEventListener('pointerup', pointerUpHandler);
+      mapElement?.removeEventListener('pointercancel', pointerUpHandler);
+      mapElement?.removeEventListener('touchmove', touchMoveHandler);
+      mapElement?.removeEventListener('contextmenu', contextMenuHandler);
       map?.destroy?.();
       document.getElementById(mapId)?.replaceChildren();
     },
