@@ -424,6 +424,28 @@ export default function ConsultationPage() {
                 />
               </label>
 
+              <section className="consultation-privacy-notice" aria-label="개인정보 수집 및 이용 안내">
+                <strong>개인정보 수집 및 이용 안내</strong>
+                <dl>
+                  <div>
+                    <dt>수집 항목</dt>
+                    <dd>이름, 연락처, 이메일, 상담 내용, 설치 검토 주소, 분석/수익 리포트 식별자</dd>
+                  </div>
+                  <div>
+                    <dt>이용 목적</dt>
+                    <dd>태양광 설치 가능성 검토, 보조금/금융 상담 안내, 접수 이력 관리</dd>
+                  </div>
+                  <div>
+                    <dt>보유 기간</dt>
+                    <dd>상담 종료 후 1년 또는 관련 법령상 보관 기간까지 보관 후 파기</dd>
+                  </div>
+                  <div>
+                    <dt>제3자 제공</dt>
+                    <dd>동의한 경우에만 설치 가능성 검토를 위해 협력 상담사에게 필요한 범위로 전달</dd>
+                  </div>
+                </dl>
+              </section>
+
               <label className="consultation-consent-row" htmlFor="consultation-privacy-agreed">
                 <input
                   id="consultation-privacy-agreed"

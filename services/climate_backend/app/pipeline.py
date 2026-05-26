@@ -1,3 +1,4 @@
+import json
 import time
 import traceback
 from typing import Any
@@ -22,6 +23,11 @@ PIPELINE_SOURCE = "external-fastapi-climate-backend"
 MANUAL_TEST_SOURCE = "manual-production-test"
 DEFAULT_MAX_CELLS = 300
 FULL_MAX_CELLS = 2500
+MAX_SELECTED_FEATURE_JSON_BYTES = 500_000
+MAX_INPUT_COORDINATE_COUNT = 1_000
+MAX_ROOF_AREA_M2 = 70_000
+MAX_GRID_CELL_SCAN_COUNT = 50_000
+MAX_ORIGINAL_CELL_COUNT = 20_000
 SELECT_BULD_TIMEOUT_SECONDS = 8
 SELECT_BULD_MATCH_DISTANCE_M = 15
 MONTHLY_GENERATION_WEIGHTS = [
@@ -71,6 +77,20 @@ def _find_coordinate_sample(value):
                 return sample
 
     return None
+
+
+def _count_coordinate_pairs(value: Any) -> int:
+    if not isinstance(value, (list, tuple)):
+        return 0
+
+    if (
+        len(value) >= 2
+        and isinstance(value[0], (int, float))
+        and isinstance(value[1], (int, float))
+    ):
+        return 1
+
+    return sum(_count_coordinate_pairs(item) for item in value)
 
 
 def _coordinate_sample_from_geometry(geometry: dict[str, Any] | None):
@@ -137,7 +157,6 @@ def _pipeline_error_response(step: str, started: float, diagnostics: dict[str, A
         "step": step,
         "elapsedMs": _elapsed_ms(started),
         "errorType": type(error).__name__,
-        "error": str(error),
     }
 
     return {
@@ -146,11 +165,32 @@ def _pipeline_error_response(step: str, started: float, diagnostics: dict[str, A
         "selectedBuildingId": diagnostics.get("selectedBuildingId"),
         "selectedAnalysisSessionId": diagnostics.get("selectedAnalysisSessionId"),
         "fallbackRecommended": True,
-        "message": f"백엔드 climate 분석 중 {step} 단계에서 오류가 발생했습니다.",
+        "message": "기후 분석을 완료하지 못했습니다. 입력 건물 정보를 확인한 뒤 다시 시도해주세요.",
         "errorType": type(error).__name__,
-        "error": str(error),
-        "trace": traceback.format_exc().splitlines()[-15:],
         "diagnostics": next_diagnostics,
+    }
+
+
+def _pipeline_validation_error_response(
+    *,
+    message: str,
+    started: float,
+    diagnostics: dict[str, Any],
+    extra_diagnostics: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "source": PIPELINE_SOURCE,
+        "selectedBuildingId": diagnostics.get("selectedBuildingId"),
+        "selectedAnalysisSessionId": diagnostics.get("selectedAnalysisSessionId"),
+        "fallbackRecommended": True,
+        "message": message,
+        "errorType": "ValidationError",
+        "diagnostics": {
+            **diagnostics,
+            **(extra_diagnostics or {}),
+            "elapsedMs": _elapsed_ms(started),
+        },
     }
 
 
@@ -462,12 +502,52 @@ async def run_hybrid_pipeline(request):
         selected_building_feature = request.selectedBuildingFeature
 
         if not selected_building_feature:
-            raise ValueError("selectedBuildingFeature가 없어 분석할 건물 polygon이 없습니다.")
+            return _pipeline_validation_error_response(
+                message="분석할 건물 polygon 정보가 없습니다.",
+                started=started,
+                diagnostics=diagnostics,
+            )
+
+        try:
+            selected_feature_bytes = len(
+                json.dumps(selected_building_feature, ensure_ascii=False).encode("utf-8")
+            )
+        except (TypeError, ValueError):
+            selected_feature_bytes = MAX_SELECTED_FEATURE_JSON_BYTES + 1
+
+        if selected_feature_bytes > MAX_SELECTED_FEATURE_JSON_BYTES:
+            return _pipeline_validation_error_response(
+                message="건물 polygon 요청 데이터가 너무 큽니다. 건물 1개 단위로 다시 선택해주세요.",
+                started=started,
+                diagnostics=diagnostics,
+                extra_diagnostics={
+                    "selectedFeatureBytes": selected_feature_bytes,
+                    "maxSelectedFeatureBytes": MAX_SELECTED_FEATURE_JSON_BYTES,
+                },
+            )
 
         geometry = _read_geometry(selected_building_feature)
 
         if not geometry:
-            raise ValueError("selectedBuildingFeature.geometry가 없습니다.")
+            return _pipeline_validation_error_response(
+                message="건물 geometry 정보가 없습니다.",
+                started=started,
+                diagnostics=diagnostics,
+            )
+
+        coordinate_count = _count_coordinate_pairs(geometry.get("coordinates"))
+        diagnostics["coordinateCount"] = coordinate_count
+
+        if coordinate_count > MAX_INPUT_COORDINATE_COUNT:
+            return _pipeline_validation_error_response(
+                message="건물 polygon 좌표가 너무 많습니다. 단순화된 건물 경계로 다시 시도해주세요.",
+                started=started,
+                diagnostics=diagnostics,
+                extra_diagnostics={
+                    "coordinateCount": coordinate_count,
+                    "maxCoordinateCount": MAX_INPUT_COORDINATE_COUNT,
+                },
+            )
 
         step = "parse-geometry"
         diagnostics["step"] = step
@@ -520,9 +600,38 @@ async def run_hybrid_pipeline(request):
         roof_area = roof_5186.area
         diagnostics["roofAreaM2"] = round(roof_area, 2)
 
+        if roof_area > MAX_ROOF_AREA_M2:
+            return _pipeline_validation_error_response(
+                message="선택한 지붕 면적이 너무 큽니다. 건물 또는 동 단위로 나누어 다시 분석해주세요.",
+                started=started,
+                diagnostics=diagnostics,
+                extra_diagnostics={
+                    "roofAreaM2": round(roof_area, 2),
+                    "maxRoofAreaM2": MAX_ROOF_AREA_M2,
+                },
+            )
+
         step = "generate-cells"
         diagnostics["step"] = step
         max_cells = FULL_MAX_CELLS if request.mode == "full" else DEFAULT_MAX_CELLS
+        minx, miny, maxx, maxy = roof_5186.bounds
+        estimated_grid_cell_count = int(
+            max(0, maxx - minx) * max(0, maxy - miny) / 3.5
+        )
+        diagnostics["estimatedGridCellCount"] = estimated_grid_cell_count
+        diagnostics["maxGridCellScanCount"] = MAX_GRID_CELL_SCAN_COUNT
+
+        if estimated_grid_cell_count > MAX_GRID_CELL_SCAN_COUNT:
+            return _pipeline_validation_error_response(
+                message="선택한 polygon 범위가 너무 넓습니다. 건물 경계를 다시 선택해주세요.",
+                started=started,
+                diagnostics=diagnostics,
+                extra_diagnostics={
+                    "estimatedGridCellCount": estimated_grid_cell_count,
+                    "maxGridCellScanCount": MAX_GRID_CELL_SCAN_COUNT,
+                },
+            )
+
         cells, original_count = make_cells_in_polygon(
             roof_5186,
             cell_w=1.0,
@@ -533,8 +642,23 @@ async def run_hybrid_pipeline(request):
         diagnostics["usedCellCount"] = len(cells)
         diagnostics["maxCellsApplied"] = original_count > len(cells)
 
+        if original_count > MAX_ORIGINAL_CELL_COUNT:
+            return _pipeline_validation_error_response(
+                message="분석 셀 수가 너무 많습니다. 건물 또는 동 단위로 나누어 다시 분석해주세요.",
+                started=started,
+                diagnostics=diagnostics,
+                extra_diagnostics={
+                    "originalCellCount": original_count,
+                    "maxOriginalCellCount": MAX_ORIGINAL_CELL_COUNT,
+                },
+            )
+
         if not cells:
-            raise ValueError("건물 polygon 내부에 분석 셀을 생성하지 못했습니다.")
+            return _pipeline_validation_error_response(
+                message="건물 polygon 내부에 분석 셀을 생성하지 못했습니다. 건물 경계를 다시 선택해주세요.",
+                started=started,
+                diagnostics=diagnostics,
+            )
 
         step = "select-sun-list"
         diagnostics["step"] = step
@@ -873,7 +997,6 @@ def debug_geometry_pipeline(request):
             "geometryTypeBefore": geometry_type_before,
             "geometryTypeAfter": None,
             "errorType": type(error).__name__,
-            "error": str(error),
-            "trace": traceback.format_exc().splitlines()[-15:],
+            "message": "건물 geometry 디버그 분석을 완료하지 못했습니다.",
             "elapsedMs": _elapsed_ms(started),
         }

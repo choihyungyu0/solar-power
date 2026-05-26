@@ -471,10 +471,8 @@ async def climate_rooftop_analysis(payload: ClimateAnalysisRequest):
             "ok": False,
             "source": "external-fastapi-climate-backend",
             "fallbackRecommended": True,
-            "message": "백엔드 climate 분석 중 오류가 발생했습니다. 기본 패널 배치를 유지합니다.",
+            "message": "기후 분석을 완료하지 못했습니다. 입력 건물 정보를 확인한 뒤 다시 시도해주세요.",
             "errorType": type(error).__name__,
-            "error": str(error),
-            "trace": traceback.format_exc().splitlines()[-15:],
             "diagnostics": create_request_diagnostics(payload),
         }
 
@@ -589,6 +587,5 @@ async def debug_geometry(payload: GeometryDebugRequest):
         return {
             "ok": False,
             "errorType": type(error).__name__,
-            "error": str(error),
-            "trace": traceback.format_exc().splitlines()[-15:],
+            "message": "건물 geometry 디버그 분석을 완료하지 못했습니다.",
         }
