@@ -13,6 +13,7 @@ class ClimateAnalysisRequest(BaseModel):
     panelAngle: int = 35
     panelType: int = 1
     cellsPerPanel: int = 2
+    includePvAnalysis: bool = False
     mode: Literal["fast", "full"] = "fast"
 
 

@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .pipeline import create_request_diagnostics, debug_geometry_pipeline, run_hybrid_pipeline
 from .schemas import ClimateAnalysisRequest, ConsultationRequest, GeometryDebugRequest
-from .supabase_client import create_db_health_status, save_consultation_request
+from .supabase_client import check_supabase_health, save_consultation_request
 
 app = FastAPI(title="SolarMate Climate Backend")
 
@@ -39,7 +39,7 @@ def health():
 
 @app.get("/api/db-health")
 def db_health():
-    return create_db_health_status()
+    return check_supabase_health()
 
 
 @app.get("/debug/cors")
@@ -90,18 +90,24 @@ async def create_consultation(payload: ConsultationRequest):
     if not name:
         return {
             "ok": False,
+            "message": "이름을 입력해주세요.",
+            "errorType": "ValidationError",
             "error": "name is required.",
         }
 
     if not contact:
         return {
             "ok": False,
+            "message": "연락처를 입력해주세요.",
+            "errorType": "ValidationError",
             "error": "contact is required.",
         }
 
     if payload.privacyAgreed is not True:
         return {
             "ok": False,
+            "message": "개인정보 수집 및 이용에 동의해주세요.",
+            "errorType": "ValidationError",
             "error": "privacyAgreed must be true.",
         }
 
@@ -131,8 +137,10 @@ async def create_consultation(payload: ConsultationRequest):
 
     return {
         "ok": False,
+        "message": "상담 신청 저장 중 오류가 발생했습니다.",
         "errorType": save_result.get("errorType"),
-        "error": save_result.get("error") or "상담 신청 저장에 실패했습니다.",
+        "reason": save_result.get("reason"),
+        "error": save_result.get("error") or save_result.get("reason") or "consultation save failed.",
     }
 
 

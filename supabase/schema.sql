@@ -310,28 +310,38 @@ set
   note = excluded.note;
 
 insert into public.install_reviews (apartment_name, region, content, saving_text, rating, is_demo)
-values
-  (
-    '햇빛마을 아파트',
-    '경기 남부',
-    '공용 전기요금 부담과 설치 가능성을 한 화면에서 비교할 수 있어 입주민 설명 자료로 쓰기 좋았습니다.',
-    '예상 절감액 확인',
-    5,
-    true
-  ),
-  (
-    '도심그린 공공주택',
-    '경기권',
-    '보조금 후보가 확정이 아니라 확인 필요 상태로 표시되어 의사결정 리스크를 설명하기 쉬웠습니다.',
-    '정책 후보 확인',
-    5,
-    true
-  ),
-  (
-    '새빛타운',
-    '화성시',
-    '세대수, 옥상 면적, 월 전기요금만으로 1차 검토를 빠르게 시작할 수 있었습니다.',
-    '설치 검토 시작',
-    4,
-    true
-  );
+select seed.apartment_name, seed.region, seed.content, seed.saving_text, seed.rating, seed.is_demo
+from (
+  values
+    (
+      '햇빛마을 아파트',
+      '경기 남부',
+      '공용 전기요금 부담과 설치 가능성을 한 화면에서 비교할 수 있어 입주민 설명 자료로 쓰기 좋았습니다.',
+      '예상 절감액 확인',
+      5,
+      true
+    ),
+    (
+      '도심그린 공공주택',
+      '경기권',
+      '보조금 후보가 확정이 아니라 확인 필요 상태로 표시되어 의사결정 리스크를 설명하기 쉬웠습니다.',
+      '정책 후보 확인',
+      5,
+      true
+    ),
+    (
+      '새빛타운',
+      '화성시',
+      '세대수, 옥상 면적, 월 전기요금만으로 1차 검토를 빠르게 시작할 수 있었습니다.',
+      '설치 검토 시작',
+      4,
+      true
+    )
+) as seed(apartment_name, region, content, saving_text, rating, is_demo)
+where not exists (
+  select 1
+  from public.install_reviews existing
+  where existing.apartment_name = seed.apartment_name
+    and existing.region = seed.region
+    and existing.content = seed.content
+);

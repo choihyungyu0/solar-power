@@ -1,6 +1,7 @@
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import type { FormEvent } from 'react';
 import { useState } from 'react';
+import { clearDemoAuth } from '../lib/demoAuth';
 
 type AuthPanelProps = {
   supabase: SupabaseClient | null;
@@ -64,6 +65,7 @@ function AuthPanel({ supabase, session, isConfigured }: AuthPanelProps) {
     }
 
     await supabase.auth.signOut();
+    clearDemoAuth();
     setMessage('로그아웃되었습니다.');
   }
 

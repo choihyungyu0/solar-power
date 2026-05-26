@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { LuUserRound } from 'react-icons/lu';
 import { clearDemoAuth, getDemoAuth } from '../lib/demoAuth';
+import { supabase } from '../lib/supabase';
+import { useSupabaseSession } from '../lib/useSupabaseSession';
 import './SolarMateHeader.css';
 
 type SolarMateHeaderProps = {
@@ -32,12 +34,17 @@ const navItems = [
 export default function SolarMateHeader({ variant = 'public', onBeforeLogin, onBeforeLogout }: SolarMateHeaderProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { session } = useSupabaseSession();
   const demoAuth = useMemo(() => getDemoAuth(), [location.pathname, location.search]);
-  const isLoggedIn = demoAuth?.isLoggedIn === true;
+  const isSupabaseLoggedIn = Boolean(session?.user);
+  const isLoggedIn = isSupabaseLoggedIn || demoAuth?.isLoggedIn === true;
 
-  const handleAuthClick = () => {
+  const handleAuthClick = async () => {
     if (isLoggedIn) {
       onBeforeLogout?.();
+      if (isSupabaseLoggedIn) {
+        await supabase?.auth.signOut();
+      }
       clearDemoAuth();
       navigate('/login');
       return;

@@ -14,12 +14,12 @@ type StoredConsultationInquiry = {
   content?: string;
   phone?: string;
   email?: string;
-  roadAddress: string;
-  jibunAddress: string;
+  roadAddress?: string;
+  jibunAddress?: string;
   monthlyPaymentKrw?: number;
   consultationRequestId?: string | null;
   serverSaveMessage?: string;
-  createdAt: string;
+  createdAt?: string;
 };
 
 type CompletionAddress = {
@@ -28,8 +28,8 @@ type CompletionAddress = {
 };
 
 const fallbackAddress: CompletionAddress = {
-  roadAddress: '경기도 수원시 팔달구 경수대로 464',
-  jibunAddress: '경기 수원시 팔달구 인계동 1017',
+  roadAddress: '경기도 수원시 영통구 경수대로 464',
+  jibunAddress: '경기도 수원시 영통구 매탄동 1017',
 };
 
 function readConsultationInquiryFromSession() {
@@ -83,6 +83,8 @@ export default function ConsultationCompletePage() {
   const navigate = useNavigate();
   const address = getCompletionAddress();
   const consultationRequestId = getConsultationRequestId();
+  const inquiry = readConsultationInquiryFromSession();
+  const serverSaveMessage = pickText(inquiry?.serverSaveMessage);
 
   return (
     <div className="consultation-complete-page">
@@ -102,12 +104,13 @@ export default function ConsultationCompletePage() {
               <p>담당 매니저가 순차적으로 연락드리겠습니다.</p>
               <p>(영업일 기준 1일 ~ 3일이 소요됩니다.)</p>
               <p>{consultationRequestId ? `접수번호: ${consultationRequestId}` : '임시 접수 상태입니다.'}</p>
+              {serverSaveMessage && <p>{serverSaveMessage}</p>}
             </div>
           </section>
         </section>
 
         <button className="consultation-complete-prev-button" type="button" onClick={() => navigate('/service')}>
-          <span aria-hidden="true">‹</span>
+          <span aria-hidden="true">←</span>
           이전
         </button>
       </main>
@@ -119,7 +122,7 @@ function AddressSummary({ address }: { address: CompletionAddress }) {
   return (
     <section className="consultation-complete-address-box" aria-label="문의 접수 주소">
       <div className="consultation-complete-address-row">
-        <strong>도로명주소</strong>
+        <strong>도로명 주소</strong>
         <p>{address.roadAddress}</p>
       </div>
 

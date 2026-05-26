@@ -429,6 +429,38 @@ export function saveSimulationResultToSession(result: StoredSimulationResult) {
   }
 }
 
+export function attachConsultationRequestIdToStoredSimulationResult(consultationRequestId: string) {
+  if (typeof window === 'undefined' || !consultationRequestId.trim()) {
+    return false;
+  }
+
+  try {
+    const rawValue = window.sessionStorage.getItem(SELECTED_SIMULATION_RESULT_STORAGE_KEY);
+
+    if (!rawValue) {
+      return false;
+    }
+
+    const parsedValue = JSON.parse(rawValue) as Partial<StoredSimulationResult>;
+
+    if (!parsedValue || typeof parsedValue !== 'object' || !parsedValue.building || !parsedValue.solar) {
+      return false;
+    }
+
+    window.sessionStorage.setItem(
+      SELECTED_SIMULATION_RESULT_STORAGE_KEY,
+      JSON.stringify({
+        ...parsedValue,
+        consultationRequestId,
+      }),
+    );
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function readSimulationResultFromSession() {
   if (typeof window === 'undefined') {
     return null;
