@@ -34,16 +34,26 @@ type AddedVWorldObject = {
   object: unknown;
 };
 
+type CesiumSelectionResult = {
+  addedCount: number;
+  renderMethod: string;
+  viewerDebugId: string | null;
+  viewerEntityCount: number | null;
+  cleanup: () => void;
+};
+
 const SELECTED_BUILDING_ENTITY_PREFIX = 'solarmate-selected-building-';
 const SELECTED_BUILDING_FILL_ID = `${SELECTED_BUILDING_ENTITY_PREFIX}fill`;
 const SELECTED_BUILDING_OUTLINE_ID = `${SELECTED_BUILDING_ENTITY_PREFIX}outline`;
 const SELECTED_BUILDING_LABEL_ID = `${SELECTED_BUILDING_ENTITY_PREFIX}label`;
 const LEGACY_SELECTED_BUILDING_IDS = ['solarmate-click-selected-building', 'solarmate-click-selected-building-layer'];
 const DEFAULT_SELECTED_ROOF_HEIGHT_M = 20;
-const SELECTED_BUILDING_ROOF_OFFSET_M = 3;
-const SELECTED_BUILDING_DEBUG_HEIGHT_OFFSET_M = 80;
+const SELECTED_BUILDING_ROOF_OFFSET_M = 10;
+const SELECTED_BUILDING_DEBUG_HEIGHT_OFFSET_M = 130;
+const SELECTED_BUILDING_FILL_ALPHA = 0.6;
+const SELECTED_BUILDING_OUTLINE_WIDTH = 7;
 const CONSTRUCTOR_ERROR_MESSAGE =
-  '선택 건물 polygon을 지도 좌표 객체로 표시하려면 VWorld 또는 Cesium polygon 객체 연결이 필요합니다.';
+  '선택 건물 polygon을 VWorld 또는 Cesium 지도 객체로 표시하지 못했습니다.';
 
 function createStatus(
   state: VWorldSelectedBuildingLayerStatus['state'],
@@ -61,6 +71,24 @@ function createStatus(
     viewerEntityCount: null,
     ...diagnostics,
   };
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isValidPolygon(polygon: PolygonCoordinates | null | undefined): polygon is PolygonCoordinates {
+  return (
+    Array.isArray(polygon) &&
+    polygon.length >= 3 &&
+    polygon.every(
+      (coordinate) =>
+        Array.isArray(coordinate) &&
+        coordinate.length >= 2 &&
+        Number.isFinite(coordinate[0]) &&
+        Number.isFinite(coordinate[1]),
+    )
+  );
 }
 
 function getSelectedBuildingHeightM(viewer: CesiumViewerLike, polygon: PolygonCoordinates, roofHeightM?: number) {
@@ -84,78 +112,93 @@ function addSelectedPolygonWithCesium({
   viewer: CesiumViewerLike;
   polygon: PolygonCoordinates;
   roofHeightM?: number;
-}) {
+}): CesiumSelectionResult | null {
   const cesium = getCesiumSdk();
   const entities = viewer.entities;
 
-  if (!cesium?.Cartesian3?.fromDegreesArrayHeights || !cesium?.Cartesian3?.fromDegrees || !entities?.add) {
+  if (!isValidPolygon(polygon) || !cesium?.Cartesian3?.fromDegreesArrayHeights || !cesium?.Cartesian3?.fromDegrees || !entities?.add) {
     return null;
   }
 
-  removeCesiumEntitiesByIdPrefix(viewer, [SELECTED_BUILDING_ENTITY_PREFIX]);
-  LEGACY_SELECTED_BUILDING_IDS.forEach((id) => entities.removeById?.(id));
-
-  const closedPolygon = closePolygon(polygon);
-  const centroid = getPolygonCentroid(closedPolygon);
-  const heightM = getSelectedBuildingHeightM(viewer, closedPolygon, roofHeightM);
-  const hierarchyPositions = cesium.Cartesian3.fromDegreesArrayHeights(createLonLatHeightArray(closedPolygon, heightM));
-  const hierarchy = cesium.PolygonHierarchy ? new cesium.PolygonHierarchy(hierarchyPositions) : hierarchyPositions;
-  const outlinePositions = cesium.Cartesian3.fromDegreesArrayHeights(createLonLatHeightArray(closedPolygon, heightM + 0.6));
-  const fillMaterial =
-    cesium.Color?.RED?.withAlpha?.(0.42) ??
-    cesium.Color?.fromCssColorString?.('#ef4444')?.withAlpha?.(0.42) ??
-    cesium.Color?.fromCssColorString?.('#ef4444');
-  const outlineMaterial = cesium.Color?.fromCssColorString?.('#ff0f3d') ?? cesium.Color?.RED;
-  const labelBackground = cesium.Color?.fromCssColorString?.('#b91c1c')?.withAlpha?.(0.82) ?? cesium.Color?.RED;
-  const labelFill = cesium.Color?.WHITE;
   const addedObjects: unknown[] = [];
-  const addEntity = entities.add.bind(entities);
-  const heightReferenceNone = cesium.HeightReference?.NONE;
 
-  const fillEntity = addEntity({
-    id: SELECTED_BUILDING_FILL_ID,
-    polygon: {
-      hierarchy,
-      perPositionHeight: true,
-      material: fillMaterial,
-      outline: true,
-      outlineColor: outlineMaterial,
-      ...(heightReferenceNone !== undefined ? { heightReference: heightReferenceNone } : {}),
-    },
-  });
-  const outlineEntity = addEntity({
-    id: SELECTED_BUILDING_OUTLINE_ID,
-    polyline: {
-      positions: outlinePositions,
-      width: 6,
-      material: outlineMaterial,
-      clampToGround: false,
-      ...(outlineMaterial ? { depthFailMaterial: outlineMaterial } : {}),
-      ...(heightReferenceNone !== undefined ? { heightReference: heightReferenceNone } : {}),
-    },
-  });
-  const labelEntity = addEntity({
-    id: SELECTED_BUILDING_LABEL_ID,
-    position: cesium.Cartesian3.fromDegrees(centroid[0], centroid[1], heightM + 14),
-    label: {
-      text: '선택 건물',
-      fillColor: labelFill,
-      showBackground: true,
-      backgroundColor: labelBackground,
-      font: '700 13px sans-serif',
-      pixelOffset: cesium.Cartesian2 ? new cesium.Cartesian2(0, -16) : undefined,
-      horizontalOrigin: cesium.HorizontalOrigin?.CENTER,
-      verticalOrigin: cesium.VerticalOrigin?.BOTTOM,
-      disableDepthTestDistance: Number.POSITIVE_INFINITY,
-      ...(heightReferenceNone !== undefined ? { heightReference: heightReferenceNone } : {}),
-    },
-  });
+  try {
+    removeCesiumEntitiesByIdPrefix(viewer, [SELECTED_BUILDING_ENTITY_PREFIX]);
+    LEGACY_SELECTED_BUILDING_IDS.forEach((id) => entities.removeById?.(id));
 
-  [fillEntity, outlineEntity, labelEntity].forEach((entity) => {
-    if (entity) {
-      addedObjects.push(entity);
-    }
-  });
+    const closedPolygon = closePolygon(polygon);
+    const centroid = getPolygonCentroid(closedPolygon);
+    const heightM = getSelectedBuildingHeightM(viewer, closedPolygon, roofHeightM);
+    const hierarchyPositions = cesium.Cartesian3.fromDegreesArrayHeights(createLonLatHeightArray(closedPolygon, heightM));
+    const hierarchy = cesium.PolygonHierarchy ? new cesium.PolygonHierarchy(hierarchyPositions) : hierarchyPositions;
+    const outlinePositions = cesium.Cartesian3.fromDegreesArrayHeights(createLonLatHeightArray(closedPolygon, heightM + 0.6));
+    const fillMaterial =
+      cesium.Color?.fromCssColorString?.('#ff1f3d')?.withAlpha?.(SELECTED_BUILDING_FILL_ALPHA) ??
+      cesium.Color?.RED?.withAlpha?.(SELECTED_BUILDING_FILL_ALPHA) ??
+      cesium.Color?.fromCssColorString?.('#ff1f3d');
+    const outlineMaterial = cesium.Color?.fromCssColorString?.('#ff002b') ?? cesium.Color?.RED;
+    const labelBackground = cesium.Color?.fromCssColorString?.('#b91c1c')?.withAlpha?.(0.82) ?? cesium.Color?.RED;
+    const labelFill = cesium.Color?.WHITE;
+    const addEntity = entities.add.bind(entities);
+    const heightReferenceNone = cesium.HeightReference?.NONE;
+
+    const fillEntity = addEntity({
+      id: SELECTED_BUILDING_FILL_ID,
+      polygon: {
+        hierarchy,
+        perPositionHeight: true,
+        material: fillMaterial,
+        outline: true,
+        outlineColor: outlineMaterial,
+        ...(heightReferenceNone !== undefined ? { heightReference: heightReferenceNone } : {}),
+      },
+    });
+    const outlineEntity = addEntity({
+      id: SELECTED_BUILDING_OUTLINE_ID,
+      polyline: {
+        positions: outlinePositions,
+        width: SELECTED_BUILDING_OUTLINE_WIDTH,
+        material: outlineMaterial,
+        clampToGround: false,
+        ...(outlineMaterial ? { depthFailMaterial: outlineMaterial } : {}),
+        ...(heightReferenceNone !== undefined ? { heightReference: heightReferenceNone } : {}),
+      },
+    });
+    const labelEntity = addEntity({
+      id: SELECTED_BUILDING_LABEL_ID,
+      position: cesium.Cartesian3.fromDegrees(centroid[0], centroid[1], heightM + 14),
+      label: {
+        text: '선택 건물',
+        fillColor: labelFill,
+        showBackground: true,
+        backgroundColor: labelBackground,
+        font: '700 13px sans-serif',
+        pixelOffset: cesium.Cartesian2 ? new cesium.Cartesian2(0, -16) : undefined,
+        horizontalOrigin: cesium.HorizontalOrigin?.CENTER,
+        verticalOrigin: cesium.VerticalOrigin?.BOTTOM,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        ...(heightReferenceNone !== undefined ? { heightReference: heightReferenceNone } : {}),
+      },
+    });
+
+    [fillEntity, outlineEntity, labelEntity].forEach((entity) => {
+      if (entity) {
+        addedObjects.push(entity);
+      }
+    });
+  } catch {
+    addedObjects.forEach((entity) => {
+      try {
+        entities.remove?.(entity);
+      } catch {
+        // Cleanup is best-effort across Cesium/VWorld builds.
+      }
+    });
+    removeCesiumEntitiesByIdPrefix(viewer, [SELECTED_BUILDING_ENTITY_PREFIX]);
+    viewer.scene?.requestRender?.();
+
+    return null;
+  }
 
   viewer.scene?.requestRender?.();
 
@@ -181,7 +224,7 @@ function addSelectedPolygonWithCesium({
 function createVWorldPolygonGeometry(polygon: PolygonCoordinates) {
   const vw = window.vw;
 
-  if (!vw?.geom?.Polygon || !vw.Coord) {
+  if (!isValidPolygon(polygon) || !vw?.geom?.Polygon || !vw.Coord) {
     return null;
   }
 
@@ -190,7 +233,15 @@ function createVWorldPolygonGeometry(polygon: PolygonCoordinates) {
   try {
     return new vw.geom.Polygon(coordinateObjects);
   } catch {
-    return new vw.geom.Polygon(polygon);
+    try {
+      return new vw.geom.Polygon([coordinateObjects]);
+    } catch {
+      try {
+        return new vw.geom.Polygon([polygon]);
+      } catch {
+        return null;
+      }
+    }
   }
 }
 
@@ -201,16 +252,20 @@ function createVWorldStyle() {
     return undefined;
   }
 
-  const style = new vw.style.Style();
-  const fill = new vw.style.Fill('rgba(239, 68, 68, 0.42)');
-  const stroke = new vw.style.Stroke('#dc2626');
+  try {
+    const style = new vw.style.Style();
+    const fill = new vw.style.Fill('rgba(239, 68, 68, 0.42)');
+    const stroke = new vw.style.Stroke('#dc2626');
 
-  stroke.setWidth?.(5);
-  fill.setStroke?.(stroke);
-  style.fill = fill;
-  style.stroke = stroke;
+    stroke.setWidth?.(5);
+    fill.setStroke?.(stroke);
+    style.fill = fill;
+    style.stroke = stroke;
 
-  return style;
+    return style;
+  } catch {
+    return undefined;
+  }
 }
 
 function addSelectedPolygonToMap(map: VWorldMapInstance, polygon: PolygonCoordinates) {
@@ -225,16 +280,19 @@ function addSelectedPolygonToMap(map: VWorldMapInstance, polygon: PolygonCoordin
   const feature = new vw.Feature();
   const featureLayer = vw?.layer?.Feature ? new vw.layer.Feature() : null;
 
-  feature.setId?.('solarmate-click-selected-building');
-  feature.setGeometry?.(geometry);
-  feature.setStyle?.(style);
+  try {
+    feature.setId?.('solarmate-click-selected-building');
+    feature.setGeometry?.(geometry);
+    feature.setStyle?.(style);
+  } catch {
+    return undefined;
+  }
 
   if (featureLayer?.setFeature) {
-    featureLayer.setName?.('solarmate-click-selected-building-layer');
-    featureLayer.setFeature(feature);
-    featureLayer.setStyle?.(style);
-
     try {
+      featureLayer.setName?.('solarmate-click-selected-building-layer');
+      featureLayer.setFeature(feature);
+      featureLayer.setStyle?.(style);
       map.addElement?.(featureLayer);
 
       return {
@@ -287,28 +345,39 @@ function VWorldSelectedBuildingLayer({
 }: VWorldSelectedBuildingLayerProps) {
   useEffect(() => {
     if (!isActive || !polygon) {
-      onStatusChange(
-        createStatus('idle', '건물 polygon을 선택하면 선택 건물을 지도에 강조 표시합니다.', '대기'),
-      );
+      onStatusChange(createStatus('idle', '건물 polygon을 선택하면 선택 건물을 지도에 강조 표시합니다.', '대기'));
+      return undefined;
+    }
+
+    if (!isValidPolygon(polygon)) {
+      onStatusChange(createStatus('fallback', '선택 건물 polygon 좌표가 유효하지 않아 지도 표시를 건너뜁니다.', '지도 표시 실패'));
       return undefined;
     }
 
     if (!map) {
-      onStatusChange(
-        createStatus('fallback', '지도가 준비되면 선택 건물 polygon을 표시합니다.', '지도 표시 실패'),
-      );
+      onStatusChange(createStatus('fallback', '지도가 준비되면 선택 건물 polygon을 표시합니다.', '지도 표시 실패'));
       return undefined;
     }
 
-    const cesiumViewer = findVisibleCesiumViewer(map);
-    const cesiumResult = cesiumViewer
-      ? addSelectedPolygonWithCesium({
-          viewer: cesiumViewer,
-          polygon,
-          roofHeightM,
-        })
-      : null;
-    const addedObject = cesiumResult ? undefined : addSelectedPolygonToMap(map, polygon);
+    let cesiumResult: CesiumSelectionResult | null = null;
+    let addedObject: AddedVWorldObject | undefined;
+    let renderErrorMessage = '';
+
+    try {
+      const cesiumViewer = findVisibleCesiumViewer(map);
+      cesiumResult = cesiumViewer
+        ? addSelectedPolygonWithCesium({
+            viewer: cesiumViewer,
+            polygon,
+            roofHeightM,
+          })
+        : null;
+      addedObject = cesiumResult ? undefined : addSelectedPolygonToMap(map, polygon);
+    } catch (error) {
+      renderErrorMessage = getErrorMessage(error);
+      cesiumResult?.cleanup();
+      addedObject = undefined;
+    }
 
     if (cesiumResult?.addedCount) {
       onStatusChange(
@@ -333,7 +402,13 @@ function VWorldSelectedBuildingLayer({
         ),
       );
     } else {
-      onStatusChange(createStatus('fallback', CONSTRUCTOR_ERROR_MESSAGE, '지도 표시 실패'));
+      onStatusChange(
+        createStatus(
+          'fallback',
+          renderErrorMessage ? `${CONSTRUCTOR_ERROR_MESSAGE} (${renderErrorMessage})` : CONSTRUCTOR_ERROR_MESSAGE,
+          '지도 표시 실패',
+        ),
+      );
       return undefined;
     }
 

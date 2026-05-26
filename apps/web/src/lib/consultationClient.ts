@@ -24,7 +24,9 @@ export type ConsultationSubmitResponse =
     }
   | {
       ok: false;
+      message?: string;
       errorType?: string;
+      reason?: string;
       error?: string;
     };
 
@@ -44,6 +46,7 @@ export async function submitConsultationRequest(
   if (!baseUrl) {
     return {
       ok: false,
+      message: '상담 서버가 설정되지 않아 임시 저장합니다.',
       errorType: 'BackendNotConfigured',
       error: 'VITE_CLIMATE_BACKEND_BASE_URL is empty.',
     };
@@ -75,12 +78,18 @@ export async function submitConsultationRequest(
 
     return {
       ok: false,
+      message:
+        isRecord(data) && typeof data.message === 'string'
+          ? data.message
+          : '상담 신청 저장 중 오류가 발생했습니다.',
       errorType: isRecord(data) && typeof data.errorType === 'string' ? data.errorType : `HTTP_${response.status}`,
-      error: isRecord(data) && typeof data.error === 'string' ? data.error : '상담 신청 저장에 실패했습니다.',
+      reason: isRecord(data) && typeof data.reason === 'string' ? data.reason : undefined,
+      error: isRecord(data) && typeof data.error === 'string' ? data.error : 'consultation save failed.',
     };
   } catch (error) {
     return {
       ok: false,
+      message: '상담 신청 저장 중 오류가 발생했습니다.',
       errorType: error instanceof Error ? error.name : 'FetchError',
       error: error instanceof Error ? error.message : String(error),
     };

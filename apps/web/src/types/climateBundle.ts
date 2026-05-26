@@ -67,9 +67,17 @@ export type ClimateBundlePvOutputRaw = {
 
 export type ClimateDbSaveStatus = {
   enabled: boolean;
+  analysisResultOk?: boolean;
   analysisResultId: string | null;
   ok: boolean;
+  errorType?: string;
+  reason?: string;
   error?: string;
+  trainingSampleOk?: boolean;
+  trainingSampleId?: string | null;
+  trainingSampleErrorType?: string;
+  trainingSampleReason?: string;
+  trainingSampleError?: string;
 };
 
 export type ClimateBundle = {

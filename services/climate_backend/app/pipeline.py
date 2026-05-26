@@ -5,12 +5,13 @@ from typing import Any
 from shapely.geometry import mapping
 
 from .ai_simulation import build_ai_simulation_result, calculate_shading_ratios
-from .climate_client import call_pv_analysis, call_select_sun_list
+from .climate_client import call_pv_analysis, call_select_buld, call_select_sun_list
 from .geometry import (
     cell_to_geojson_polygon_4326,
     cells_to_geojson_4326,
     geom_4326_to_5186,
     geom_5186_to_4326,
+    lonlat_to_5186,
     make_cells_in_polygon,
     normalize_geojson_polygon_4326,
 )
@@ -19,6 +20,9 @@ from .supabase_client import save_analysis_result, save_training_sample
 
 PIPELINE_SOURCE = "external-fastapi-climate-backend"
 DEFAULT_MAX_CELLS = 300
+FULL_MAX_CELLS = 2500
+SELECT_BULD_TIMEOUT_SECONDS = 8
+SELECT_BULD_MATCH_DISTANCE_M = 15
 MONTHLY_GENERATION_WEIGHTS = [
     0.072,
     0.079,
@@ -117,6 +121,7 @@ def create_request_diagnostics(request) -> dict[str, Any]:
         "geometryType": geometry.get("type") if geometry else None,
         "coordinateSample": _coordinate_sample_from_geometry(geometry),
         "mode": getattr(request, "mode", None),
+        "includePvAnalysis": getattr(request, "includePvAnalysis", None),
         "panelCapacityW": getattr(request, "panelCapacityW", None),
         "panelAngle": getattr(request, "panelAngle", None),
         "cellsPerPanel": getattr(request, "cellsPerPanel", None),
@@ -223,16 +228,61 @@ def _read_nested(mapping_value: dict[str, Any] | None, *keys: str):
     return current
 
 
+def _select_buld_match_diagnostics(select_buld_5186, selected_roof_5186):
+    centroid = select_buld_5186.centroid
+    centroid_inside = selected_roof_5186.covers(centroid)
+    centroid_distance = 0.0 if centroid_inside else centroid.distance(selected_roof_5186)
+    centroid_4326 = geom_5186_to_4326(centroid)
+
+    return {
+        "matchesSelectedBuilding": centroid_inside or centroid_distance <= SELECT_BULD_MATCH_DISTANCE_M,
+        "centroidInsideSelectedBuilding": bool(centroid_inside),
+        "centroidDistanceToSelectedBuildingM": round(float(centroid_distance), 2),
+        "centroidWgs84": {
+            "longitude": float(centroid_4326.x),
+            "latitude": float(centroid_4326.y),
+        },
+    }
+
+
 def _safe_db_status(save_result: dict[str, Any]) -> dict[str, Any]:
     analysis_result_id = save_result.get("id") if isinstance(save_result.get("id"), str) else None
     status = {
         "enabled": save_result.get("enabled") is True,
+        "analysisResultOk": save_result.get("ok") is True,
         "analysisResultId": analysis_result_id,
         "ok": save_result.get("ok") is True,
     }
 
-    if save_result.get("ok") is not True and save_result.get("error"):
-        status["error"] = str(save_result.get("error"))
+    if save_result.get("ok") is not True:
+        if save_result.get("errorType"):
+            status["errorType"] = str(save_result.get("errorType"))
+
+        if save_result.get("reason"):
+            status["reason"] = str(save_result.get("reason"))
+
+        if save_result.get("error"):
+            status["error"] = str(save_result.get("error"))
+
+    return status
+
+
+def _safe_training_db_status(save_result: dict[str, Any]) -> dict[str, Any]:
+    status = {
+        "enabled": save_result.get("enabled") is True,
+        "trainingSampleOk": save_result.get("ok") is True,
+        "trainingSampleId": save_result.get("id") if isinstance(save_result.get("id"), str) else None,
+    }
+
+    if save_result.get("ok") is not True:
+        if save_result.get("errorType"):
+            status["trainingSampleErrorType"] = str(save_result.get("errorType"))
+
+        if save_result.get("reason"):
+            status["trainingSampleReason"] = str(save_result.get("reason"))
+
+        if save_result.get("error"):
+            status["trainingSampleError"] = str(save_result.get("error"))
 
     return status
 
@@ -384,6 +434,7 @@ async def run_hybrid_pipeline(request):
         "step": step,
         "elapsedMs": 0,
         "roofSource": roof_source,
+        "selectBuldStatus": "skipped",
     }
 
     try:
@@ -407,16 +458,55 @@ async def run_hybrid_pipeline(request):
         step = "project-geometry"
         diagnostics["step"] = step
         roof_5186 = geom_4326_to_5186(geometry)
+        selected_roof_5186 = roof_5186
+
+        if request.mode == "full":
+            step = "select-buld"
+            diagnostics["step"] = step
+            x5186, y5186 = lonlat_to_5186(request.longitude, request.latitude)
+            select_buld_result = await call_select_buld(
+                x5186,
+                y5186,
+                timeout_seconds=SELECT_BULD_TIMEOUT_SECONDS,
+            )
+            diagnostics.update(select_buld_result.get("diagnostics") or {})
+            diagnostics["selectBuldStatus"] = select_buld_result.get("status")
+
+            select_buld_5186 = select_buld_result.get("geometry_5186")
+
+            if select_buld_5186 is not None:
+                match_status = _select_buld_match_diagnostics(select_buld_5186, selected_roof_5186)
+                diagnostics["selectBuldRoofMatchesSelectedBuilding"] = match_status["matchesSelectedBuilding"]
+                diagnostics["selectBuldCentroidInsideSelectedBuilding"] = match_status[
+                    "centroidInsideSelectedBuilding"
+                ]
+                diagnostics["selectBuldCentroidDistanceToSelectedBuildingM"] = match_status[
+                    "centroidDistanceToSelectedBuildingM"
+                ]
+                diagnostics["selectBuldCentroidWgs84"] = match_status["centroidWgs84"]
+
+                if match_status["matchesSelectedBuilding"]:
+                    roof_5186 = select_buld_5186
+                    roof_4326 = geom_5186_to_4326(roof_5186)
+                    roof_source = "climate.gg-selectBuld"
+                    diagnostics["roofSource"] = roof_source
+                    diagnostics["roofGeometryType"] = roof_4326.geom_type
+                    diagnostics["geometryTypeAfter"] = roof_4326.geom_type
+                else:
+                    diagnostics["selectBuldStatus"] = "mismatch_selected_building"
+                    diagnostics["selectBuldLastError"] = "selectBuld centroid did not match selected building"
+
         roof_area = roof_5186.area
         diagnostics["roofAreaM2"] = round(roof_area, 2)
 
         step = "generate-cells"
         diagnostics["step"] = step
+        max_cells = FULL_MAX_CELLS if request.mode == "full" else DEFAULT_MAX_CELLS
         cells, original_count = make_cells_in_polygon(
             roof_5186,
             cell_w=1.0,
             cell_h=3.5,
-            max_cells=DEFAULT_MAX_CELLS,
+            max_cells=max_cells,
         )
         diagnostics["originalCellCount"] = original_count
         diagnostics["usedCellCount"] = len(cells)
@@ -455,7 +545,7 @@ async def run_hybrid_pipeline(request):
         pv_output = None
         pv_status = "skipped"
 
-        if request.mode == "full":
+        if request.includePvAnalysis:
             try:
                 pv_output = normalize_backend_pv_output(
                     await call_pv_analysis(pv_input, timeout_seconds=15),
@@ -477,7 +567,7 @@ async def run_hybrid_pipeline(request):
                 panel_count,
                 sun["score_mean"],
             )
-            pv_status = "local-fallback-fast-mode"
+            pv_status = "local-fallback-no-pv-analysis"
 
         step = "build-geojson"
         diagnostics["step"] = step
@@ -672,6 +762,16 @@ async def run_hybrid_pipeline(request):
                 ai_simulation_result=ai_simulation_result,
             )
         )
+        training_db_save_status = _safe_training_db_status(training_save_result)
+        db_save_status = {
+            **db_save_status,
+            **{
+                key: value
+                for key, value in training_db_save_status.items()
+                if key != "enabled"
+            },
+        }
+        bundle["dbSaveStatus"] = db_save_status
 
         diagnostics["pvAnalysisStatus"] = pv_status
         diagnostics["pvAnalysisSource"] = (
@@ -679,16 +779,7 @@ async def run_hybrid_pipeline(request):
         )
         diagnostics["usedVercelPvAnalysis"] = False
         diagnostics["dbSaveStatus"] = db_save_status
-        diagnostics["trainingSampleDbSaveStatus"] = {
-            "enabled": training_save_result.get("enabled") is True,
-            "ok": training_save_result.get("ok") is True,
-            "id": training_save_result.get("id") if isinstance(training_save_result.get("id"), str) else None,
-            **(
-                {"error": str(training_save_result.get("error"))}
-                if training_save_result.get("ok") is not True and training_save_result.get("error")
-                else {}
-            ),
-        }
+        diagnostics["trainingSampleDbSaveStatus"] = training_db_save_status
         diagnostics["elapsedMs"] = _elapsed_ms(started)
 
         return {

@@ -1,11 +1,15 @@
 import { type ChangeEvent, type FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SolarMateHeader from '../components/SolarMateHeader';
-import { setDemoAuth } from '../lib/demoAuth';
+import { clearDemoAuth, setDemoAuth } from '../lib/demoAuth';
+import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { useSupabaseSession } from '../lib/useSupabaseSession';
 import './LoginPage.css';
 
+type AuthMode = 'login' | 'signup';
+
 type LoginFormState = {
-  id: string;
+  email: string;
   password: string;
 };
 
@@ -44,12 +48,34 @@ function SearchIcon() {
   );
 }
 
+function getFriendlyAuthError(message: string) {
+  const lowerMessage = message.toLowerCase();
+
+  if (lowerMessage.includes('invalid login')) {
+    return '이메일 또는 비밀번호를 다시 확인해 주세요.';
+  }
+
+  if (lowerMessage.includes('already registered') || lowerMessage.includes('already exists')) {
+    return '이미 가입된 이메일입니다. 로그인으로 진행해 주세요.';
+  }
+
+  if (lowerMessage.includes('password')) {
+    return '비밀번호는 Supabase 설정 기준을 충족해야 합니다.';
+  }
+
+  return message;
+}
+
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { session } = useSupabaseSession();
+  const [mode, setMode] = useState<AuthMode>('login');
   const [form, setForm] = useState<LoginFormState>({
-    id: '',
+    email: '',
     password: '',
   });
+  const [message, setMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = event.target;
@@ -60,33 +86,88 @@ export default function LoginPage() {
     }));
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    const userId = form.id.trim();
-    const password = form.password.trim();
-
-    if (!userId || !password) {
-      window.alert('아이디와 비밀번호를 입력해주세요.');
-      return;
-    }
-
-    const authState = setDemoAuth(userId);
-
-    if (authState.role === 'uninstalled') {
-      navigate('/member/no-installation');
-      return;
+  const handleDashboardClick = () => {
+    if (session?.user) {
+      setDemoAuth(session.user.email ?? session.user.id);
     }
 
     navigate('/member/dashboard?tab=generation');
   };
 
-  const handleSignupClick = () => {
-    window.alert('회원가입 기능은 추후 구현 예정입니다.');
+  const handleLogout = async () => {
+    await supabase?.auth.signOut();
+    clearDemoAuth();
+    setMessage('로그아웃되었습니다.');
   };
 
-  const handleFindAccountClick = () => {
-    window.alert('ID/비밀번호 찾기 기능은 추후 구현 예정입니다.');
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!supabase || !isSupabaseConfigured) {
+      setMessage('VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY 설정 후 Supabase Auth를 사용할 수 있습니다.');
+      return;
+    }
+
+    const email = form.email.trim();
+    const password = form.password.trim();
+
+    if (!email || !password) {
+      setMessage('이메일과 비밀번호를 입력해 주세요.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setMessage('');
+
+    const response =
+      mode === 'signup'
+        ? await supabase.auth.signUp({ email, password })
+        : await supabase.auth.signInWithPassword({ email, password });
+
+    setIsSubmitting(false);
+
+    if (response.error) {
+      setMessage(getFriendlyAuthError(response.error.message));
+      return;
+    }
+
+    if (mode === 'signup') {
+      if (response.data.session) {
+        setDemoAuth(response.data.user?.email ?? email);
+        navigate('/member/dashboard?tab=generation');
+        return;
+      }
+
+      setMode('login');
+      setMessage('회원가입 요청이 완료되었습니다. 이메일 확인 설정이 켜져 있으면 메일함을 확인해 주세요.');
+      return;
+    }
+
+    setDemoAuth(response.data.user?.email ?? email);
+    navigate('/member/dashboard?tab=generation');
+  };
+
+  const handleSignupClick = () => {
+    setMode((currentMode) => (currentMode === 'signup' ? 'login' : 'signup'));
+    setMessage('');
+  };
+
+  const handleFindAccountClick = async () => {
+    if (!supabase || !isSupabaseConfigured) {
+      setMessage('Supabase 환경변수 설정 후 비밀번호 재설정 메일을 요청할 수 있습니다.');
+      return;
+    }
+
+    const email = form.email.trim();
+
+    if (!email) {
+      setMessage('비밀번호 재설정 메일을 받을 이메일을 먼저 입력해 주세요.');
+      return;
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
+
+    setMessage(error ? getFriendlyAuthError(error.message) : '비밀번호 재설정 메일 요청을 보냈습니다.');
   };
 
   return (
@@ -99,55 +180,70 @@ export default function LoginPage() {
             <LockIcon />
           </div>
 
-          <h1 id="login-title">로그인</h1>
-          <p>이코햇 서비스를 이용하기 위해 로그인해주세요.</p>
-          <p className="login-demo-help">
-            데모 로그인: 아무 ID/PW 입력 시 설치자 화면으로 이동합니다. ID에 guest 또는 미설치를 입력하면 미설치자 화면으로 이동합니다.
-          </p>
+          <h1 id="login-title">{session?.user ? '로그인 상태' : mode === 'signup' ? '회원가입' : '로그인'}</h1>
+          <p>Supabase 이메일/비밀번호 계정으로 요청서와 시뮬레이션 결과를 사용자별로 저장합니다.</p>
+          {!isSupabaseConfigured && (
+            <p className="login-demo-help">apps/web/.env.local에 VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY를 설정해 주세요.</p>
+          )}
 
-          <form className="login-form" onSubmit={handleSubmit}>
-            <div className="login-form-row">
-              <label htmlFor="login-id">ID</label>
-              <input
-                id="login-id"
-                name="id"
-                type="text"
-                value={form.id}
-                autoComplete="username"
-                placeholder="아이디를 입력해주세요."
-                onChange={handleChange}
-              />
-            </div>
-
-            <div className="login-form-row">
-              <label htmlFor="login-password">PW</label>
-              <input
-                id="login-password"
-                name="password"
-                type="password"
-                value={form.password}
-                autoComplete="current-password"
-                placeholder="비밀번호를 입력해주세요."
-                onChange={handleChange}
-              />
-            </div>
-
-            <button className="login-submit-button" type="submit">
-              로그인
-            </button>
-
-            <div className="login-sub-button-row">
-              <button type="button" className="login-outline-button" onClick={handleSignupClick}>
-                <JoinIcon />
-                회원가입
+          {session?.user ? (
+            <div className="login-session-panel">
+              <strong>{session.user.email}</strong>
+              <span>현재 Supabase Auth 세션으로 로그인되어 있습니다.</span>
+              <button className="login-submit-button" type="button" onClick={handleDashboardClick}>
+                대시보드로 이동
               </button>
-
-              <button type="button" className="login-outline-button" onClick={handleFindAccountClick}>
-                <SearchIcon />
-                ID/비밀번호 찾기
+              <button className="login-outline-button" type="button" onClick={handleLogout}>
+                로그아웃
               </button>
             </div>
-          </form>
+          ) : (
+            <form className="login-form" onSubmit={handleSubmit}>
+              <div className="login-form-row">
+                <label htmlFor="login-email">Email</label>
+                <input
+                  id="login-email"
+                  name="email"
+                  type="email"
+                  value={form.email}
+                  autoComplete="email"
+                  placeholder="manager@example.com"
+                  onChange={handleChange}
+                />
+              </div>
+
+              <div className="login-form-row">
+                <label htmlFor="login-password">PW</label>
+                <input
+                  id="login-password"
+                  name="password"
+                  type="password"
+                  value={form.password}
+                  autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                  placeholder="비밀번호를 입력해 주세요."
+                  onChange={handleChange}
+                />
+              </div>
+
+              <button className="login-submit-button" type="submit" disabled={isSubmitting}>
+                {isSubmitting ? '처리 중' : mode === 'signup' ? '회원가입' : '로그인'}
+              </button>
+
+              <div className="login-sub-button-row">
+                <button type="button" className="login-outline-button" onClick={handleSignupClick}>
+                  <JoinIcon />
+                  {mode === 'signup' ? '로그인으로' : '회원가입'}
+                </button>
+
+                <button type="button" className="login-outline-button" onClick={handleFindAccountClick}>
+                  <SearchIcon />
+                  비밀번호 찾기
+                </button>
+              </div>
+            </form>
+          )}
+
+          {message && <p className="login-form-message">{message}</p>}
         </section>
       </main>
     </div>

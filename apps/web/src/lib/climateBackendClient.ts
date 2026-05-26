@@ -7,6 +7,7 @@ import type {
 
 const CLIMATE_BACKEND_HEALTH_TIMEOUT_MS = 45000;
 const CLIMATE_BACKEND_ANALYSIS_TIMEOUT_MS = 90000;
+const CLIMATE_BACKEND_POST_RETRY_DELAYS_MS = [1800, 4500];
 const CLIMATE_BACKEND_DISABLED_MESSAGE =
   '백엔드 서버 연결은 성공했습니다. climate.gg 파이프라인은 다음 단계에서 연결됩니다.';
 const CLIMATE_BACKEND_UNAVAILABLE_MESSAGE =
@@ -166,6 +167,7 @@ function createBackendRequestBody(input: ClimateLiveAnalysisRequest) {
     panelAngle: input.panelAngle,
     panelType: input.panelType,
     cellsPerPanel: input.cellsPerPanel,
+    includePvAnalysis: input.includePvAnalysis,
     mode: input.mode,
   };
 }
@@ -190,6 +192,12 @@ function createBackendTimeoutMessage(stepLabel: string, timeoutMs: number) {
   return `${stepLabel} 응답이 ${formatTimeoutSeconds(
     timeoutMs,
   )}초 안에 오지 않아 중단했습니다. Render cold start 또는 일시적인 네트워크 지연일 수 있습니다. 잠시 후 다시 시도해주세요.`;
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 async function fetchJsonWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
@@ -223,6 +231,47 @@ async function fetchJsonWithTimeout(url: string, init: RequestInit, timeoutMs: n
   } finally {
     window.clearTimeout(timeoutId);
   }
+}
+
+async function fetchJsonWithRetry(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  retryDelaysMs: number[],
+) {
+  let lastError: unknown = null;
+
+  for (let attemptIndex = 0; attemptIndex <= retryDelaysMs.length; attemptIndex += 1) {
+    try {
+      const response = await fetchJsonWithTimeout(url, init, timeoutMs);
+
+      if (response.status !== 502 && response.status !== 503 && response.status !== 504) {
+        return {
+          ...response,
+          retryAttemptCount: attemptIndex,
+        };
+      }
+
+      lastError = new Error(`HTTP ${response.status}`);
+
+      if (attemptIndex === retryDelaysMs.length) {
+        return {
+          ...response,
+          retryAttemptCount: attemptIndex,
+        };
+      }
+    } catch (error) {
+      lastError = error;
+
+      if (attemptIndex === retryDelaysMs.length) {
+        throw error;
+      }
+    }
+
+    await wait(retryDelaysMs[attemptIndex]);
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 // Future integration point: climate.gg live calls should run on a dedicated backend
@@ -305,7 +354,7 @@ export async function runExternalClimateBackendAnalysis(
   }
 
   try {
-    const postResponse = await fetchJsonWithTimeout(
+    const postResponse = await fetchJsonWithRetry(
       requestUrl,
       {
         method: 'POST',
@@ -316,11 +365,13 @@ export async function runExternalClimateBackendAnalysis(
         body: JSON.stringify(createBackendRequestBody(input)),
       },
       CLIMATE_BACKEND_ANALYSIS_TIMEOUT_MS,
+      CLIMATE_BACKEND_POST_RETRY_DELAYS_MS,
     );
     const diagnosticsFromFetch: Partial<ClimateLiveAnalysisDiagnostics> = {
       ...baseDiagnostics,
       backendHealthStatus,
       backendPostStatus: postResponse.status,
+      backendRetryAttemptCount: postResponse.retryAttemptCount,
       backendResponseOk: isObjectRecord(postResponse.payload) && postResponse.payload.ok === true,
       backendResponseMessage:
         isObjectRecord(postResponse.payload) && typeof postResponse.payload.message === 'string'

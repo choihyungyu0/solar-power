@@ -1,12 +1,25 @@
+import os
 import traceback
+from hmac import compare_digest
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .pipeline import create_request_diagnostics, debug_geometry_pipeline, run_hybrid_pipeline
-from .schemas import ClimateAnalysisRequest, ConsultationRequest, GeometryDebugRequest
-from .supabase_client import create_db_health_status, save_consultation_request
+from .schemas import (
+    AdminConsultationStatusUpdateRequest,
+    ClimateAnalysisRequest,
+    ConsultationRequest,
+    GeometryDebugRequest,
+)
+from .supabase_client import (
+    check_supabase_health,
+    list_admin_consultations,
+    save_consultation_request,
+    update_consultation_status,
+)
 
 app = FastAPI(title="SolarMate Climate Backend")
 
@@ -29,6 +42,42 @@ app.add_middleware(
 )
 
 
+class AdminAccessError(Exception):
+    def __init__(self, status_code: int = 401):
+        self.status_code = status_code
+
+
+@app.exception_handler(AdminAccessError)
+async def admin_access_error_handler(_: Request, error: AdminAccessError):
+    return JSONResponse(
+        status_code=error.status_code,
+        content={
+            "ok": False,
+            "message": "관리자 권한이 필요합니다.",
+        },
+    )
+
+
+def require_admin_access(
+    x_solarmate_admin_key: str | None = Header(default=None, alias="X-SolarMate-Admin-Key"),
+):
+    configured_key = os.getenv("SOLARMATE_ADMIN_KEY", "").strip()
+    is_development = os.getenv("ENV", "").strip().lower() == "development"
+
+    if not configured_key:
+        if is_development:
+            return True
+
+        raise AdminAccessError(status_code=503)
+
+    candidate_key = x_solarmate_admin_key.strip() if x_solarmate_admin_key else ""
+
+    if not candidate_key or not compare_digest(candidate_key, configured_key):
+        raise AdminAccessError(status_code=401)
+
+    return True
+
+
 @app.get("/health")
 def health():
     return {
@@ -39,7 +88,49 @@ def health():
 
 @app.get("/api/db-health")
 def db_health():
-    return create_db_health_status()
+    return check_supabase_health()
+
+
+@app.get("/api/admin/consultations")
+def admin_consultations(_: bool = Depends(require_admin_access)):
+    result = list_admin_consultations()
+
+    if result.get("ok") is True and isinstance(result.get("items"), list):
+        return result["items"]
+
+    return JSONResponse(
+        status_code=503,
+        content={
+            "ok": False,
+            "message": "관리자 상담 정보를 불러오지 못했습니다.",
+        },
+    )
+
+
+@app.patch("/api/admin/consultations/{consultation_id}/status")
+def admin_update_consultation_status(
+    consultation_id: str,
+    payload: AdminConsultationStatusUpdateRequest,
+    _: bool = Depends(require_admin_access),
+):
+    result = update_consultation_status(consultation_id, payload.status)
+
+    if result.get("ok") is True:
+        return {
+            "ok": True,
+            "id": result.get("id") or consultation_id,
+            "status": result.get("status") or payload.status,
+        }
+
+    status_code = 404 if result.get("errorType") == "NotFound" else 503
+
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "ok": False,
+            "message": "상담 상태를 변경하지 못했습니다.",
+        },
+    )
 
 
 @app.get("/debug/cors")
@@ -90,18 +181,24 @@ async def create_consultation(payload: ConsultationRequest):
     if not name:
         return {
             "ok": False,
+            "message": "이름을 입력해주세요.",
+            "errorType": "ValidationError",
             "error": "name is required.",
         }
 
     if not contact:
         return {
             "ok": False,
+            "message": "연락처를 입력해주세요.",
+            "errorType": "ValidationError",
             "error": "contact is required.",
         }
 
     if payload.privacyAgreed is not True:
         return {
             "ok": False,
+            "message": "개인정보 수집 및 이용에 동의해주세요.",
+            "errorType": "ValidationError",
             "error": "privacyAgreed must be true.",
         }
 
@@ -131,8 +228,10 @@ async def create_consultation(payload: ConsultationRequest):
 
     return {
         "ok": False,
+        "message": "상담 신청 저장 중 오류가 발생했습니다.",
         "errorType": save_result.get("errorType"),
-        "error": save_result.get("error") or "상담 신청 저장에 실패했습니다.",
+        "reason": save_result.get("reason"),
+        "error": save_result.get("error") or save_result.get("reason") or "consultation save failed.",
     }
 
 

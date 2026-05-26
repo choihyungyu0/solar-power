@@ -6,25 +6,29 @@ import {
   CONSULTATION_REQUEST_ID_STORAGE_KEY,
   submitConsultationRequest,
 } from '../lib/consultationClient';
-import { SELECTED_SIMULATION_RESULT_STORAGE_KEY } from '../lib/simulationResultStorage';
+import {
+  attachConsultationRequestIdToStoredSimulationResult,
+  SELECTED_SIMULATION_RESULT_STORAGE_KEY,
+} from '../lib/simulationResultStorage';
 import './ConsultationPage.css';
 
 const LEGACY_CONSULTATION_INQUIRY_STORAGE_KEY = 'solarmate:consultationInquiry';
 const SERVICE_CONSULTATION_INQUIRY_STORAGE_KEY = 'solarmate:serviceConsultationInquiry';
+const TEMPORARY_SAVE_MESSAGE = '서버 저장에 실패하여 임시 저장되었습니다. 네트워크 상태를 확인해주세요.';
 
 const consultationTypes = [
   '설치 가능 여부 상담',
   '이전 설치 문의',
-  '보조금 및 지원 정책 안내',
-  '절차 및 예상 비용 문의',
+  '보조금 및 정책자금 안내',
+  '일정 및 예상 비용 문의',
   '기타 문의',
 ];
 
 const serviceItems = [
   '설치 가능 여부 상담',
   '이전 설치 문의',
-  '보조금 및 지원 정책 안내',
-  '절차 및 예상 비용 문의',
+  '보조금 및 정책자금 안내',
+  '일정 및 예상 비용 문의',
 ];
 
 type ConsultationAddress = {
@@ -35,6 +39,7 @@ type ConsultationAddress = {
 type ConsultationFormValues = {
   name: string;
   contact: string;
+  email: string;
   consultationType: string;
   content: string;
   privacyAgreed: boolean;
@@ -53,8 +58,8 @@ type ServiceConsultationInquiry = ConsultationFormValues &
 type UnknownRecord = Record<string, unknown>;
 
 const fallbackAddress: ConsultationAddress = {
-  roadAddress: '경기도 수원시 팔달구 경수대로 464',
-  jibunAddress: '경기도 수원시 팔달구 인계동 1017',
+  roadAddress: '경기도 수원시 영통구 경수대로 464',
+  jibunAddress: '경기도 수원시 영통구 매탄동 1017',
 };
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -163,13 +168,11 @@ function getSelectedSimulationContext() {
 function saveConsultationInquiry(inquiry: ServiceConsultationInquiry) {
   window.sessionStorage.setItem(SERVICE_CONSULTATION_INQUIRY_STORAGE_KEY, JSON.stringify(inquiry));
 
-  // Keep older dashboard/complete-page readers working while the new service key is adopted.
   window.sessionStorage.setItem(
     LEGACY_CONSULTATION_INQUIRY_STORAGE_KEY,
     JSON.stringify({
       ...inquiry,
       phone: inquiry.contact,
-      email: '',
       type: inquiry.consultationType,
       message: inquiry.content,
       consultationRequestId: inquiry.consultationRequestId,
@@ -184,6 +187,7 @@ export default function ConsultationPage() {
   const [formValues, setFormValues] = useState<ConsultationFormValues>({
     name: '',
     contact: '',
+    email: '',
     consultationType: '',
     content: '',
     privacyAgreed: false,
@@ -213,6 +217,7 @@ export default function ConsultationPage() {
     const trimmedFormValues = {
       name: formValues.name.trim(),
       contact: formValues.contact.trim(),
+      email: formValues.email.trim(),
       consultationType: formValues.consultationType.trim(),
       content: formValues.content.trim(),
       privacyAgreed: formValues.privacyAgreed,
@@ -245,6 +250,7 @@ export default function ConsultationPage() {
     const response = await submitConsultationRequest({
       name: trimmedFormValues.name,
       contact: trimmedFormValues.contact,
+      email: trimmedFormValues.email || undefined,
       consultationType: trimmedFormValues.consultationType || undefined,
       content: trimmedFormValues.content || undefined,
       roadAddress: address.roadAddress,
@@ -257,6 +263,7 @@ export default function ConsultationPage() {
 
     if (response.ok) {
       window.sessionStorage.setItem(CONSULTATION_REQUEST_ID_STORAGE_KEY, response.consultationRequestId);
+      attachConsultationRequestIdToStoredSimulationResult(response.consultationRequestId);
       saveConsultationInquiry({
         ...inquiry,
         consultationRequestId: response.consultationRequestId,
@@ -266,15 +273,13 @@ export default function ConsultationPage() {
       return;
     }
 
-    const fallbackMessage = '서버 저장에 실패하여 임시 저장되었습니다. 네트워크 상태를 확인해주세요.';
-
     saveConsultationInquiry({
       ...inquiry,
       serverSaveStatus: 'temporary',
-      serverSaveMessage: fallbackMessage,
+      serverSaveMessage: TEMPORARY_SAVE_MESSAGE,
     });
-    setSubmitMessage(fallbackMessage);
-    window.alert(fallbackMessage);
+    setSubmitMessage(TEMPORARY_SAVE_MESSAGE);
+    window.alert(TEMPORARY_SAVE_MESSAGE);
     setIsSubmitting(false);
     navigate('/consultation/complete');
   };
@@ -317,8 +322,20 @@ export default function ConsultationPage() {
                 />
               </label>
 
+              <label className="consultation-form-row" htmlFor="consultation-email">
+                <span>이메일</span>
+                <input
+                  id="consultation-email"
+                  name="email"
+                  type="email"
+                  value={formValues.email}
+                  placeholder="선택 입력"
+                  onChange={handleChange}
+                />
+              </label>
+
               <label className="consultation-form-row" htmlFor="consultation-type">
-                <span>상담유형</span>
+                <span>상담 유형</span>
                 <span className="consultation-select-wrap">
                   <select
                     id="consultation-type"
@@ -328,7 +345,7 @@ export default function ConsultationPage() {
                     onChange={handleChange}
                   >
                     <option value="" disabled>
-                      상담유형을 선택해주세요.
+                      상담 유형을 선택해주세요.
                     </option>
                     {consultationTypes.map((type) => (
                       <option key={type} value={type}>
@@ -341,12 +358,12 @@ export default function ConsultationPage() {
               </label>
 
               <label className="consultation-form-row consultation-textarea-row" htmlFor="consultation-content">
-                <span>상담내용</span>
+                <span>상담 내용</span>
                 <textarea
                   id="consultation-content"
                   name="content"
                   value={formValues.content}
-                  placeholder="상담내용을 입력해주세요."
+                  placeholder="상담 내용을 입력해주세요."
                   onChange={handleChange}
                 />
               </label>
@@ -383,7 +400,7 @@ export default function ConsultationPage() {
 
                 <button className="consultation-submit-button" type="submit" disabled={isSubmitting}>
                   <LuMessageCircle aria-hidden="true" />
-                  {isSubmitting ? '접수 중' : '상담신청'}
+                  {isSubmitting ? '접수 중' : '상담 신청'}
                 </button>
               </div>
             </form>
@@ -421,7 +438,7 @@ function AddressSummary({ address }: { address: ConsultationAddress }) {
     <section className="consultation-address-box" aria-label="상담 주소 요약">
       <div className="consultation-address-row">
         <LuMapPin aria-hidden="true" />
-        <strong>도로명주소</strong>
+        <strong>도로명 주소</strong>
         <p>{address.roadAddress}</p>
       </div>
 

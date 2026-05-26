@@ -4155,3 +4155,514 @@ img {
     scroll-snap-align: start;
   }
 }
+
+.mvpWorkspace {
+  padding: 76px clamp(24px, 5vw, 84px) 88px;
+  background: #f6f9fc;
+}
+
+.mvpWorkspaceHeader {
+  max-width: 1060px;
+  margin: 0 auto 34px;
+  display: grid;
+  gap: 16px;
+  text-align: center;
+}
+
+.mvpWorkspaceHeader h2 {
+  margin: 0;
+  color: #10213d;
+  font-size: clamp(32px, 3vw, 52px);
+  font-weight: 850;
+  letter-spacing: 0;
+  line-height: 1.18;
+}
+
+.mvpWorkspaceHeader p {
+  max-width: 860px;
+  margin: 0 auto;
+  color: #40546d;
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.72;
+}
+
+.mvpStandaloneCta {
+  justify-self: center;
+  width: min(100%, 340px);
+  margin-top: 8px;
+}
+
+.mvpWorkflowGrid {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.82fr) minmax(340px, 1.15fr) minmax(360px, 1.18fr);
+  grid-template-areas:
+    "auth request result"
+    "notice request result";
+  gap: 18px;
+  align-items: stretch;
+}
+
+.mvpPanel {
+  min-width: 0;
+  border: 1px solid #dce6f2;
+  border-radius: 8px;
+  padding: 24px;
+  background: #ffffff;
+  box-shadow: 0 14px 30px rgba(19, 43, 78, 0.08);
+}
+
+.authPanel {
+  grid-area: auth;
+}
+
+.requestPanel {
+  grid-area: request;
+}
+
+.resultPanel {
+  grid-area: result;
+}
+
+.notificationPanel {
+  grid-area: notice;
+}
+
+.panelKicker {
+  color: #0b64e9;
+  font-size: 13px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mvpPanel h2,
+.mvpSection h2 {
+  margin: 8px 0 10px;
+  color: #10213d;
+  font-size: 26px;
+  font-weight: 850;
+  letter-spacing: 0;
+  line-height: 1.24;
+}
+
+.mvpPanel p,
+.mvpSection p {
+  color: #52657d;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.65;
+}
+
+.setupNotice,
+.formMessage,
+.saveStatus,
+.panelNote {
+  margin: 12px 0 0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #eef5ff;
+  color: #244d7f;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.formMessage.isError,
+.saveStatus.is-error {
+  background: #fff1f1;
+  color: #a33131;
+}
+
+.saveStatus.is-saved {
+  background: #e9f8ef;
+  color: #17633a;
+}
+
+.saveStatus.is-saving {
+  background: #fff8dc;
+  color: #705900;
+}
+
+.saveStatus.is-local-only {
+  background: #f1f5f9;
+  color: #40546d;
+}
+
+.segmentedControl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 18px 0;
+}
+
+.segmentedControl button,
+.ghostButton {
+  min-height: 44px;
+  border: 1px solid #cbd8e7;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #123862;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.segmentedControl button.isActive,
+.ghostButton:hover {
+  border-color: #0b64e9;
+  background: #eef5ff;
+  color: #0757bd;
+}
+
+.authForm,
+.requestForm {
+  display: grid;
+  gap: 14px;
+}
+
+.authForm label,
+.requestForm label {
+  display: grid;
+  gap: 7px;
+  color: #10213d;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.authForm input,
+.requestForm input {
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  border: 1px solid #cbd8e7;
+  border-radius: 8px;
+  padding: 0 13px;
+  background: #ffffff;
+  color: #10213d;
+  font-size: 15px;
+  font-weight: 650;
+  outline: none;
+}
+
+.authForm input:focus,
+.requestForm input:focus {
+  border-color: #0b64e9;
+  box-shadow: 0 0 0 3px rgba(11, 100, 233, 0.12);
+}
+
+.mvpPrimaryButton {
+  width: 100%;
+  min-height: 54px;
+  border-radius: 8px;
+  font-size: 16px;
+}
+
+.mvpPrimaryButton:disabled,
+.login-submit-button:disabled {
+  cursor: progress;
+  opacity: 0.68;
+}
+
+.contactFieldset {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  border: 1px solid #dce6f2;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.contactFieldset legend {
+  padding: 0 6px;
+  color: #10213d;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.contactFieldset label {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #dce6f2;
+  border-radius: 999px;
+  padding: 0 12px;
+  background: #f8fbff;
+}
+
+.contactFieldset input {
+  width: auto;
+  min-height: auto;
+  padding: 0;
+}
+
+.signedInEmail {
+  margin: 12px 0;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f3f8ff;
+  color: #0b4a9f;
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+
+.resultHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.scoreBadge {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: #10213d;
+  color: #ffffff;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.resultGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.resultGrid div,
+.householdBenefit,
+.notificationPanel dl div {
+  min-width: 0;
+  border: 1px solid #e3ebf5;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8fbff;
+}
+
+.resultGrid span,
+.householdBenefit span,
+.notificationPanel dt {
+  display: block;
+  color: #667a92;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.resultGrid strong,
+.householdBenefit strong,
+.notificationPanel dd {
+  display: block;
+  margin: 4px 0 0;
+  color: #10213d;
+  font-size: 17px;
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+
+.householdBenefit {
+  margin-top: 12px;
+  background: #fff8dc;
+}
+
+.notificationPanel dl {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0 0;
+}
+
+.notificationPanel dd {
+  margin-left: 0;
+}
+
+.mvpSection {
+  margin-top: 42px;
+}
+
+.sectionHeader {
+  max-width: 920px;
+  margin: 0 auto 20px;
+  text-align: center;
+}
+
+.businessFlowGrid,
+.policyGrid,
+.reviewGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.businessFlowCard,
+.policyCard,
+.reviewCard {
+  min-width: 0;
+  border: 1px solid #dce6f2;
+  border-radius: 8px;
+  padding: 18px;
+  background: #ffffff;
+  box-shadow: 0 12px 24px rgba(19, 43, 78, 0.06);
+}
+
+.businessFlowCard span {
+  color: #0b64e9;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.businessFlowCard p,
+.policyCard p,
+.reviewCard p {
+  margin: 8px 0 0;
+}
+
+.publicValueList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.publicValueList li {
+  border: 1px solid #cfe0f4;
+  border-radius: 999px;
+  padding: 9px 13px;
+  background: #ffffff;
+  color: #244d7f;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.policyGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.policyCardTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.statusPill {
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #eef5ff;
+  color: #0757bd;
+  font-size: 12px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.policyCard h3 {
+  margin: 14px 0;
+  color: #10213d;
+  font-size: 20px;
+  line-height: 1.28;
+}
+
+.policyCard dl {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.policyCard dl div {
+  display: grid;
+  gap: 3px;
+}
+
+.policyCard dt {
+  color: #667a92;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.policyCard dd {
+  margin: 0;
+  color: #10213d;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.policyCard a,
+.sourceText {
+  display: inline-flex;
+  margin-top: 12px;
+  color: #0757bd;
+  font-weight: 850;
+}
+
+.reviewGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ratingRow {
+  color: #ffb800;
+  font-size: 18px;
+  letter-spacing: 0;
+}
+
+.reviewCard strong,
+.reviewCard span {
+  display: block;
+  margin-top: 10px;
+}
+
+.reviewCard strong {
+  color: #10213d;
+  font-weight: 850;
+}
+
+.reviewCard span {
+  color: #0b64e9;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+@media (max-width: 1180px) {
+  .mvpWorkflowGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "auth notice"
+      "request result";
+  }
+
+  .businessFlowGrid,
+  .policyGrid,
+  .reviewGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .mvpWorkspace {
+    padding: 48px 18px 62px;
+  }
+
+  .mvpWorkflowGrid,
+  .businessFlowGrid,
+  .policyGrid,
+  .reviewGrid,
+  .resultGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .mvpWorkflowGrid {
+    grid-template-areas:
+      "auth"
+      "request"
+      "result"
+      "notice";
+  }
+
+  .resultHeader {
+    display: grid;
+  }
+
+  .scoreBadge {
+    width: fit-content;
+  }
+}

@@ -111,3 +111,75 @@ Content-Type: application/json
   "cellsPerPanel": 2,
   "mode": "fast"
 }
+
+### Production DB health
+GET https://solarmate-climate-backend.onrender.com/api/db-health
+
+### Production climate analysis insert test
+POST https://solarmate-climate-backend.onrender.com/api/climate-rooftop-analysis
+Content-Type: application/json
+
+{
+  "longitude": 127.072254,
+  "latitude": 37.202501,
+  "selectedBuildingId": "manual-supabase-test",
+  "selectedAnalysisSessionId": "manual-supabase-test-session",
+  "selectedBuildingFeature": {
+    "type": "Feature",
+    "properties": {
+      "bld_id": "manual-supabase-test",
+      "bld_nm": "수동 Supabase 테스트 건물",
+      "address": "경기도 화성시 테스트 주소"
+    },
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [[
+        [127.07220, 37.20245],
+        [127.07235, 37.20245],
+        [127.07235, 37.20260],
+        [127.07220, 37.20260],
+        [127.07220, 37.20245]
+      ]]
+    }
+  },
+  "panelCapacityW": 640,
+  "panelAngle": 35,
+  "panelType": 1,
+  "cellsPerPanel": 2,
+  "mode": "fast"
+}
+
+# Expected response fields:
+# - ok: true
+# - analysisResultId: string
+# - dbSaveStatus.enabled: true
+# - dbSaveStatus.analysisResultOk: true
+# - dbSaveStatus.trainingSampleOk: true
+# - aiSimulationResult exists
+# - agentPayload exists
+
+### Production consultation insert test
+POST https://solarmate-climate-backend.onrender.com/api/consultations
+Content-Type: application/json
+
+{
+  "name": "테스트사용자",
+  "contact": "010-0000-0000",
+  "email": "test@example.com",
+  "consultationType": "설치 가능 여부 상담",
+  "content": "Supabase 상담 저장 테스트입니다.",
+  "roadAddress": "경기도 화성시 테스트 주소",
+  "jibunAddress": "경기도 화성시 테스트 지번",
+  "analysisResultId": "{{paste_analysisResultId_from_previous_response}}",
+  "privacyAgreed": true,
+  "thirdPartyAgreed": false,
+  "agentPayload": {
+    "summaryForCounselor": "수동 테스트 상담 payload입니다.",
+    "nextStep": "저장 확인"
+  }
+}
+
+# Expected response:
+# - ok: true
+# - consultationRequestId: string
+# - message: "상담 신청이 접수되었습니다."

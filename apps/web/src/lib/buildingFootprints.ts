@@ -351,6 +351,12 @@ function getSearchTokens(value: string) {
     .filter((token) => token.length >= 2 && !TEXT_SEARCH_STOPWORDS.has(token));
 }
 
+function getHyphenatedParcelTokens(value: string) {
+  return (value.match(/\d{1,5}-\d{1,5}/g) ?? [])
+    .map((token) => token.trim())
+    .filter((token) => token.length > 0);
+}
+
 function getFeatureText(feature: BuildingFootprintFeature) {
   const match = createMatch(feature);
   const properties = feature.properties ?? {};
@@ -375,7 +381,41 @@ function getFeatureText(feature: BuildingFootprintFeature) {
   );
 }
 
-function scoreFeatureTextMatch(feature: BuildingFootprintFeature, normalizedQuery: string, tokens: string[]) {
+function getFeatureHyphenatedParcelTokens(feature: BuildingFootprintFeature) {
+  const match = createMatch(feature);
+  const properties = feature.properties ?? {};
+
+  return getHyphenatedParcelTokens(
+    [
+      match.metadata.address,
+      properties.address,
+      properties.jibun,
+    ]
+      .filter((value) => typeof value === 'string' || typeof value === 'number')
+      .join(' '),
+  );
+}
+
+function hasRequiredParcelTokens(feature: BuildingFootprintFeature, requiredParcelTokens: string[]) {
+  if (requiredParcelTokens.length === 0) {
+    return true;
+  }
+
+  const featureParcelTokens = new Set(getFeatureHyphenatedParcelTokens(feature));
+
+  return requiredParcelTokens.every((token) => featureParcelTokens.has(token));
+}
+
+function scoreFeatureTextMatch(
+  feature: BuildingFootprintFeature,
+  normalizedQuery: string,
+  tokens: string[],
+  requiredParcelTokens: string[],
+) {
+  if (!hasRequiredParcelTokens(feature, requiredParcelTokens)) {
+    return 0;
+  }
+
   const featureText = getFeatureText(feature);
 
   if (normalizedQuery && featureText.includes(normalizedQuery)) {
@@ -404,11 +444,12 @@ function scoreFeatureTextMatch(feature: BuildingFootprintFeature, normalizedQuer
 function findBestTextMatch(features: BuildingFootprintFeature[], query: string) {
   const normalizedQuery = normalizeSearchText(query);
   const tokens = getSearchTokens(query);
+  const requiredParcelTokens = getHyphenatedParcelTokens(query);
   let bestFeature: BuildingFootprintFeature | null = null;
   let bestScore = 0;
 
   for (const feature of features) {
-    const score = scoreFeatureTextMatch(feature, normalizedQuery, tokens);
+    const score = scoreFeatureTextMatch(feature, normalizedQuery, tokens, requiredParcelTokens);
 
     if (score > bestScore) {
       bestFeature = feature;

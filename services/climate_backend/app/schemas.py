@@ -13,6 +13,7 @@ class ClimateAnalysisRequest(BaseModel):
     panelAngle: int = 35
     panelType: int = 1
     cellsPerPanel: int = 2
+    includePvAnalysis: bool = False
     mode: Literal["fast", "full"] = "fast"
 
 
@@ -53,3 +54,13 @@ class ConsultationRequest(BaseModel):
     privacyAgreed: bool = False
     thirdPartyAgreed: bool = False
     agentPayload: Optional[dict[str, Any]] = None
+
+
+class AdminConsultationStatusUpdateRequest(BaseModel):
+    status: Literal[
+        "received",
+        "contacted",
+        "waiting_documents",
+        "proposal_sent",
+        "closed",
+    ]

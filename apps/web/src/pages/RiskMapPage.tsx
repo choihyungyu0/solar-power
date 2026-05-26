@@ -136,6 +136,7 @@ const CLIMATE_POC_FOCUS_HEIGHT_PADDING_M = 320;
 const SIMPLE_PAYBACK_MAX_REASONABLE_YEARS = 100;
 const FOOTPRINT_FALLBACK_SIMPLE_PAYBACK_YEARS = 6.8;
 const BACKEND_ROOF_MATCH_DISTANCE_THRESHOLD_M = 15;
+const CLIMATE_LIVE_ANALYSIS_MODE = import.meta.env.VITE_CLIMATE_LIVE_ANALYSIS_MODE === 'fast' ? 'fast' : 'full';
 const DEFAULT_PANEL_PLACEMENT_SOURCE = '건물 footprint 기반 자체 배치';
 const BUILDING_DATA_HEALTH_ERROR_MESSAGE =
   '건물 polygon 데이터를 불러오지 못했습니다. 배포 데이터 경로를 확인해주세요.';
@@ -1022,7 +1023,41 @@ function getClimatePocFocusHeightM(extent: ClimatePocPanelExtent) {
   );
 }
 
-function getNearbyBuildingPolygons(polygons: PolygonCoordinates[], coordinate: Coordinate | null) {
+function withoutClosingCoordinate(polygon: PolygonCoordinates) {
+  if (polygon.length < 2) {
+    return polygon;
+  }
+
+  const first = polygon[0];
+  const last = polygon[polygon.length - 1];
+
+  return first[0] === last[0] && first[1] === last[1] ? polygon.slice(0, -1) : polygon;
+}
+
+function areSameFootprintPolygons(left: PolygonCoordinates, right: PolygonCoordinates | null | undefined) {
+  if (!right) {
+    return false;
+  }
+
+  const leftOpen = withoutClosingCoordinate(left);
+  const rightOpen = withoutClosingCoordinate(right);
+
+  if (leftOpen.length !== rightOpen.length) {
+    return false;
+  }
+
+  return leftOpen.every((coordinate, index) => {
+    const other = rightOpen[index];
+
+    return Math.abs(coordinate[0] - other[0]) < 0.0000001 && Math.abs(coordinate[1] - other[1]) < 0.0000001;
+  });
+}
+
+function getNearbyBuildingPolygons(
+  polygons: PolygonCoordinates[],
+  coordinate: Coordinate | null,
+  excludedPolygon?: PolygonCoordinates | null,
+) {
   if (!coordinate) {
     return [];
   }
@@ -1032,7 +1067,11 @@ function getNearbyBuildingPolygons(polygons: PolygonCoordinates[], coordinate: C
       polygon,
       distanceMeters: getDistanceMeters(coordinate, getPolygonCentroid(polygon)),
     }))
-    .filter((item) => item.distanceMeters <= NEARBY_BUILDING_OUTLINE_RADIUS_M)
+    .filter(
+      (item) =>
+        item.distanceMeters <= NEARBY_BUILDING_OUTLINE_RADIUS_M &&
+        !areSameFootprintPolygons(item.polygon, excludedPolygon),
+    )
     .sort((a, b) => a.distanceMeters - b.distanceMeters)
     .slice(0, MAX_NEARBY_BUILDING_OUTLINES)
     .map((item) => item.polygon);
@@ -1435,8 +1474,8 @@ function RiskMapPage() {
     viewerEntityCount: null,
   });
   const [isDeveloperDiagnosticsOpen, setIsDeveloperDiagnosticsOpen] = useState(false);
-  const hasMapAnchoredGeometry =
-    selectionMode === 'geometry' || selectionMode === 'parcel-fallback' || selectionMode === 'building_footprint';
+  const hasActualSelectedBuildingGeometry =
+    Boolean(selectedBuildingGeometry) && (selectionMode === 'geometry' || selectionMode === 'building_footprint');
   const shouldShowDevDiagnostics = import.meta.env.DEV || import.meta.env.VITE_SHOW_SELECTION_DEBUG === 'true';
   const appEnv = import.meta.env.DEV ? 'development' : import.meta.env.MODE || 'production';
   const hasBuildingDataHealthError = buildingDataHealth.buildingIndexStatus === 'error';
@@ -1456,8 +1495,8 @@ function RiskMapPage() {
     [buildingFootprints],
   );
   const nearbySelectableBuildingPolygons = useMemo(
-    () => getNearbyBuildingPolygons(selectableBuildingPolygons, selectedCoordinate),
-    [selectableBuildingPolygons, selectedCoordinate],
+    () => getNearbyBuildingPolygons(selectableBuildingPolygons, selectedCoordinate, selectedBuildingGeometry),
+    [selectableBuildingPolygons, selectedBuildingGeometry, selectedCoordinate],
   );
   const roofHeightEstimate = useMemo(
     () => deriveRoofHeightMFromFeature(selectedBuildingFeature),
@@ -1578,7 +1617,7 @@ function RiskMapPage() {
     isSolarPanelLayerVisible && (Boolean(activeClimatePanelGeojson) || Boolean(activeBackendRoofPolygon4326));
   const shouldRenderGeneratedPanelLayer =
     isSolarPanelLayerVisible &&
-    hasMapAnchoredGeometry &&
+    hasActualSelectedBuildingGeometry &&
     !hasLiveClimatePanelLayout;
   const liveRoofSource = (liveClimateDiagnostics?.roofSource as ClimateLiveRoofSource | undefined) ?? null;
   const liveSelectBuldStatus = liveClimateDiagnostics?.selectBuldStatus ?? null;
@@ -2851,7 +2890,7 @@ function RiskMapPage() {
       panelType: livePanelType,
       cellsPerPanel: liveCellsPerPanel,
       includePvAnalysis: false,
-      mode: 'fast',
+      mode: CLIMATE_LIVE_ANALYSIS_MODE,
     });
     const responseBuildingId = response.selectedBuildingId ?? response.diagnostics.requestSelectedBuildingId ?? requestSelectedBuildingId;
     const responseSessionId = response.selectedAnalysisSessionId ?? response.diagnostics.requestSessionId ?? requestSessionId;
@@ -3775,8 +3814,8 @@ function RiskMapPage() {
 
             <VWorldSelectedBuildingLayer
               map={vworldMap}
-              isActive={hasMapAnchoredGeometry}
-              polygon={selectedBuildingGeometry ?? selectedRoofPolygon}
+              isActive={hasActualSelectedBuildingGeometry}
+              polygon={selectedBuildingGeometry}
               roofHeightM={roofHeightEstimate.roofHeightM}
               onStatusChange={setSelectedBuildingLayerStatus}
             />

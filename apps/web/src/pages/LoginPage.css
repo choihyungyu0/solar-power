@@ -140,6 +140,41 @@
   line-height: 1.55;
 }
 
+.login-form-message {
+  width: min(720px, 100%);
+  margin: 24px auto 0;
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: #eef5ff;
+  color: #244d7f;
+  font-size: 15px;
+  font-weight: 750;
+  line-height: 1.55;
+}
+
+.login-session-panel {
+  width: min(720px, 100%);
+  margin: 0 auto;
+  display: grid;
+  gap: 16px;
+  text-align: center;
+}
+
+.login-session-panel strong {
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: #eef5ff;
+  color: #0b4a9f;
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+
+.login-session-panel span {
+  color: #5d6678;
+  font-size: 16px;
+  font-weight: 700;
+}
+
 .login-form {
   width: min(850px, 100%);
   margin: 0 auto;
