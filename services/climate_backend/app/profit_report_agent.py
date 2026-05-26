@@ -775,6 +775,13 @@ def build_profit_report_markdown(report_json: dict[str, Any]) -> str:
     loan = report_json.get("loanSupportScenario") if isinstance(report_json.get("loanSupportScenario"), dict) else {}
     net = report_json.get("netInvestment") if isinstance(report_json.get("netInvestment"), dict) else {}
     disclaimers = report_json.get("riskDisclaimers") if isinstance(report_json.get("riskDisclaimers"), list) else []
+    rag_context = (
+        report_json.get("subsidyRagContext")
+        if isinstance(report_json.get("subsidyRagContext"), dict)
+        else {}
+    )
+    rag_matches = rag_context.get("matches") if isinstance(rag_context.get("matches"), list) else []
+    references = report_json.get("sourceReferences") if isinstance(report_json.get("sourceReferences"), list) else []
 
     lines = [
         "# AI 수익·보조금·금융 리포트",
