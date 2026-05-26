@@ -142,8 +142,13 @@ export type ProfitReportJson = {
     headline: string;
     summary: string;
     salesMessage: string;
+    ctaText?: string;
     ctaMessage: string;
+    riskNotes?: string[];
   };
+  reportNarrativeSource?: 'deterministic-template' | 'llm-structured-output';
+  llmEnabled?: boolean;
+  llmError?: string;
   riskDisclaimers: string[];
   cta: {
     label: string;

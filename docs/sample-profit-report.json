@@ -7,7 +7,7 @@
     "analysisResultId": "example-analysis-result-id",
     "generator": "deterministic_profit_report_agent",
     "llmPolishEnabled": false,
-    "llmPolishNote": "TODO: OPENAI_API_KEY와 ENABLE_LLM_PROFIT_REPORT=true 설정 시 숫자 재계산 없이 문장 다듬기만 연결 가능"
+    "llmPolishFallback": false
   },
   "buildingSummary": {
     "buildingName": "수동 Supabase 테스트 건물",
@@ -86,8 +86,12 @@
     "headline": "AI 기준 설치 적합도 A등급, 수익성 검토 가치가 있는 태양광 후보지입니다.",
     "summary": "예상 연간 발전량은 27,550kWh, 예상 연간 절감/수익 기준은 2,310,000원입니다. 경기 주택태양광 지원사업 단일 기준 보조금 적용 후 예상 자부담은 14,720,000원이며, 추정 회수기간은 6.4년입니다.",
     "salesMessage": "금융 지원 시나리오를 함께 검토하면 예상 대출 검토 한도는 9,240,000원, 초기 현금 필요액은 5,480,000원까지 낮아질 가능성이 있습니다. 보조금 예산이 소진되기 전에 상담을 통해 가능 여부를 확인해보세요.",
-    "ctaMessage": "우리 아파트 태양광 설치하기"
+    "ctaText": "우리 아파트 태양광 설치하기",
+    "ctaMessage": "우리 아파트 태양광 설치하기",
+    "riskNotes": []
   },
+  "reportNarrativeSource": "deterministic-template",
+  "llmEnabled": false,
   "riskDisclaimers": [
     "본 리포트는 시뮬레이션 기반 예상·추정 결과이며 실제 발전량과 절감액을 보장하지 않습니다.",
     "경기 주택태양광 지원사업 지원 여부와 금액은 최신 공고, 예산 잔여 여부, 대상 요건 확인이 필요합니다.",

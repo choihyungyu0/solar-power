@@ -20,7 +20,8 @@
   - `loanCoverageRatio`
 
 OpenAI 또는 LLM은 필수 의존성이 아니다.
-향후 `OPENAI_API_KEY`, `ENABLE_LLM_PROFIT_REPORT=true`가 있을 때 문장 다듬기만 연결할 수 있으나, 숫자는 LLM이 재계산하지 않는다.
+`OPENAI_API_KEY`, `ENABLE_LLM_PROFIT_REPORT=true`가 있을 때만 문장 다듬기용 LLM을 선택적으로 사용한다.
+숫자, 보조금, 대출 한도, 회수기간은 항상 백엔드 결정론 코드가 먼저 계산하며 LLM은 재계산하지 않는다.
 
 ## 4대 핵심 지표
 
@@ -107,6 +108,9 @@ cashNeededKrw =
     "loanSupportScenario": {},
     "netInvestment": {},
     "reportNarrative": {},
+    "reportNarrativeSource": "deterministic-template | llm-structured-output",
+    "llmEnabled": false,
+    "llmError": "optional safe fallback reason",
     "riskDisclaimers": [],
     "cta": {}
   },
@@ -120,6 +124,58 @@ cashNeededKrw =
   }
 }
 ```
+
+## 선택적 LLM narrative 생성
+
+LLM narrative는 `reportNarrative` 필드만 다듬는다.
+사용 모델은 Render FastAPI 백엔드 환경변수로만 설정한다.
+프론트엔드에는 `OPENAI_API_KEY`를 넣지 않는다.
+
+환경변수:
+
+```text
+OPENAI_API_KEY=...
+ENABLE_LLM_PROFIT_REPORT=true
+OPENAI_MODEL=gpt-4o-mini
+```
+
+LLM 입력은 개인정보나 Supabase secret 없이 정제된 구조화 데이터만 포함한다.
+
+- 설치 적합도 등급/점수
+- 예상 연간 발전량
+- 예상 설치비
+- 예상 보조금
+- 예상 실투자금
+- 예상 회수기간
+- 대출 검토 시나리오
+- 리포트 주의사항
+
+LLM Structured Outputs JSON schema:
+
+```json
+{
+  "headline": "string",
+  "summary": "string",
+  "salesMessage": "string",
+  "ctaText": "string",
+  "riskNotes": ["string"]
+}
+```
+
+운영 규칙:
+
+- 한국어만 사용한다.
+- `예상`, `추정`, `가능성`, `검토`, `확인 필요` 표현을 사용한다.
+- 보조금, 대출 승인, 절감액을 보장하지 않는다.
+- 구조안전성이나 장애물 상태를 AI가 확정했다고 표현하지 않는다.
+- 제공된 숫자를 바꾸거나 재계산하지 않는다.
+
+Fallback:
+
+- `ENABLE_LLM_PROFIT_REPORT`가 `true`가 아니면 `reportNarrativeSource = deterministic-template`이다.
+- `OPENAI_API_KEY`가 없거나 OpenAI 호출이 실패하면 결정론 템플릿을 사용한다.
+- 실패 사유는 `llmError`에 안전한 문장으로만 기록하고 secret이나 원문 응답을 노출하지 않는다.
+- Supabase `profit_reports.report_json`에는 최종 narrative와 `reportNarrativeSource`, `llmEnabled`가 함께 저장된다.
 
 ## Supabase 저장
 
@@ -171,3 +227,16 @@ npm.cmd run build
 5. 개발자 JSON에서 `profitReport.fourMetrics`, `subsidyMatrix`, `loanSupportScenario`, `netInvestment`를 확인한다.
 6. `상담 신청하기`를 눌러 `/consultation`으로 이동한다.
 7. 상담 신청 후 Supabase `consultation_requests.agent_payload`에 `profitReport` 요약이 포함되는지 확인한다.
+
+LLM narrative 수동 테스트:
+
+```powershell
+cd services\climate_backend
+$env:ENABLE_LLM_PROFIT_REPORT = "true"
+$env:OPENAI_MODEL = "gpt-4o-mini"
+# OPENAI_API_KEY는 Render 또는 로컬 세션 환경변수로만 설정한다. 파일에 저장하지 않는다.
+python -m py_compile app/main.py app/profit_report_agent.py app/schemas.py
+```
+
+이후 `/api/ai-profit-report`를 `forceRegenerate: true`로 호출하면 새 리포트에서 `reportNarrativeSource`가 `llm-structured-output`인지 확인할 수 있다.
+키가 없거나 호출이 실패하면 `deterministic-template`으로 안전하게 fallback되어야 한다.

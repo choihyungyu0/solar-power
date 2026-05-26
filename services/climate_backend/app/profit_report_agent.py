@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import os
 from datetime import datetime, timezone
 from typing import Any
 
@@ -11,6 +13,20 @@ REPORT_TYPE = "solar_profit_report"
 SCHEMA_VERSION = "solarmate-profit-report-v1"
 DEFAULT_LOAN_YEARS = 5
 DEFAULT_LOAN_COVERAGE_RATIO = 0.8
+DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
+LLM_REPORT_NARRATIVE_SOURCE = "llm-structured-output"
+DETERMINISTIC_REPORT_NARRATIVE_SOURCE = "deterministic-template"
+LLM_UNSAFE_CLAIM_PATTERNS = (
+    "보장됩니다",
+    "확정됩니다",
+    "무조건",
+    "반드시 지원",
+    "반드시 승인",
+    "보조금 지급 확정",
+    "대출 승인 확정",
+    "절감 보장",
+    "수익 보장",
+)
 
 
 def _now_iso() -> str:
@@ -63,6 +79,14 @@ def _get_path(value: dict[str, Any], *keys: str) -> Any:
         current = current.get(key)
 
     return current
+
+
+def _is_llm_profit_report_enabled() -> bool:
+    return os.getenv("ENABLE_LLM_PROFIT_REPORT", "").strip().lower() == "true"
+
+
+def _get_openai_model_name() -> str:
+    return os.getenv("OPENAI_MODEL", "").strip() or DEFAULT_OPENAI_MODEL
 
 
 def _get_report_input_metrics(agent_payload: dict[str, Any]) -> dict[str, Any]:
@@ -256,7 +280,7 @@ def _build_report_narrative(
     subsidy_matrix: dict[str, Any],
     loan_scenario: dict[str, Any],
     net_investment: dict[str, Any],
-) -> dict[str, str]:
+) -> dict[str, Any]:
     grade = report_input_metrics.get("installationSuitabilityGrade") or "검토"
     annual_generation = _format_kwh(report_input_metrics.get("annualGenerationKwh"))
     annual_saving = _format_krw(report_input_metrics.get("annualSavingKrw"))
@@ -277,7 +301,9 @@ def _build_report_narrative(
             f"초기 현금 필요액은 {cash_needed}까지 낮아질 가능성이 있습니다. "
             "보조금 예산이 소진되기 전에 상담을 통해 가능 여부를 확인해보세요."
         ),
+        "ctaText": "우리 아파트 태양광 설치하기",
         "ctaMessage": "우리 아파트 태양광 설치하기",
+        "riskNotes": [],
     }
 
 
@@ -292,6 +318,248 @@ def _build_risk_disclaimers(agent_payload: dict[str, Any]) -> list[str]:
         "대출 가능 금액과 조건은 추정 시나리오이며 실제 승인은 금융기관 심사가 필요합니다.",
         f"{field_check_text}는 AI 확정 항목이 아니며 현장조사와 관리주체 협의가 필요합니다.",
     ]
+
+
+def _build_llm_sanitized_input(report_json: dict[str, Any]) -> dict[str, Any]:
+    four_metrics = report_json.get("fourMetrics") if isinstance(report_json.get("fourMetrics"), dict) else {}
+    generation = four_metrics.get("expectedGeneration") if isinstance(four_metrics.get("expectedGeneration"), dict) else {}
+    cost = four_metrics.get("costAndSelfPayment") if isinstance(four_metrics.get("costAndSelfPayment"), dict) else {}
+    payback = four_metrics.get("payback") if isinstance(four_metrics.get("payback"), dict) else {}
+    suitability = (
+        four_metrics.get("subsidyAndSuitability")
+        if isinstance(four_metrics.get("subsidyAndSuitability"), dict)
+        else {}
+    )
+    subsidy = report_json.get("subsidyMatrix") if isinstance(report_json.get("subsidyMatrix"), dict) else {}
+    loan = report_json.get("loanSupportScenario") if isinstance(report_json.get("loanSupportScenario"), dict) else {}
+    net = report_json.get("netInvestment") if isinstance(report_json.get("netInvestment"), dict) else {}
+    disclaimers = report_json.get("riskDisclaimers") if isinstance(report_json.get("riskDisclaimers"), list) else []
+
+    return {
+        "suitability": {
+            "grade": suitability.get("installationSuitabilityGrade"),
+            "score": suitability.get("installationSuitabilityScore"),
+            "label": suitability.get("installationSuitabilityLabel"),
+        },
+        "generation": {
+            "annualGenerationKwh": generation.get("annualGenerationKwh"),
+            "annualGenerationText": _format_kwh(generation.get("annualGenerationKwh")),
+        },
+        "cost": {
+            "estimatedInstallCostKrw": cost.get("estimatedInstallCostKrw"),
+            "estimatedInstallCostText": _format_krw(cost.get("estimatedInstallCostKrw")),
+            "subsidyEstimateKrw": subsidy.get("subsidyEstimateKrw"),
+            "subsidyEstimateText": _format_krw(subsidy.get("subsidyEstimateKrw")),
+            "selfPaymentBeforeLoanKrw": net.get("selfPaymentBeforeLoanKrw"),
+            "selfPaymentBeforeLoanText": _format_krw(net.get("selfPaymentBeforeLoanKrw")),
+            "cashNeededKrw": net.get("cashNeededKrw"),
+            "cashNeededText": _format_krw(net.get("cashNeededKrw")),
+        },
+        "payback": {
+            "annualSavingKrw": payback.get("annualSavingKrw"),
+            "annualSavingText": _format_krw(payback.get("annualSavingKrw")),
+            "paybackYears": net.get("paybackYears"),
+            "paybackYearsText": _format_years(net.get("paybackYears")),
+        },
+        "subsidyPolicy": {
+            "programName": subsidy.get("programName") or SUBSIDY_PROGRAM_NAME,
+            "policyMode": subsidy.get("policyMode") or SUBSIDY_POLICY_MODE,
+            "stackingAllowed": subsidy.get("stackingAllowed") is True,
+            "eligibilityNote": subsidy.get("eligibilityNote"),
+        },
+        "loanScenario": {
+            "loanBasis": loan.get("loanBasis"),
+            "loanYears": loan.get("loanYears"),
+            "loanCoverageRatio": loan.get("loanCoverageRatio"),
+            "estimatedLoanLimitKrw": loan.get("estimatedLoanLimitKrw"),
+            "estimatedLoanLimitText": _format_krw(loan.get("estimatedLoanLimitKrw")),
+            "monthlyPaymentEstimateKrw": loan.get("monthlyPaymentEstimateKrw"),
+            "monthlyPaymentEstimateText": _format_krw(loan.get("monthlyPaymentEstimateKrw")),
+            "loanApprovalStatus": loan.get("loanApprovalStatus"),
+            "note": loan.get("note"),
+        },
+        "disclaimers": [str(item) for item in disclaimers if isinstance(item, str)],
+        "fixedCta": "우리 아파트 태양광 설치하기",
+    }
+
+
+def _build_llm_narrative_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["headline", "summary", "salesMessage", "ctaText", "riskNotes"],
+        "properties": {
+            "headline": {
+                "type": "string",
+            },
+            "summary": {
+                "type": "string",
+            },
+            "salesMessage": {
+                "type": "string",
+            },
+            "ctaText": {
+                "type": "string",
+            },
+            "riskNotes": {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                },
+            },
+        },
+    }
+
+
+def _normalize_llm_narrative(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+
+    headline = value.get("headline")
+    summary = value.get("summary")
+    sales_message = value.get("salesMessage")
+    cta_text = value.get("ctaText")
+    risk_notes = value.get("riskNotes")
+
+    if not all(isinstance(item, str) and item.strip() for item in (headline, summary, sales_message, cta_text)):
+        return None
+
+    if not isinstance(risk_notes, list) or not all(isinstance(item, str) and item.strip() for item in risk_notes):
+        return None
+
+    normalized = {
+        "headline": headline.strip(),
+        "summary": summary.strip(),
+        "salesMessage": sales_message.strip(),
+        "ctaText": cta_text.strip(),
+        "ctaMessage": cta_text.strip(),
+        "riskNotes": [item.strip() for item in risk_notes],
+    }
+    combined_text = " ".join(
+        [
+            normalized["headline"],
+            normalized["summary"],
+            normalized["salesMessage"],
+            normalized["ctaText"],
+            " ".join(normalized["riskNotes"]),
+        ]
+    )
+
+    if any(pattern in combined_text for pattern in LLM_UNSAFE_CLAIM_PATTERNS):
+        return None
+
+    return normalized
+
+
+def generate_llm_report_narrative(report_json: dict[str, Any]) -> dict[str, Any]:
+    if not _is_llm_profit_report_enabled():
+        return {
+            "ok": False,
+            "enabled": False,
+            "source": DETERMINISTIC_REPORT_NARRATIVE_SOURCE,
+            "error": None,
+        }
+
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+
+    if not api_key:
+        return {
+            "ok": False,
+            "enabled": False,
+            "source": DETERMINISTIC_REPORT_NARRATIVE_SOURCE,
+            "error": "OPENAI_API_KEY is not configured.",
+        }
+
+    try:
+        from openai import OpenAI
+    except Exception:
+        return {
+            "ok": False,
+            "enabled": True,
+            "source": DETERMINISTIC_REPORT_NARRATIVE_SOURCE,
+            "error": "OpenAI SDK is not installed.",
+        }
+
+    sanitized_input = _build_llm_sanitized_input(report_json)
+    model = _get_openai_model_name()
+    schema = _build_llm_narrative_schema()
+
+    try:
+        client = OpenAI(api_key=api_key, timeout=12)
+        completion = client.chat.completions.create(
+            model=model,
+            temperature=0.35,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "solarmate_profit_report_narrative",
+                    "strict": True,
+                    "schema": schema,
+                },
+            },
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "너는 SolarMate의 AI 수익·보조금·금융 리포트 문장 편집자다. "
+                        "한국어만 사용한다. 제공된 숫자를 재계산하거나 변경하지 말고, "
+                        "제공된 formatted text 값을 그대로 인용한다. "
+                        "'예상', '추정', '가능성', '검토', '확인 필요' 표현을 사용한다. "
+                        "보조금, 대출 승인, 절감액, 구조안전성, 장애물 상태를 보장하거나 확정하지 않는다. "
+                        "출력은 반드시 요청된 JSON schema만 따른다."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "task": "숫자는 바꾸지 말고 SolarMate 수익 리포트 narrative 필드만 작성하세요.",
+                            "allowedCta": "우리 아파트 태양광 설치하기",
+                            "input": sanitized_input,
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+            ],
+        )
+        content = completion.choices[0].message.content if completion.choices else None
+
+        if not isinstance(content, str) or not content.strip():
+            return {
+                "ok": False,
+                "enabled": True,
+                "source": DETERMINISTIC_REPORT_NARRATIVE_SOURCE,
+                "model": model,
+                "error": "OpenAI response was empty.",
+            }
+
+        narrative = _normalize_llm_narrative(json.loads(content))
+
+        if narrative is None:
+            return {
+                "ok": False,
+                "enabled": True,
+                "source": DETERMINISTIC_REPORT_NARRATIVE_SOURCE,
+                "model": model,
+                "error": "OpenAI response did not match the safe narrative schema.",
+            }
+
+        return {
+            "ok": True,
+            "enabled": True,
+            "source": LLM_REPORT_NARRATIVE_SOURCE,
+            "model": model,
+            "narrative": narrative,
+            "error": None,
+        }
+    except Exception:
+        return {
+            "ok": False,
+            "enabled": True,
+            "source": DETERMINISTIC_REPORT_NARRATIVE_SOURCE,
+            "model": model,
+            "error": "OpenAI narrative generation failed; deterministic template was used.",
+        }
 
 
 def build_profit_report(
@@ -310,8 +578,7 @@ def build_profit_report(
     net_investment = calculate_net_investment(report_input_metrics, subsidy_matrix, loan_scenario)
     narrative = _build_report_narrative(report_input_metrics, subsidy_matrix, loan_scenario, net_investment)
     risk_disclaimers = _build_risk_disclaimers(agent_payload)
-
-    return {
+    report = {
         "schemaVersion": SCHEMA_VERSION,
         "reportType": REPORT_TYPE,
         "generatedAt": _now_iso(),
@@ -320,7 +587,6 @@ def build_profit_report(
             "analysisResultId": agent_payload.get("analysisResultId") or ai_simulation_result.get("analysisResultId"),
             "generator": "deterministic_profit_report_agent",
             "llmPolishEnabled": False,
-            "llmPolishNote": "TODO: OPENAI_API_KEY와 ENABLE_LLM_PROFIT_REPORT=true 설정 시 숫자 재계산 없이 문장 다듬기만 연결 가능",
         },
         "buildingSummary": _build_building_summary(ai_simulation_result, agent_payload),
         "fourMetrics": _build_four_metrics(report_input_metrics),
@@ -328,6 +594,8 @@ def build_profit_report(
         "loanSupportScenario": loan_scenario,
         "netInvestment": net_investment,
         "reportNarrative": narrative,
+        "reportNarrativeSource": DETERMINISTIC_REPORT_NARRATIVE_SOURCE,
+        "llmEnabled": False,
         "riskDisclaimers": risk_disclaimers,
         "cta": {
             "label": "상담 신청하기",
@@ -335,6 +603,33 @@ def build_profit_report(
             "nextAction": "보조금 공고와 현장 확인 항목을 상담으로 검토",
         },
     }
+    llm_result = generate_llm_report_narrative(report)
+    report["llmEnabled"] = llm_result.get("enabled") is True
+
+    if llm_result.get("ok") is True and isinstance(llm_result.get("narrative"), dict):
+        report["reportNarrative"] = llm_result["narrative"]
+        report["reportNarrativeSource"] = LLM_REPORT_NARRATIVE_SOURCE
+        report["source"] = {
+            **report["source"],
+            "generator": "deterministic_profit_report_agent_with_llm_narrative",
+            "llmPolishEnabled": True,
+            "llmModel": llm_result.get("model"),
+        }
+    else:
+        report["reportNarrativeSource"] = DETERMINISTIC_REPORT_NARRATIVE_SOURCE
+        report["source"] = {
+            **report["source"],
+            "llmPolishEnabled": report["llmEnabled"],
+            "llmPolishFallback": report["llmEnabled"],
+        }
+
+        if isinstance(llm_result.get("model"), str):
+            report["source"]["llmModel"] = llm_result["model"]
+
+        if isinstance(llm_result.get("error"), str) and llm_result["error"]:
+            report["llmError"] = llm_result["error"]
+
+    return report
 
 
 def build_profit_report_markdown(report_json: dict[str, Any]) -> str:
