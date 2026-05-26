@@ -6,9 +6,9 @@ import {
   LuRefreshCw,
   LuSearch,
   LuShieldCheck,
+  LuUserRound,
   LuX,
 } from 'react-icons/lu';
-import SolarMateHeader from '../components/SolarMateHeader';
 import {
   ADMIN_CONSULTATION_STATUSES,
   fetchAdminConsultations,
@@ -259,7 +259,25 @@ export default function AdminConsultationsPage() {
 
   return (
     <div className="admin-consultations-page">
-      <SolarMateHeader />
+      <header className="admin-consultations-header">
+        <a className="admin-consultations-brand" href="/" aria-label="이코햇 홈">
+          <span className="admin-consultations-brand-mark" aria-hidden="true">
+            <span />
+            <span />
+          </span>
+          <span>
+            <strong>이코햇</strong>
+            <small>SolarMate Admin</small>
+          </span>
+        </a>
+
+        <div className="admin-consultations-header-actions">
+          <a href="/login">
+            <LuUserRound aria-hidden="true" />
+            로그인 화면
+          </a>
+        </div>
+      </header>
 
       <main className="admin-consultations-main">
         <section className="admin-consultations-toolbar" aria-labelledby="admin-consultations-title">

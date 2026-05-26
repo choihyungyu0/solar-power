@@ -1,5 +1,6 @@
 import { type ChangeEvent, type FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { LuShieldCheck } from 'react-icons/lu';
 import SolarMateHeader from '../components/SolarMateHeader';
 import { clearDemoAuth, setDemoAuth } from '../lib/demoAuth';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
@@ -92,6 +93,10 @@ export default function LoginPage() {
     }
 
     navigate('/member/dashboard?tab=generation');
+  };
+
+  const handleAdminClick = () => {
+    navigate('/admin/consultations');
   };
 
   const handleLogout = async () => {
@@ -196,6 +201,10 @@ export default function LoginPage() {
               <button className="login-outline-button" type="button" onClick={handleLogout}>
                 로그아웃
               </button>
+              <button className="login-admin-button" type="button" onClick={handleAdminClick}>
+                <LuShieldCheck aria-hidden="true" />
+                관리자 화면으로 이동
+              </button>
             </div>
           ) : (
             <form className="login-form" onSubmit={handleSubmit}>
@@ -240,6 +249,11 @@ export default function LoginPage() {
                   비밀번호 찾기
                 </button>
               </div>
+
+              <button type="button" className="login-admin-button" onClick={handleAdminClick}>
+                <LuShieldCheck aria-hidden="true" />
+                관리자 화면으로 이동
+              </button>
             </form>
           )}
 

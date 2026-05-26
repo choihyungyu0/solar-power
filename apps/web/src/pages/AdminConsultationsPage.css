@@ -11,6 +11,97 @@
   font-family: inherit;
 }
 
+.admin-consultations-header {
+  min-height: 78px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid #dfe6ef;
+  padding: 0 30px;
+  background: #ffffff;
+}
+
+.admin-consultations-brand {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: #0f172a;
+  text-decoration: none;
+}
+
+.admin-consultations-brand-mark {
+  width: 45px;
+  height: 42px;
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.admin-consultations-brand-mark span:first-child {
+  width: 20px;
+  height: 20px;
+  position: absolute;
+  top: 0;
+  right: 5px;
+  border-radius: 50%;
+  background: #facc15;
+}
+
+.admin-consultations-brand-mark span:last-child {
+  width: 34px;
+  height: 24px;
+  border: 3px solid #1d4ed8;
+  border-radius: 5px;
+  background:
+    linear-gradient(90deg, transparent 31%, #1d4ed8 31% 38%, transparent 38% 62%, #1d4ed8 62% 69%, transparent 69%),
+    linear-gradient(0deg, transparent 44%, #1d4ed8 44% 56%, transparent 56%),
+    #60a5fa;
+  transform: skewX(-10deg);
+}
+
+.admin-consultations-brand strong,
+.admin-consultations-brand small {
+  display: block;
+  line-height: 1;
+}
+
+.admin-consultations-brand strong {
+  color: #0f2a5f;
+  font-size: 25px;
+  font-weight: 950;
+}
+
+.admin-consultations-brand small {
+  margin-top: 4px;
+  color: #0e7490;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.admin-consultations-header-actions a {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0 14px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.admin-consultations-header-actions svg {
+  width: 18px;
+  height: 18px;
+}
+
 .admin-consultations-main {
   width: min(1420px, calc(100% - 48px));
   margin: 30px auto 0;
@@ -592,6 +683,17 @@
 }
 
 @media (max-width: 620px) {
+  .admin-consultations-header {
+    min-height: auto;
+    align-items: stretch;
+    flex-direction: column;
+    padding: 16px;
+  }
+
+  .admin-consultations-header-actions a {
+    width: 100%;
+  }
+
   .admin-consultations-main {
     width: calc(100% - 24px);
     margin-top: 20px;
