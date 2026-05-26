@@ -2,6 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from .ml_simulation_model import (
+    build_model_metadata,
+    classify_building_cluster,
+    get_feature_importance,
+    predict_generation,
+    predict_payback,
+)
+
 
 GRADE_LABELS = {
     "S": "최우선 설치 후보",
@@ -49,6 +57,17 @@ def _as_int(value: Any, fallback: int = 0) -> int:
 
 def _round(value: float, digits: int = 1):
     return round(value, digits)
+
+
+def _money(value: Any):
+    return round(_as_float(value))
+
+
+def _usable_ratio(input: dict[str, Any]):
+    roof_area_m2 = _as_float(input.get("roofAreaM2"))
+    usable_area_m2 = _as_float(input.get("usableAreaM2"))
+
+    return _round(usable_area_m2 / roof_area_m2, 3) if roof_area_m2 > 0 else 0
 
 
 def calculate_shading_ratios(panels_geojson):
@@ -258,13 +277,14 @@ def calculate_suitability_score(input):
 
 
 def build_generation_prediction(input):
-    annual_generation_kwh = round(_as_float(input.get("annualGenerationKwh")))
-    monthly_generation_kwh = _as_float(input.get("monthlyGenerationKwh"))
+    ml_prediction = predict_generation(input)
+    annual_generation_kwh = round(_as_float(ml_prediction.get("annualGenerationKwh")))
+    monthly_generation_kwh = _as_float(ml_prediction.get("monthlyGenerationKwh"))
 
     if monthly_generation_kwh <= 0 and annual_generation_kwh > 0:
         monthly_generation_kwh = round(annual_generation_kwh / 12)
 
-    confidence = 0.75
+    confidence = _as_float(ml_prediction.get("confidence"), 0.75)
     red_cell_ratio = _as_float(input.get("redCellRatio"))
     original_cell_count = _as_float(input.get("originalCellCount"))
     used_cell_count = _as_float(input.get("usedCellCount"))
@@ -294,15 +314,22 @@ def build_generation_prediction(input):
     else:
         confidence_label = "낮음"
 
+    feature_importance = get_feature_importance().get("generation", [])
+
     return {
-        "modelType": "explainable-hybrid-regression-v1",
+        "modelType": ml_prediction.get("modelType") or "fallback-formula-v1",
+        "modelStatus": ml_prediction.get("modelStatus") or "fallback-no-model-file",
         "annualGenerationKwh": annual_generation_kwh,
         "monthlyGenerationKwh": round(monthly_generation_kwh),
         "confidence": confidence,
         "confidenceLabel": confidence_label,
+        "featureImportance": feature_importance[:6],
+        "isMeasuredGenerationModel": False,
+        "trainingDataSource": ml_prediction.get("trainingDataSource") or "simulation-derived-seed-data",
         "assumptions": [
-            "경기 기후 플랫폼 음영 셀과 패널 배치 결과를 기반으로 한 예상값입니다.",
-            "패널 출력, 설치각, 음영 평균, 선택 셀 수를 반영한 데모 산식입니다.",
+            "시뮬레이션 기반 대리 회귀 모델로 경기 기후 플랫폼 음영 셀과 패널 배치 결과를 기반으로 한 예상값입니다.",
+            "패널 출력, 설치각, 음영 평균, 선택 셀 수를 반영한 설명 가능한 AI 점수화 보조 모델입니다.",
+            "실측 발전량 학습 모델이 아니며 실측 데이터 누적 시 고도화 가능하도록 설계했습니다.",
             "실제 발전량은 현장 장애물, 구조안전성, 계통연계 조건, 유지관리 상태에 따라 달라질 수 있습니다.",
         ],
     }
@@ -323,8 +350,9 @@ def build_panel_optimization_summary(input):
         summary = "녹색 및 노란색 셀을 우선 사용하고 붉은 음영 셀은 후순위로 두는 배치를 권장합니다."
 
     return {
+        "modelType": "shading_aware_optimizer_v1",
         "strategy": "green-first-shading-aware",
-        "objective": "음영이 낮은 셀을 우선 선택하여 예상 발전량을 높이는 배치",
+        "objective": "음영이 낮은 셀을 우선 선택해 예상 발전량을 최대화",
         "selectedPanelCount": selected_count,
         "excludedPanelCount": excluded_count,
         "optimizationSummary": summary,
@@ -337,7 +365,8 @@ def build_panel_optimization_summary(input):
 
 
 def build_agent_payload(input):
-    score_result = input.get("suitability") if isinstance(input.get("suitability"), dict) else None
+    score_result = input.get("buildingSuitability") if isinstance(input.get("buildingSuitability"), dict) else None
+    score_result = score_result or (input.get("suitability") if isinstance(input.get("suitability"), dict) else None)
     score = score_result or calculate_suitability_score(input)
     self_payment_estimate_krw = max(
         0,
@@ -353,11 +382,14 @@ def build_agent_payload(input):
     payback_years = _as_float(input.get("paybackYears"))
     warnings = score.get("warnings", [])
     reasons = score.get("reasons", [])
+    cluster = score.get("cluster") if isinstance(score.get("cluster"), dict) else {}
+    cluster_name = cluster.get("clusterName") if isinstance(cluster.get("clusterName"), str) else "군집 확인 필요"
 
     return {
         "summaryForCounselor": (
-            f"{input.get('buildingName') or '선택 건물'}은 설명형 AI 기준 {score['grade']}등급 "
+            f"{input.get('buildingName') or '선택 건물'}은 설명 가능한 AI 점수화 기준 {score['grade']}등급 "
             f"({score['score']}점, {score['label']})으로 추정됩니다. "
+            f"군집 유형은 {cluster_name}입니다. "
             f"권장 설치용량은 약 {_round(install_capacity_kw, 1)}kW, 예상 회수기간은 약 {_round(payback_years, 1)}년입니다."
         ),
         "questionsToAskUser": [
@@ -381,6 +413,8 @@ def build_agent_payload(input):
             "selfPaymentEstimateKrw": self_payment_estimate_krw,
             "paybackYears": _round(payback_years, 1),
             "suitabilityGrade": score["grade"],
+            "suitabilityCluster": cluster_name,
+            "modelDisclosure": "시뮬레이션 기반 대리 회귀 모델이며 실측 데이터 누적 시 고도화 가능",
         },
         "counselingHints": {
             "topReasons": reasons[:3],
@@ -404,18 +438,117 @@ def _build_recommended_action(score_result: dict[str, Any]):
     return "현재 조건만으로는 신중한 검토가 필요하며 대체 배치나 규모 축소 검토를 권장합니다."
 
 
-def build_ai_simulation_result(input):
-    score_result = calculate_suitability_score(input)
-    generation_prediction = build_generation_prediction(input)
-    panel_optimization = build_panel_optimization_summary(input)
-    agent_payload = build_agent_payload({**input, "suitability": score_result})
+def _build_building_snapshot(input: dict[str, Any]):
+    return {
+        "buildingId": input.get("buildingId"),
+        "buildingName": input.get("buildingName") or "선택 건물",
+        "roadAddress": input.get("roadAddress") or "",
+        "jibunAddress": input.get("jibunAddress") or "",
+        "buildingUsage": input.get("buildingUsage") or "확인 필요",
+        "latitude": input.get("latitude"),
+        "longitude": input.get("longitude"),
+    }
+
+
+def _build_roof_snapshot(input: dict[str, Any]):
+    return {
+        "roofAreaM2": _round(_as_float(input.get("roofAreaM2")), 2),
+        "usableAreaM2": _round(_as_float(input.get("usableAreaM2")), 2),
+        "usableRatio": _usable_ratio(input),
+        "roofSource": input.get("roofSource") or "확인 필요",
+        "geometryType": input.get("geometryType") or "확인 필요",
+        "isPreciseRoofData": bool(input.get("isPreciseRoofData")),
+        "originalCellCount": _as_int(input.get("originalCellCount")),
+        "usedCellCount": _as_int(input.get("usedCellCount")),
+    }
+
+
+def _build_shading_snapshot(input: dict[str, Any]):
+    return {
+        "shadingAverage": _round(_as_float(input.get("shadingAverage")), 2),
+        "greenCellRatio": _as_float(input.get("greenCellRatio")),
+        "yellowCellRatio": _as_float(input.get("yellowCellRatio")),
+        "redCellRatio": _as_float(input.get("redCellRatio")),
+        "greenCellCount": _as_int(input.get("greenCellCount")),
+        "yellowCellCount": _as_int(input.get("yellowCellCount")),
+        "redCellCount": _as_int(input.get("redCellCount")),
+        "cellCount": _as_int(input.get("cellCount")),
+    }
+
+
+def _build_economics_snapshot(input: dict[str, Any], payback_prediction: dict[str, Any]):
+    estimated_install_cost_krw = _money(input.get("estimatedInstallCostKrw"))
+    subsidy_estimate_krw = _money(input.get("subsidyEstimateKrw"))
+    self_payment_estimate_krw = max(0, estimated_install_cost_krw - subsidy_estimate_krw)
 
     return {
-        "modelVersion": "solarmate-explainable-simulation-ai-v1",
-        "summary": "공공데이터, 음영 분석, 패널 배치, 발전량/경제성 추정값 기반의 설명형 AI 시뮬레이션 결과입니다.",
-        "suitability": score_result,
-        "generationPrediction": generation_prediction,
+        "estimatedInstallCostKrw": estimated_install_cost_krw,
+        "subsidyEstimateKrw": subsidy_estimate_krw,
+        "estimatedSelfPaymentKrw": self_payment_estimate_krw,
+        "policyLoanLimitKrw": _money(input.get("policyLoanLimitKrw")),
+        "annualSavingKrw": _money(input.get("annualSavingKrw")),
+        "paybackYears": _round(_as_float(payback_prediction.get("paybackYears")), 1),
+        "paybackModelType": payback_prediction.get("modelType"),
+        "paybackModelStatus": payback_prediction.get("modelStatus"),
+        "notice": "예상·추정 값이며 실제 공고 확인 필요",
+    }
+
+
+def build_ai_simulation_result(input):
+    generation_prediction = build_generation_prediction(input)
+    annual_generation_kwh = _as_float(generation_prediction.get("annualGenerationKwh"))
+    base_generation_kwh = _as_float(input.get("annualGenerationKwh"))
+    base_annual_saving_krw = _as_float(input.get("annualSavingKrw"))
+    saving_per_kwh = base_annual_saving_krw / base_generation_kwh if base_generation_kwh > 0 else 155
+    annual_saving_krw = round(annual_generation_kwh * saving_per_kwh) if annual_generation_kwh > 0 else round(base_annual_saving_krw)
+    payback_prediction = predict_payback(
+        {
+            **input,
+            "annualGenerationKwh": annual_generation_kwh,
+            "annualSavingKrw": annual_saving_krw,
+        }
+    )
+    score_input = {
+        **input,
+        "annualGenerationKwh": annual_generation_kwh,
+        "monthlyGenerationKwh": generation_prediction.get("monthlyGenerationKwh"),
+        "annualSavingKrw": annual_saving_krw,
+        "paybackYears": payback_prediction.get("paybackYears"),
+        "usableRatio": _usable_ratio(input),
+    }
+    score_result = calculate_suitability_score(score_input)
+    cluster_result = classify_building_cluster(score_input)
+    building_suitability = {
+        "modelType": "explainable_score_plus_kmeans_v1",
+        **score_result,
+        "cluster": cluster_result,
+    }
+    panel_optimization = build_panel_optimization_summary(score_input)
+    economics = _build_economics_snapshot(score_input, payback_prediction)
+    ai_model_metadata = {
+        **build_model_metadata(),
+        "featureImportance": get_feature_importance(),
+    }
+    agent_payload = build_agent_payload(
+        {
+            **score_input,
+            "buildingSuitability": building_suitability,
+            "suitability": building_suitability,
+        }
+    )
+
+    return {
+        "modelVersion": "solarmate-ml-backed-simulation-ai-v1",
+        "summary": "공공데이터, 음영 분석, 패널 배치, 발전량/경제성 추정값 기반의 시뮬레이션 기반 대리 회귀 모델 및 설명 가능한 AI 점수화 결과입니다.",
+        "building": _build_building_snapshot(score_input),
+        "roof": _build_roof_snapshot(score_input),
+        "shading": _build_shading_snapshot(score_input),
         "panelOptimization": panel_optimization,
-        "recommendedAction": _build_recommended_action(score_result),
+        "generationPrediction": generation_prediction,
+        "economics": economics,
+        "buildingSuitability": building_suitability,
+        "suitability": building_suitability,
+        "aiModelMetadata": ai_model_metadata,
+        "recommendedAction": _build_recommended_action(building_suitability),
         "agentPayload": agent_payload,
     }

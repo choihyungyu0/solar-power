@@ -5,8 +5,8 @@ import type {
   ClimateLiveAnalysisResponse,
 } from '../types/climateBundle';
 
-const CLIMATE_BACKEND_HEALTH_TIMEOUT_MS = 15000;
-const CLIMATE_BACKEND_ANALYSIS_TIMEOUT_MS = 45000;
+const CLIMATE_BACKEND_HEALTH_TIMEOUT_MS = 45000;
+const CLIMATE_BACKEND_ANALYSIS_TIMEOUT_MS = 90000;
 const CLIMATE_BACKEND_DISABLED_MESSAGE =
   '백엔드 서버 연결은 성공했습니다. climate.gg 파이프라인은 다음 단계에서 연결됩니다.';
 const CLIMATE_BACKEND_UNAVAILABLE_MESSAGE =

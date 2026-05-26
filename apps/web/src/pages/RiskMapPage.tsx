@@ -1555,8 +1555,13 @@ function RiskMapPage() {
     ? activeClimateBundle.ai_simulation_result
     : null;
   const activeAiSimulationResult = aiSimulationResult ?? activeBundleAiResult;
-  const aiSuitabilityReasons = activeAiSimulationResult?.suitability.reasons.slice(0, 3) ?? [];
-  const aiSuitabilityWarnings = activeAiSimulationResult?.suitability.warnings ?? [];
+  const activeBuildingSuitability =
+    activeAiSimulationResult?.buildingSuitability ?? activeAiSimulationResult?.suitability ?? null;
+  const activeAiCluster = activeBuildingSuitability?.cluster ?? null;
+  const activeAiModelType =
+    activeBuildingSuitability?.modelType ?? activeAiSimulationResult?.generationPrediction.modelType ?? '-';
+  const aiSuitabilityReasons = activeBuildingSuitability?.reasons.slice(0, 3) ?? [];
+  const aiSuitabilityWarnings = activeBuildingSuitability?.warnings ?? [];
   const activeClimatePanelGeojson = hasLiveClimatePanelLayout
     ? liveClimatePanelGeojson
     : hasStaticClimatePanelLayout
@@ -3019,6 +3024,8 @@ function RiskMapPage() {
       },
       liveClimateBundle: response.bundle.pv_analysis_output ? response.bundle : null,
       aiSimulationResult: nextAiSimulationResult,
+      analysisResultId: response.analysisResultId ?? response.bundle.analysisResultId ?? response.bundle.analysis_result_id ?? null,
+      dbSaveStatus: response.dbSaveStatus ?? response.bundle.dbSaveStatus ?? null,
       pvAnalysisResult: nextPvResponse.result,
       selectedEstimate: {
         panelCount: selectedBuilding.estimatedPanelCount,
@@ -4807,7 +4814,7 @@ function RiskMapPage() {
                 </div>
               )}
 
-              {activeAiSimulationResult && (
+              {activeAiSimulationResult && activeBuildingSuitability && (
                 <section className="aiSuitabilityCard" aria-label="AI 설치 적합도">
                   <div className="aiSuitabilityHeader">
                     <div>
@@ -4815,12 +4822,23 @@ function RiskMapPage() {
                       <strong>AI 설치 적합도</strong>
                     </div>
                     <div className="aiSuitabilityScore">
-                      <strong>{activeAiSimulationResult.suitability.score}</strong>
-                      <span>{activeAiSimulationResult.suitability.grade}</span>
+                      <strong>{activeBuildingSuitability.score}</strong>
+                      <span>{activeBuildingSuitability.grade}</span>
                     </div>
                   </div>
 
-                  <p className="aiSuitabilityLabel">{activeAiSimulationResult.suitability.label}</p>
+                  <p className="aiSuitabilityLabel">{activeBuildingSuitability.label}</p>
+
+                  <dl className="aiSuitabilityMeta">
+                    <div>
+                      <dt>군집 유형</dt>
+                      <dd>{activeAiCluster?.clusterName ?? '군집 확인 필요'}</dd>
+                    </div>
+                    <div>
+                      <dt>모델</dt>
+                      <dd>{activeAiModelType}</dd>
+                    </div>
+                  </dl>
 
                   {aiSuitabilityReasons.length > 0 && (
                     <div className="aiSuitabilityList">
@@ -4847,7 +4865,7 @@ function RiskMapPage() {
                   </div>
 
                   <p className="aiSuitabilityNote">
-                    초기 MVP에서는 공공데이터와 음영 분석 결과 기반 설명형 AI 점수화 모델을 사용합니다.
+                    현재 모델은 시뮬레이션 기반 대리 회귀 모델이며, 실측 데이터 누적 시 고도화됩니다.
                   </p>
                 </section>
               )}

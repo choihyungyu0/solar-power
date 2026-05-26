@@ -1,0 +1,88 @@
+{
+  "modelVersion": "solarmate-simulation-surrogate-rf-kmeans-v1",
+  "trainedAt": "2026-05-26T07:37:35.244847+00:00",
+  "trainingDataSource": "simulation-derived-seed-data",
+  "isMeasuredGenerationModel": false,
+  "rowCount": 24,
+  "featureColumns": [
+    "roof_area_m2",
+    "usable_area_m2",
+    "usable_ratio",
+    "shading_average",
+    "green_cell_ratio",
+    "yellow_cell_ratio",
+    "red_cell_ratio",
+    "panel_count",
+    "install_capacity_kw",
+    "panel_angle_deg",
+    "panel_capacity_w",
+    "estimated_install_cost_krw",
+    "subsidy_estimate_krw"
+  ],
+  "targetColumns": [
+    "annual_generation_kwh",
+    "payback_years"
+  ],
+  "modelTypes": {
+    "generation": "RandomForestRegressor",
+    "payback": "RandomForestRegressor",
+    "suitabilityCluster": "KMeans"
+  },
+  "trainingSummary": {
+    "annualGenerationKwhMean": 14817.9,
+    "paybackYearsMean": 7.58,
+    "annualGenerationKwhMin": 2060.0,
+    "annualGenerationKwhMax": 46320.0
+  },
+  "clusterLabelMap": {
+    "0": {
+      "clusterName": "설치 우선형",
+      "description": "설치 용량과 녹색 셀 비율이 높고 회수기간이 비교적 짧은 군집입니다.",
+      "centroidSignals": {
+        "installCapacityKw": 25.6,
+        "greenCellRatio": 0.664,
+        "redCellRatio": 0.086,
+        "usableAreaM2": 282.9,
+        "estimatedInstallCostKrw": 31494000
+      }
+    },
+    "1": {
+      "clusterName": "음영 주의형",
+      "description": "붉은 음영 셀 비율이 높아 패널 배치와 현장 음영 검토가 필요한 군집입니다.",
+      "centroidSignals": {
+        "installCapacityKw": 6.2,
+        "greenCellRatio": 0.196,
+        "redCellRatio": 0.406,
+        "usableAreaM2": 72.3,
+        "estimatedInstallCostKrw": 7821429
+      }
+    },
+    "3": {
+      "clusterName": "면적 부족형",
+      "description": "사용 가능 면적 또는 패널 수가 부족해 설치 규모 검토가 필요한 군집입니다.",
+      "centroidSignals": {
+        "installCapacityKw": 7.1,
+        "greenCellRatio": 0.559,
+        "redCellRatio": 0.126,
+        "usableAreaM2": 88.0,
+        "estimatedInstallCostKrw": 9130000
+      }
+    },
+    "2": {
+      "clusterName": "경제성 검토형",
+      "description": "비용 또는 회수기간 부담이 커 보조금과 정책자금 검토가 중요한 군집입니다.",
+      "centroidSignals": {
+        "installCapacityKw": 18.8,
+        "greenCellRatio": 0.35,
+        "redCellRatio": 0.23,
+        "usableAreaM2": 235.3,
+        "estimatedInstallCostKrw": 23075000
+      }
+    }
+  },
+  "limitations": [
+    "현재 모델은 실측 발전량이 아닌 시뮬레이션 파생 seed data로 학습되었습니다.",
+    "시뮬레이션 기반 대리 회귀 모델이므로 현장 장애물, 구조안전성, 계통연계 조건을 직접 보증하지 않습니다.",
+    "실측 데이터 누적 시 고도화 가능하며, 현재 결과는 상담 우선순위와 설명 가능한 AI 점수화에 사용합니다."
+  ]
+}

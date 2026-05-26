@@ -1173,6 +1173,36 @@
   font-weight: 900;
 }
 
+.aiSuitabilityMeta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.aiSuitabilityMeta div {
+  min-width: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #f8fafc;
+}
+
+.aiSuitabilityMeta dt {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.aiSuitabilityMeta dd {
+  overflow-wrap: anywhere;
+  margin: 4px 0 0;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
 .aiSuitabilityList {
   display: grid;
   gap: 7px;

@@ -33,3 +33,6 @@ venv/
 coverage/
 htmlcov/
 .vercel
+.codex/
+/risk-map*.png
+/uvicorn-*.txt

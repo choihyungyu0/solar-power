@@ -366,22 +366,33 @@ function SimulationResultPage() {
 }
 
 function AiAnalysisReport({ aiResult }: { aiResult: NonNullable<StoredSimulationResult['aiSimulationResult']> }) {
-  const warnings = aiResult.suitability.warnings;
+  const suitability = aiResult.buildingSuitability ?? aiResult.suitability;
+  const warnings = suitability.warnings;
   const questions = aiResult.agentPayload.questionsToAskUser;
+  const requiredDocuments = aiResult.agentPayload.requiredDocuments;
+  const cluster = suitability.cluster;
 
   return (
     <section className="aiAnalysisReport" aria-label="AI 분석 리포트">
       <div className="aiReportHeader">
         <div>
           <span>AI 분석 리포트</span>
-          <h2>설치 적합도 {aiResult.suitability.grade}등급</h2>
+          <h2>설치 적합도 {suitability.grade}등급</h2>
         </div>
-        <strong>{aiResult.suitability.score}점</strong>
+        <strong>{suitability.score}점</strong>
       </div>
 
       <p className="aiReportSummary">{aiResult.agentPayload.summaryForCounselor}</p>
 
       <dl className="aiReportGrid">
+        <div>
+          <dt>발전량 모델</dt>
+          <dd>{aiResult.generationPrediction.modelType}</dd>
+        </div>
+        <div>
+          <dt>군집 유형</dt>
+          <dd>{cluster?.clusterName ?? '군집 확인 필요'}</dd>
+        </div>
         <div>
           <dt>권장 조치</dt>
           <dd>{aiResult.recommendedAction}</dd>
@@ -399,6 +410,8 @@ function AiAnalysisReport({ aiResult }: { aiResult: NonNullable<StoredSimulation
           <dd>{aiResult.generationPrediction.confidenceLabel}</dd>
         </div>
       </dl>
+
+      {cluster?.description && <p className="aiReportSummary">{cluster.description}</p>}
 
       {warnings.length > 0 && (
         <div className="aiReportList">
@@ -422,8 +435,19 @@ function AiAnalysisReport({ aiResult }: { aiResult: NonNullable<StoredSimulation
         </div>
       )}
 
+      {requiredDocuments.length > 0 && (
+        <div className="aiReportList">
+          <strong>필요 서류</strong>
+          <ul>
+            {requiredDocuments.map((documentName) => (
+              <li key={documentName}>{documentName}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <details className="agentPayloadPreview">
-        <summary>상담 에이전트 전달 JSON</summary>
+        <summary>개발자 JSON · agentPayload</summary>
         <pre>{formatAgentPayloadJson(aiResult.agentPayload)}</pre>
       </details>
     </section>

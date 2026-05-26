@@ -1,12 +1,16 @@
-import type { ClimateBundle } from '../types/climateBundle';
+import type { ClimateBundle, ClimateDbSaveStatus } from '../types/climateBundle';
 import type { PvAnalysisResult } from '../types/pvAnalysis';
 import {
   isSimulationAiResult,
   type SimulationAiAgentPayload,
+  type SimulationAiModelMetadata,
   type SimulationAiResult,
 } from './simulationAiResult';
 
 export const SELECTED_SIMULATION_RESULT_STORAGE_KEY = 'solarmate:selectedSimulationResult';
+export const SELECTED_AI_SIMULATION_RESULT_STORAGE_KEY = 'solarmate:aiSimulationResult';
+export const SELECTED_AGENT_PAYLOAD_STORAGE_KEY = 'solarmate:agentPayload';
+export const SELECTED_AI_MODEL_METADATA_STORAGE_KEY = 'solarmate:aiModelMetadata';
 
 export type SimulationResultSource = 'climate-live-hybrid' | 'pv-analysis' | 'demo';
 
@@ -42,14 +46,20 @@ export type StoredSimulationResult = {
   solar: StoredSimulationSolar;
   source: SimulationResultSource;
   storedAt: string;
+  analysisResultId?: string | null;
+  dbSaveStatus?: ClimateDbSaveStatus | null;
+  consultationRequestId?: string | null;
   aiSimulationResult?: SimulationAiResult | null;
   agentPayload?: SimulationAiAgentPayload | null;
+  aiModelMetadata?: SimulationAiModelMetadata | null;
 };
 
 type SimulationResultSnapshotInput = {
   building: Partial<StoredSimulationBuilding>;
   liveClimateBundle?: ClimateBundle | null;
   aiSimulationResult?: SimulationAiResult | null;
+  analysisResultId?: string | null;
+  dbSaveStatus?: ClimateDbSaveStatus | null;
   pvAnalysisResult?: PvAnalysisResult | null;
   selectedEstimate?: Partial<{
     panelCount: number;
@@ -204,6 +214,43 @@ function buildClimateSolarPayload(bundle: ClimateBundle, selectedEstimate?: Simu
   });
 }
 
+function applyAiSimulationToSolarPayload(solar: StoredSimulationSolar, aiSimulationResult: SimulationAiResult | null) {
+  if (!aiSimulationResult) {
+    return solar;
+  }
+
+  const generation = aiSimulationResult.generationPrediction;
+  const economics = aiSimulationResult.economics ?? {};
+  const annualGenerationKwh = toFiniteNumber(generation.annualGenerationKwh) ?? solar.annualGenerationKwh;
+  const annualSavingKrw = toFiniteNumber(economics.annualSavingKrw) ?? solar.annualSavingKrw;
+  const investmentKrw = toFiniteNumber(economics.estimatedInstallCostKrw) ?? solar.investmentKrw;
+  const subsidyMaxKrw = toFiniteNumber(economics.subsidyEstimateKrw) ?? solar.subsidyMaxKrw;
+  const selfPaymentKrw = toFiniteNumber(economics.estimatedSelfPaymentKrw) ?? Math.max(0, investmentKrw - subsidyMaxKrw);
+  const loanLimitKrw = toFiniteNumber(economics.policyLoanLimitKrw) ?? Math.round(selfPaymentKrw * 0.75);
+  const paybackYears = toFiniteNumber(economics.paybackYears) ?? solar.paybackYears;
+  const monthlyGeneration =
+    solar.monthlyGeneration.length === 12
+      ? solar.monthlyGeneration.map((value) => {
+          const currentTotal = solar.monthlyGeneration.reduce((sum, item) => sum + item, 0);
+
+          return currentTotal > 0 ? Math.round((value / currentTotal) * annualGenerationKwh) : value;
+        })
+      : createMonthlyGenerationFallback(annualGenerationKwh);
+
+  return {
+    ...solar,
+    annualGenerationKwh: Math.round(annualGenerationKwh),
+    annualSavingKrw: Math.round(annualSavingKrw),
+    paybackYears: roundNumber(paybackYears, 1),
+    investmentKrw: Math.round(investmentKrw),
+    subsidyMaxKrw: Math.round(subsidyMaxKrw),
+    selfPaymentKrw: Math.round(selfPaymentKrw),
+    loanLimitKrw: Math.round(loanLimitKrw),
+    monthlyGeneration,
+    monthlyGenerationKwh: monthlyGeneration,
+  };
+}
+
 function buildPvSolarPayload(result: PvAnalysisResult, selectedEstimate?: SimulationResultSnapshotInput['selectedEstimate']) {
   return buildSolarPayload(
     {
@@ -234,6 +281,43 @@ function resolveSimulationAiResult(input: SimulationResultSnapshotInput) {
   return isSimulationAiResult(bundleAiResult) ? bundleAiResult : null;
 }
 
+function buildAiPayloadFields(aiSimulationResult: SimulationAiResult | null) {
+  return aiSimulationResult
+    ? {
+        aiSimulationResult,
+        agentPayload: aiSimulationResult.agentPayload,
+        aiModelMetadata: aiSimulationResult.aiModelMetadata ?? null,
+      }
+    : {};
+}
+
+function pickString(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function resolveAnalysisResultId(
+  input: SimulationResultSnapshotInput,
+  aiSimulationResult: SimulationAiResult | null,
+) {
+  return pickString(
+    input.analysisResultId,
+    input.liveClimateBundle?.analysisResultId,
+    input.liveClimateBundle?.analysis_result_id,
+    aiSimulationResult?.analysisResultId,
+    aiSimulationResult?.agentPayload?.analysisResultId,
+  );
+}
+
+function resolveDbSaveStatus(input: SimulationResultSnapshotInput) {
+  return input.dbSaveStatus ?? input.liveClimateBundle?.dbSaveStatus ?? null;
+}
+
 export function buildStoredSimulationResult(input: SimulationResultSnapshotInput): StoredSimulationResult {
   const building: StoredSimulationBuilding = {
     name: input.building.name || '선택 아파트',
@@ -243,38 +327,52 @@ export function buildStoredSimulationResult(input: SimulationResultSnapshotInput
   };
 
   const aiSimulationResult = resolveSimulationAiResult(input);
-  const aiPayloadFields = aiSimulationResult
-    ? {
-        aiSimulationResult,
-        agentPayload: aiSimulationResult.agentPayload,
-      }
-    : {};
+  const aiPayloadFields = buildAiPayloadFields(aiSimulationResult);
+  const analysisResultId = resolveAnalysisResultId(input, aiSimulationResult);
+  const dbSaveStatus = resolveDbSaveStatus(input);
+  const persistenceFields = {
+    analysisResultId,
+    dbSaveStatus,
+  };
 
   if (input.liveClimateBundle) {
+    const solar = applyAiSimulationToSolarPayload(
+      buildClimateSolarPayload(input.liveClimateBundle, input.selectedEstimate),
+      aiSimulationResult,
+    );
+
     return {
       building,
-      solar: buildClimateSolarPayload(input.liveClimateBundle, input.selectedEstimate),
+      solar,
       source: 'climate-live-hybrid',
       storedAt: new Date().toISOString(),
+      ...persistenceFields,
       ...aiPayloadFields,
     };
   }
 
   if (input.pvAnalysisResult) {
+    const solar = applyAiSimulationToSolarPayload(
+      buildPvSolarPayload(input.pvAnalysisResult, input.selectedEstimate),
+      aiSimulationResult,
+    );
+
     return {
       building,
-      solar: buildPvSolarPayload(input.pvAnalysisResult, input.selectedEstimate),
+      solar,
       source: 'pv-analysis',
       storedAt: new Date().toISOString(),
+      ...persistenceFields,
       ...aiPayloadFields,
     };
   }
 
   return {
     building,
-    solar: buildSolarPayload({}, input.selectedEstimate),
+    solar: applyAiSimulationToSolarPayload(buildSolarPayload({}, input.selectedEstimate), aiSimulationResult),
     source: 'demo',
     storedAt: new Date().toISOString(),
+    ...persistenceFields,
     ...aiPayloadFields,
   };
 }
@@ -303,6 +401,28 @@ export function saveSimulationResultToSession(result: StoredSimulationResult) {
     };
 
     window.sessionStorage.setItem(SELECTED_SIMULATION_RESULT_STORAGE_KEY, JSON.stringify(dashboardCompatibleResult));
+
+    if (dashboardCompatibleResult.aiSimulationResult) {
+      window.sessionStorage.setItem(
+        SELECTED_AI_SIMULATION_RESULT_STORAGE_KEY,
+        JSON.stringify(dashboardCompatibleResult.aiSimulationResult),
+      );
+    }
+
+    if (dashboardCompatibleResult.agentPayload) {
+      window.sessionStorage.setItem(
+        SELECTED_AGENT_PAYLOAD_STORAGE_KEY,
+        JSON.stringify(dashboardCompatibleResult.agentPayload),
+      );
+    }
+
+    if (dashboardCompatibleResult.aiModelMetadata) {
+      window.sessionStorage.setItem(
+        SELECTED_AI_MODEL_METADATA_STORAGE_KEY,
+        JSON.stringify(dashboardCompatibleResult.aiModelMetadata),
+      );
+    }
+
     return true;
   } catch {
     return false;
@@ -335,7 +455,17 @@ export function readSimulationResultFromSession() {
       return null;
     }
 
-    return parsedValue as StoredSimulationResult;
+    const storedResult = parsedValue as StoredSimulationResult;
+
+    if (!storedResult.aiModelMetadata && storedResult.aiSimulationResult?.aiModelMetadata) {
+      storedResult.aiModelMetadata = storedResult.aiSimulationResult.aiModelMetadata;
+    }
+
+    if (!storedResult.agentPayload && storedResult.aiSimulationResult?.agentPayload) {
+      storedResult.agentPayload = storedResult.aiSimulationResult.agentPayload;
+    }
+
+    return storedResult;
   } catch {
     return null;
   }

@@ -8,9 +8,15 @@ function Invoke-WebNpm {
     [string[]] $Arguments
   )
 
-  $process = Start-Process -FilePath "npm.cmd" -ArgumentList $Arguments -WorkingDirectory $webAppPath -NoNewWindow -Wait -PassThru
-  if ($process.ExitCode -ne 0) {
-    throw "npm.cmd $($Arguments -join ' ') failed with exit code $($process.ExitCode)"
+  Push-Location $webAppPath
+  try {
+    & npm.cmd @Arguments
+    if ($LASTEXITCODE -ne 0) {
+      throw "npm.cmd $($Arguments -join ' ') failed with exit code $LASTEXITCODE"
+    }
+  }
+  finally {
+    Pop-Location
   }
 }
 

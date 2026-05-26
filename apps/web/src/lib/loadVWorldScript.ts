@@ -1478,6 +1478,10 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : '알 수 없는 오류';
 }
 
+function isVWorldViewerRedefinitionError(error: unknown) {
+  return getErrorMessage(error).includes('Cannot redefine property: viewer');
+}
+
 export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWorldMapController {
   let map: VWorldMapInstance | null = null;
   let lastSelection:
@@ -1525,12 +1529,24 @@ export function initVWorld3DMap({ mapId, onSelect }: InitVWorld3DMapParams): VWo
 
   const initialPosition = createVWorldCameraPosition();
 
-  map.setOption?.(createVWorldMapOptions(mapId, initialPosition) as VWorldMapOptions);
-  map.setMapId?.(mapId);
-  map.setInitPosition?.(initialPosition);
-  map.setLogoVisible?.(true);
-  map.setNavigationZoomVisible?.(true);
-  map.start?.();
+  try {
+    map.setOption?.(createVWorldMapOptions(mapId, initialPosition) as VWorldMapOptions);
+    map.setMapId?.(mapId);
+    map.setInitPosition?.(initialPosition);
+    map.setLogoVisible?.(true);
+    map.setNavigationZoomVisible?.(true);
+    map.start?.();
+  } catch (error) {
+    if (!isVWorldViewerRedefinitionError(error)) {
+      throw error;
+    }
+
+    window.__solarMateMapDiagnostics = {
+      ...(window.__solarMateMapDiagnostics ?? {}),
+      vworldViewerRedefinitionIgnored: true,
+      vworldViewerRedefinitionMessage: getErrorMessage(error),
+    };
+  }
   focusVWorldMapOnCoordinate(map, {
     longitude: HWASEONG_INITIAL_LONGITUDE,
     latitude: HWASEONG_INITIAL_LATITUDE,

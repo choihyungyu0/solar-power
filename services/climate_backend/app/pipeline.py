@@ -14,6 +14,7 @@ from .geometry import (
     make_cells_in_polygon,
     normalize_geojson_polygon_4326,
 )
+from .supabase_client import save_analysis_result, save_training_sample
 
 
 PIPELINE_SOURCE = "external-fastapi-climate-backend"
@@ -192,6 +193,137 @@ def _coerce_float(value: Any, fallback: float):
         return float(value)
     except (TypeError, ValueError):
         return fallback
+
+
+def _coerce_optional_float(value: Any):
+    try:
+        next_value = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    return next_value if next_value == next_value else None
+
+
+def _coerce_optional_int(value: Any):
+    try:
+        return int(round(float(value)))
+    except (TypeError, ValueError):
+        return None
+
+
+def _read_nested(mapping_value: dict[str, Any] | None, *keys: str):
+    current: Any = mapping_value
+
+    for key in keys:
+        if not isinstance(current, dict):
+            return None
+
+        current = current.get(key)
+
+    return current
+
+
+def _safe_db_status(save_result: dict[str, Any]) -> dict[str, Any]:
+    analysis_result_id = save_result.get("id") if isinstance(save_result.get("id"), str) else None
+    status = {
+        "enabled": save_result.get("enabled") is True,
+        "analysisResultId": analysis_result_id,
+        "ok": save_result.get("ok") is True,
+    }
+
+    if save_result.get("ok") is not True and save_result.get("error"):
+        status["error"] = str(save_result.get("error"))
+
+    return status
+
+
+def _build_analysis_result_row(
+    *,
+    selected_building_id: str | None,
+    request,
+    ai_input: dict[str, Any],
+    ai_simulation_result: dict[str, Any],
+    agent_payload: dict[str, Any] | None,
+    pv_input: dict[str, Any],
+    pv_output: dict[str, Any] | None,
+    panels_geojson: dict[str, Any],
+    roof_polygon_4326: dict[str, Any],
+    diagnostics: dict[str, Any],
+) -> dict[str, Any]:
+    suitability = ai_simulation_result.get("suitability") if isinstance(ai_simulation_result, dict) else {}
+
+    if not isinstance(suitability, dict):
+        suitability = {}
+
+    return {
+        "building_id": selected_building_id,
+        "building_name": ai_input.get("buildingName"),
+        "road_address": ai_input.get("roadAddress"),
+        "jibun_address": ai_input.get("jibunAddress"),
+        "latitude": request.latitude,
+        "longitude": request.longitude,
+        "roof_area_m2": _coerce_optional_float(ai_input.get("roofAreaM2")),
+        "usable_area_m2": _coerce_optional_float(ai_input.get("usableAreaM2")),
+        "panel_count": _coerce_optional_int(ai_input.get("panelCountSelected")),
+        "install_capacity_kw": _coerce_optional_float(ai_input.get("installCapacityKw")),
+        "annual_generation_kwh": _coerce_optional_float(_read_nested(ai_simulation_result, "generationPrediction", "annualGenerationKwh"))
+        or _coerce_optional_float(ai_input.get("annualGenerationKwh")),
+        "annual_saving_krw": _coerce_optional_int(_read_nested(ai_simulation_result, "economics", "annualSavingKrw"))
+        or _coerce_optional_int(ai_input.get("annualSavingKrw")),
+        "suitability_score": _coerce_optional_int(suitability.get("score")),
+        "suitability_grade": suitability.get("grade"),
+        "suitability_label": suitability.get("label"),
+        "ai_simulation_result": ai_simulation_result,
+        "agent_payload": agent_payload,
+        "raw_result": {
+            "source": PIPELINE_SOURCE,
+            "selectedBuildingId": selected_building_id,
+            "selectedAnalysisSessionId": getattr(request, "selectedAnalysisSessionId", None),
+            "roofSource": diagnostics.get("roofSource"),
+            "roofPolygon4326": roof_polygon_4326,
+            "pvAnalysisInput": pv_input,
+            "pvAnalysisOutput": pv_output,
+            "panelsGeojson": panels_geojson,
+            "diagnostics": diagnostics,
+        },
+    }
+
+
+def _build_training_sample_row(
+    *,
+    selected_building_id: str | None,
+    ai_input: dict[str, Any],
+    ai_simulation_result: dict[str, Any],
+) -> dict[str, Any]:
+    roof_area_m2 = _coerce_optional_float(ai_input.get("roofAreaM2")) or 0
+    usable_area_m2 = _coerce_optional_float(ai_input.get("usableAreaM2")) or 0
+    usable_ratio = round(usable_area_m2 / roof_area_m2, 3) if roof_area_m2 > 0 else 0
+
+    return {
+        "building_id": selected_building_id,
+        "roof_area_m2": roof_area_m2,
+        "usable_area_m2": usable_area_m2,
+        "usable_ratio": usable_ratio,
+        "shading_average": _coerce_optional_float(ai_input.get("shadingAverage")),
+        "green_cell_ratio": _coerce_optional_float(ai_input.get("greenCellRatio")),
+        "yellow_cell_ratio": _coerce_optional_float(ai_input.get("yellowCellRatio")),
+        "red_cell_ratio": _coerce_optional_float(ai_input.get("redCellRatio")),
+        "panel_count": _coerce_optional_int(ai_input.get("panelCountSelected")),
+        "install_capacity_kw": _coerce_optional_float(ai_input.get("installCapacityKw")),
+        "panel_angle_deg": _coerce_optional_int(ai_input.get("panelAngleDeg")),
+        "panel_capacity_w": _coerce_optional_int(ai_input.get("panelCapacityW")),
+        "estimated_install_cost_krw": _coerce_optional_int(_read_nested(ai_simulation_result, "economics", "estimatedInstallCostKrw"))
+        or _coerce_optional_int(ai_input.get("estimatedInstallCostKrw")),
+        "subsidy_estimate_krw": _coerce_optional_int(_read_nested(ai_simulation_result, "economics", "subsidyEstimateKrw"))
+        or _coerce_optional_int(ai_input.get("subsidyEstimateKrw")),
+        "annual_generation_kwh": _coerce_optional_float(_read_nested(ai_simulation_result, "generationPrediction", "annualGenerationKwh"))
+        or _coerce_optional_float(ai_input.get("annualGenerationKwh")),
+        "annual_saving_krw": _coerce_optional_int(_read_nested(ai_simulation_result, "economics", "annualSavingKrw"))
+        or _coerce_optional_int(ai_input.get("annualSavingKrw")),
+        "payback_years": _coerce_optional_float(_read_nested(ai_simulation_result, "economics", "paybackYears"))
+        or _coerce_optional_float(ai_input.get("paybackYears")),
+        "source": "render-backend-simulation-ai",
+    }
 
 
 def normalize_backend_pv_output(raw: Any, panel_capacity_w: int, panel_count: int, shading_average: float):
@@ -450,11 +582,23 @@ async def run_hybrid_pipeline(request):
             "paybackYears": payback_years,
         }
         ai_simulation_result = build_ai_simulation_result(ai_input)
+        agent_payload = (
+            ai_simulation_result.get("agentPayload")
+            if isinstance(ai_simulation_result.get("agentPayload"), dict)
+            else None
+        )
         diagnostics["greenCellRatio"] = shading_ratios["greenCellRatio"]
         diagnostics["yellowCellRatio"] = shading_ratios["yellowCellRatio"]
         diagnostics["redCellRatio"] = shading_ratios["redCellRatio"]
         diagnostics["aiSuitabilityScore"] = ai_simulation_result["suitability"]["score"]
         diagnostics["aiSuitabilityGrade"] = ai_simulation_result["suitability"]["grade"]
+        diagnostics["aiSuitabilityCluster"] = (
+            ai_simulation_result.get("buildingSuitability", {})
+            .get("cluster", {})
+            .get("clusterName")
+        )
+        diagnostics["aiGenerationModelType"] = ai_simulation_result.get("generationPrediction", {}).get("modelType")
+        diagnostics["aiModelStatus"] = ai_simulation_result.get("aiModelMetadata", {}).get("modelStatus")
 
         step = "build-bundle"
         diagnostics["step"] = step
@@ -495,11 +639,56 @@ async def run_hybrid_pipeline(request):
             "ai_simulation_result": ai_simulation_result,
         }
 
+        analysis_save_result = save_analysis_result(
+            _build_analysis_result_row(
+                selected_building_id=selected_building_id,
+                request=request,
+                ai_input=ai_input,
+                ai_simulation_result=ai_simulation_result,
+                agent_payload=agent_payload,
+                pv_input=pv_input,
+                pv_output=pv_output,
+                panels_geojson=panels_geojson,
+                roof_polygon_4326=roof_polygon_4326,
+                diagnostics=diagnostics,
+            )
+        )
+        db_save_status = _safe_db_status(analysis_save_result)
+        analysis_result_id = db_save_status["analysisResultId"]
+        bundle["dbSaveStatus"] = db_save_status
+
+        if analysis_result_id:
+            bundle["analysisResultId"] = analysis_result_id
+            bundle["analysis_result_id"] = analysis_result_id
+            ai_simulation_result["analysisResultId"] = analysis_result_id
+
+            if agent_payload is not None:
+                agent_payload["analysisResultId"] = analysis_result_id
+
+        training_save_result = save_training_sample(
+            _build_training_sample_row(
+                selected_building_id=selected_building_id,
+                ai_input=ai_input,
+                ai_simulation_result=ai_simulation_result,
+            )
+        )
+
         diagnostics["pvAnalysisStatus"] = pv_status
         diagnostics["pvAnalysisSource"] = (
             pv_output.get("source") if isinstance(pv_output, dict) else None
         )
         diagnostics["usedVercelPvAnalysis"] = False
+        diagnostics["dbSaveStatus"] = db_save_status
+        diagnostics["trainingSampleDbSaveStatus"] = {
+            "enabled": training_save_result.get("enabled") is True,
+            "ok": training_save_result.get("ok") is True,
+            "id": training_save_result.get("id") if isinstance(training_save_result.get("id"), str) else None,
+            **(
+                {"error": str(training_save_result.get("error"))}
+                if training_save_result.get("ok") is not True and training_save_result.get("error")
+                else {}
+            ),
+        }
         diagnostics["elapsedMs"] = _elapsed_ms(started)
 
         return {
@@ -507,12 +696,16 @@ async def run_hybrid_pipeline(request):
             "source": PIPELINE_SOURCE,
             "selectedBuildingId": selected_building_id,
             "selectedAnalysisSessionId": selected_analysis_session_id,
+            "analysisResultId": analysis_result_id,
+            "dbSaveStatus": db_save_status,
             "roofSource": roof_source,
             "roofPolygon4326": roof_polygon_4326,
             "roofAreaM2": round(roof_area, 2),
             "bundle": bundle,
             "panelsGeojson": panels_geojson,
             "aiSimulationResult": ai_simulation_result,
+            "agentPayload": agent_payload,
+            "aiModelMetadata": ai_simulation_result.get("aiModelMetadata"),
             "diagnostics": diagnostics,
         }
     except Exception as error:

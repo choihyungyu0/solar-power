@@ -2,6 +2,10 @@ import { ChangeEvent, FormEvent, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LuChevronDown, LuHouse, LuMapPin, LuMessageCircle } from 'react-icons/lu';
 import SolarMateHeader from '../components/SolarMateHeader';
+import {
+  CONSULTATION_REQUEST_ID_STORAGE_KEY,
+  submitConsultationRequest,
+} from '../lib/consultationClient';
 import { SELECTED_SIMULATION_RESULT_STORAGE_KEY } from '../lib/simulationResultStorage';
 import './ConsultationPage.css';
 
@@ -33,11 +37,17 @@ type ConsultationFormValues = {
   contact: string;
   consultationType: string;
   content: string;
+  privacyAgreed: boolean;
+  thirdPartyAgreed: boolean;
 };
 
 type ServiceConsultationInquiry = ConsultationFormValues &
   ConsultationAddress & {
     createdAt: string;
+    analysisResultId?: string | null;
+    consultationRequestId?: string | null;
+    serverSaveStatus?: 'saved' | 'temporary';
+    serverSaveMessage?: string;
   };
 
 type UnknownRecord = Record<string, unknown>;
@@ -126,6 +136,30 @@ function getConsultationAddress(): ConsultationAddress {
   return serviceInquiryAddress ?? fallbackAddress;
 }
 
+function getSelectedSimulationContext() {
+  const selectedSimulationResult = readSessionJson(SELECTED_SIMULATION_RESULT_STORAGE_KEY);
+
+  if (!isRecord(selectedSimulationResult)) {
+    return {
+      analysisResultId: null,
+      agentPayload: null,
+    };
+  }
+
+  const analysisResultId = pickText(
+    selectedSimulationResult.analysisResultId,
+    getPathValue(selectedSimulationResult, ['aiSimulationResult', 'analysisResultId']),
+    getPathValue(selectedSimulationResult, ['agentPayload', 'analysisResultId']),
+  );
+  const agentPayload = getPathValue(selectedSimulationResult, ['agentPayload']);
+  const aiAgentPayload = getPathValue(selectedSimulationResult, ['aiSimulationResult', 'agentPayload']);
+
+  return {
+    analysisResultId,
+    agentPayload: isRecord(agentPayload) ? agentPayload : isRecord(aiAgentPayload) ? aiAgentPayload : null,
+  };
+}
+
 function saveConsultationInquiry(inquiry: ServiceConsultationInquiry) {
   window.sessionStorage.setItem(SERVICE_CONSULTATION_INQUIRY_STORAGE_KEY, JSON.stringify(inquiry));
 
@@ -138,6 +172,8 @@ function saveConsultationInquiry(inquiry: ServiceConsultationInquiry) {
       email: '',
       type: inquiry.consultationType,
       message: inquiry.content,
+      consultationRequestId: inquiry.consultationRequestId,
+      analysisResultId: inquiry.analysisResultId,
     }),
   );
 }
@@ -150,14 +186,20 @@ export default function ConsultationPage() {
     contact: '',
     consultationType: '',
     content: '',
+    privacyAgreed: false,
+    thirdPartyAgreed: false,
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitMessage, setSubmitMessage] = useState('');
 
   const handleChange = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = event.target;
+    const target = event.target;
+    const { name, value } = target;
+    const nextValue = target instanceof HTMLInputElement && target.type === 'checkbox' ? target.checked : value;
 
     setFormValues((prevValues) => ({
       ...prevValues,
-      [name]: value,
+      [name]: nextValue,
     }));
   };
 
@@ -165,7 +207,7 @@ export default function ConsultationPage() {
     navigate('/');
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const trimmedFormValues = {
@@ -173,24 +215,67 @@ export default function ConsultationPage() {
       contact: formValues.contact.trim(),
       consultationType: formValues.consultationType.trim(),
       content: formValues.content.trim(),
+      privacyAgreed: formValues.privacyAgreed,
+      thirdPartyAgreed: formValues.thirdPartyAgreed,
     };
-    const hasMissingValue =
-      !trimmedFormValues.name ||
-      !trimmedFormValues.contact ||
-      !trimmedFormValues.consultationType ||
-      !trimmedFormValues.content;
 
-    if (hasMissingValue) {
-      window.alert('필수 항목을 입력해주세요.');
+    if (!trimmedFormValues.name || !trimmedFormValues.contact) {
+      window.alert('이름과 연락처를 입력해주세요.');
       return;
     }
 
-    saveConsultationInquiry({
+    if (!trimmedFormValues.privacyAgreed) {
+      window.alert('개인정보 수집 및 이용에 동의해주세요.');
+      return;
+    }
+
+    const selectedSimulationContext = getSelectedSimulationContext();
+    const inquiry: ServiceConsultationInquiry = {
       ...trimmedFormValues,
       roadAddress: address.roadAddress,
       jibunAddress: address.jibunAddress,
+      analysisResultId: selectedSimulationContext.analysisResultId,
       createdAt: new Date().toISOString(),
+    };
+
+    setIsSubmitting(true);
+    setSubmitMessage('');
+    window.sessionStorage.removeItem(CONSULTATION_REQUEST_ID_STORAGE_KEY);
+
+    const response = await submitConsultationRequest({
+      name: trimmedFormValues.name,
+      contact: trimmedFormValues.contact,
+      consultationType: trimmedFormValues.consultationType || undefined,
+      content: trimmedFormValues.content || undefined,
+      roadAddress: address.roadAddress,
+      jibunAddress: address.jibunAddress,
+      analysisResultId: selectedSimulationContext.analysisResultId,
+      privacyAgreed: trimmedFormValues.privacyAgreed,
+      thirdPartyAgreed: trimmedFormValues.thirdPartyAgreed,
+      agentPayload: selectedSimulationContext.agentPayload,
     });
+
+    if (response.ok) {
+      window.sessionStorage.setItem(CONSULTATION_REQUEST_ID_STORAGE_KEY, response.consultationRequestId);
+      saveConsultationInquiry({
+        ...inquiry,
+        consultationRequestId: response.consultationRequestId,
+        serverSaveStatus: 'saved',
+      });
+      navigate('/consultation/complete');
+      return;
+    }
+
+    const fallbackMessage = '서버 저장에 실패하여 임시 저장되었습니다. 네트워크 상태를 확인해주세요.';
+
+    saveConsultationInquiry({
+      ...inquiry,
+      serverSaveStatus: 'temporary',
+      serverSaveMessage: fallbackMessage,
+    });
+    setSubmitMessage(fallbackMessage);
+    window.alert(fallbackMessage);
+    setIsSubmitting(false);
     navigate('/consultation/complete');
   };
 
@@ -266,15 +351,39 @@ export default function ConsultationPage() {
                 />
               </label>
 
+              <label className="consultation-consent-row" htmlFor="consultation-privacy-agreed">
+                <input
+                  id="consultation-privacy-agreed"
+                  name="privacyAgreed"
+                  type="checkbox"
+                  checked={formValues.privacyAgreed}
+                  onChange={handleChange}
+                />
+                <span>상담 접수를 위한 개인정보 수집 및 이용에 동의합니다.</span>
+              </label>
+
+              <label className="consultation-consent-row" htmlFor="consultation-third-party-agreed">
+                <input
+                  id="consultation-third-party-agreed"
+                  name="thirdPartyAgreed"
+                  type="checkbox"
+                  checked={formValues.thirdPartyAgreed}
+                  onChange={handleChange}
+                />
+                <span>설치 가능성 검토를 위해 협력 상담사에게 내용을 전달하는 것에 동의합니다.</span>
+              </label>
+
+              {submitMessage && <p className="consultation-submit-message">{submitMessage}</p>}
+
               <div className="consultation-button-row">
                 <button className="consultation-home-button" type="button" onClick={handleHomeClick}>
                   <LuHouse aria-hidden="true" />
                   홈
                 </button>
 
-                <button className="consultation-submit-button" type="submit">
+                <button className="consultation-submit-button" type="submit" disabled={isSubmitting}>
                   <LuMessageCircle aria-hidden="true" />
-                  상담신청
+                  {isSubmitting ? '접수 중' : '상담신청'}
                 </button>
               </div>
             </form>

@@ -1,4 +1,8 @@
-import type { SimulationAiResult } from '../lib/simulationAiResult';
+import type {
+  SimulationAiAgentPayload,
+  SimulationAiModelMetadata,
+  SimulationAiResult,
+} from '../lib/simulationAiResult';
 
 export type ClimateBundleMeta = {
   unq_id: string | null;
@@ -61,7 +65,17 @@ export type ClimateBundlePvOutputRaw = {
   monthly_generation: Array<{ month: number; generation: number }>;
 };
 
+export type ClimateDbSaveStatus = {
+  enabled: boolean;
+  analysisResultId: string | null;
+  ok: boolean;
+  error?: string;
+};
+
 export type ClimateBundle = {
+  analysisResultId?: string | null;
+  analysis_result_id?: string | null;
+  dbSaveStatus?: ClimateDbSaveStatus | null;
   meta: ClimateBundleMeta;
   roof_polygon_4326: { type: 'Polygon'; coordinates: number[][][] };
   roof_area_sqm_5186: number;
@@ -216,6 +230,8 @@ export type ClimateLiveAnalysisSuccessResponse = {
   selectedAnalysisSessionId?: string | null;
   selectedFeatureBuildingId?: string | null;
   roofSource: ClimateLiveRoofSource;
+  analysisResultId?: string | null;
+  dbSaveStatus?: ClimateDbSaveStatus | null;
   roofPolygon4326?: ClimateRoofPolygon4326 | null;
   roofAreaM2?: number | null;
   analysisStage?: 'shading-complete' | 'shading-timeout' | 'pv-complete' | string;
@@ -223,6 +239,8 @@ export type ClimateLiveAnalysisSuccessResponse = {
   bundle: ClimateBundle;
   panelsGeojson: ClimatePanelsGeoJson;
   aiSimulationResult?: SimulationAiResult | null;
+  agentPayload?: SimulationAiAgentPayload | null;
+  aiModelMetadata?: SimulationAiModelMetadata | null;
   diagnostics: ClimateLiveAnalysisDiagnostics;
 };
 
@@ -233,6 +251,8 @@ export type ClimateLiveAnalysisFailureResponse = {
   selectedAnalysisSessionId?: string | null;
   selectedFeatureBuildingId?: string | null;
   roofSource?: ClimateLiveRoofSource;
+  analysisResultId?: string | null;
+  dbSaveStatus?: ClimateDbSaveStatus | null;
   roofPolygon4326?: ClimateRoofPolygon4326 | null;
   roofAreaM2?: number | null;
   disabled?: boolean;
@@ -240,6 +260,8 @@ export type ClimateLiveAnalysisFailureResponse = {
   fallbackRecommended: true;
   analysisStage?: 'shading-complete' | 'shading-timeout' | 'pv-complete' | string;
   aiSimulationResult?: SimulationAiResult | null;
+  agentPayload?: SimulationAiAgentPayload | null;
+  aiModelMetadata?: SimulationAiModelMetadata | null;
   diagnostics: ClimateLiveAnalysisDiagnostics;
 };
 

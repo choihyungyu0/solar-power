@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import SolarMateHeader from '../components/SolarMateHeader';
+import { CONSULTATION_REQUEST_ID_STORAGE_KEY } from '../lib/consultationClient';
 import { readSimulationResultFromSession } from '../lib/simulationResultStorage';
 import './ConsultationCompletePage.css';
 
@@ -16,6 +17,8 @@ type StoredConsultationInquiry = {
   roadAddress: string;
   jibunAddress: string;
   monthlyPaymentKrw?: number;
+  consultationRequestId?: string | null;
+  serverSaveMessage?: string;
   createdAt: string;
 };
 
@@ -55,6 +58,15 @@ function pickText(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
+function getConsultationRequestId() {
+  const inquiry = readConsultationInquiryFromSession();
+
+  return (
+    pickText(window.sessionStorage.getItem(CONSULTATION_REQUEST_ID_STORAGE_KEY)) ??
+    pickText(inquiry?.consultationRequestId)
+  );
+}
+
 function getCompletionAddress(): CompletionAddress {
   const inquiry = readConsultationInquiryFromSession();
   const storedResult = readSimulationResultFromSession();
@@ -70,6 +82,7 @@ function getCompletionAddress(): CompletionAddress {
 export default function ConsultationCompletePage() {
   const navigate = useNavigate();
   const address = getCompletionAddress();
+  const consultationRequestId = getConsultationRequestId();
 
   return (
     <div className="consultation-complete-page">
@@ -88,6 +101,7 @@ export default function ConsultationCompletePage() {
               <h1>정상적으로 접수되었습니다.</h1>
               <p>담당 매니저가 순차적으로 연락드리겠습니다.</p>
               <p>(영업일 기준 1일 ~ 3일이 소요됩니다.)</p>
+              <p>{consultationRequestId ? `접수번호: ${consultationRequestId}` : '임시 접수 상태입니다.'}</p>
             </div>
           </section>
         </section>

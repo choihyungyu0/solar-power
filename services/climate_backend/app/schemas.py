@@ -21,6 +21,8 @@ class ClimateAnalysisResponse(BaseModel):
     source: str = "external-fastapi-climate-backend"
     selectedBuildingId: Optional[str] = None
     selectedAnalysisSessionId: Optional[str] = None
+    analysisResultId: Optional[str] = None
+    dbSaveStatus: Optional[dict[str, Any]] = None
     message: Optional[str] = None
     roofSource: Optional[str] = None
     roofPolygon4326: Optional[dict[str, Any]] = None
@@ -28,6 +30,8 @@ class ClimateAnalysisResponse(BaseModel):
     bundle: Optional[dict[str, Any]] = None
     panelsGeojson: Optional[dict[str, Any]] = None
     aiSimulationResult: Optional[dict[str, Any]] = None
+    agentPayload: Optional[dict[str, Any]] = None
+    aiModelMetadata: Optional[dict[str, Any]] = None
     fallbackRecommended: bool = False
     diagnostics: dict[str, Any] = Field(default_factory=dict)
 
@@ -35,3 +39,17 @@ class ClimateAnalysisResponse(BaseModel):
 class GeometryDebugRequest(BaseModel):
     selectedBuildingId: Optional[str] = None
     selectedBuildingFeature: dict[str, Any]
+
+
+class ConsultationRequest(BaseModel):
+    name: Optional[str] = None
+    contact: Optional[str] = None
+    email: Optional[str] = None
+    consultationType: Optional[str] = None
+    content: Optional[str] = None
+    roadAddress: Optional[str] = None
+    jibunAddress: Optional[str] = None
+    analysisResultId: Optional[str] = None
+    privacyAgreed: bool = False
+    thirdPartyAgreed: bool = False
+    agentPayload: Optional[dict[str, Any]] = None

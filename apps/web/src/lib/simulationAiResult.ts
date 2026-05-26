@@ -9,25 +9,48 @@ export type SimulationAiFeatureScores = {
   positiveRawScore?: number;
 };
 
+export type SimulationAiCluster = {
+  clusterId: number | string;
+  clusterName: string;
+  description?: string;
+  modelType?: string;
+  modelStatus?: string;
+  confidence?: number;
+  centroidSignals?: Record<string, number | string | null>;
+};
+
 export type SimulationAiSuitability = {
+  modelType?: 'explainable_score_plus_kmeans_v1' | string;
   score: number;
   grade: SimulationAiGrade;
   label: string;
+  cluster?: SimulationAiCluster;
   featureScores: SimulationAiFeatureScores;
   reasons: string[];
   warnings: string[];
 };
 
+export type SimulationAiFeatureImportance = {
+  feature: string;
+  label: string;
+  importance: number;
+};
+
 export type SimulationAiGenerationPrediction = {
-  modelType: 'explainable-hybrid-regression-v1' | string;
+  modelType: 'random_forest_surrogate_v1' | 'fallback-formula-v1' | 'explainable-hybrid-regression-v1' | string;
+  modelStatus?: string;
   annualGenerationKwh: number;
   monthlyGenerationKwh: number;
   confidence: number;
   confidenceLabel: '높음' | '중간' | '낮음' | string;
+  featureImportance?: SimulationAiFeatureImportance[];
+  isMeasuredGenerationModel?: boolean;
+  trainingDataSource?: string;
   assumptions: string[];
 };
 
 export type SimulationAiPanelOptimizationSummary = {
+  modelType?: 'shading_aware_optimizer_v1' | string;
   strategy: 'green-first-shading-aware' | string;
   objective: string;
   selectedPanelCount: number;
@@ -37,6 +60,7 @@ export type SimulationAiPanelOptimizationSummary = {
 };
 
 export type SimulationAiAgentPayload = {
+  analysisResultId?: string | null;
   summaryForCounselor: string;
   questionsToAskUser: string[];
   requiredDocuments: string[];
@@ -56,6 +80,8 @@ export type SimulationAiAgentPayload = {
     selfPaymentEstimateKrw: number;
     paybackYears: number;
     suitabilityGrade: SimulationAiGrade | string;
+    suitabilityCluster?: string;
+    modelDisclosure?: string;
   };
   counselingHints?: {
     topReasons?: string[];
@@ -63,12 +89,37 @@ export type SimulationAiAgentPayload = {
   };
 };
 
+export type SimulationAiModelMetadata = {
+  modelVersion: string;
+  modelStatus?: string;
+  trainingDataSource: string;
+  isMeasuredGenerationModel: boolean;
+  disclosure?: string[];
+  models?: Record<string, unknown>;
+  featureColumns?: string[];
+  rowCount?: number | null;
+  trainedAt?: string | null;
+  limitations?: string[];
+  loadError?: string | null;
+  featureImportance?: {
+    generation?: SimulationAiFeatureImportance[];
+    payback?: SimulationAiFeatureImportance[];
+  };
+};
+
 export type SimulationAiResult = {
+  analysisResultId?: string | null;
   modelVersion: string;
   summary: string;
+  building?: Record<string, unknown>;
+  roof?: Record<string, unknown>;
+  shading?: Record<string, unknown>;
   suitability: SimulationAiSuitability;
+  buildingSuitability?: SimulationAiSuitability;
   generationPrediction: SimulationAiGenerationPrediction;
   panelOptimization: SimulationAiPanelOptimizationSummary;
+  economics?: Record<string, unknown>;
+  aiModelMetadata?: SimulationAiModelMetadata;
   recommendedAction: string;
   agentPayload: SimulationAiAgentPayload;
 };

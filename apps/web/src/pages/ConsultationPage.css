@@ -329,6 +329,31 @@
   transform: translateY(-50%);
 }
 
+.consultation-consent-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: #465366;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.consultation-consent-row input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: #1d8f5f;
+  flex: 0 0 auto;
+}
+
+.consultation-submit-message {
+  margin: 0;
+  color: #b45309;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 .consultation-button-row {
   display: grid;
   grid-template-columns: 1fr 1.25fr;
@@ -358,6 +383,11 @@
   background: linear-gradient(135deg, #086af0 0%, #0054d6 100%);
   box-shadow: 0 10px 23px rgba(0, 88, 214, 0.25);
   color: #ffffff;
+}
+
+.consultation-submit-button:disabled {
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .consultation-home-button svg,
