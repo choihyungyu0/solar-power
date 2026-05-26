@@ -11,7 +11,7 @@ function ConvertTo-Utf8JsonFile {
     [Parameter(Mandatory = $true)] [object] $Payload
   )
 
-  $json = $Payload | ConvertTo-Json -Depth 100 -Compress
+  $json = if ($Payload -is [string]) { $Payload } else { $Payload | ConvertTo-Json -Depth 100 -Compress }
   $path = Join-Path $env:TEMP ("solarmate-profit-flow-{0}.json" -f ([guid]::NewGuid().ToString("N")))
   [System.IO.File]::WriteAllText($path, $json, [System.Text.UTF8Encoding]::new($false))
 
@@ -76,37 +76,37 @@ function Assert-Condition {
 
 Write-Host "Testing SolarMate production AI profit report flow against $BackendBaseUrl"
 
-$analysisPayload = @{
-  longitude = 127.072254
-  latitude = 37.202501
-  selectedBuildingId = "manual-profit-report-test"
-  selectedAnalysisSessionId = "manual-profit-report-test-session"
-  selectedBuildingFeature = @{
-    type = "Feature"
-    properties = @{
-      bld_id = "manual-profit-report-test"
-      bld_nm = "AI 수익 리포트 테스트 건물"
-      address = "경기도 화성시 테스트 주소"
+$analysisPayload = @'
+{
+  "longitude": 127.072254,
+  "latitude": 37.202501,
+  "selectedBuildingId": "manual-profit-report-test",
+  "selectedAnalysisSessionId": "manual-profit-report-test-session",
+  "selectedBuildingFeature": {
+    "type": "Feature",
+    "properties": {
+      "bld_id": "manual-profit-report-test",
+      "bld_nm": "AI 수익 리포트 테스트 건물",
+      "address": "경기도 화성시 테스트 주소"
+    },
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [[
+        [127.07220, 37.20245],
+        [127.07235, 37.20245],
+        [127.07235, 37.20260],
+        [127.07220, 37.20260],
+        [127.07220, 37.20245]
+      ]]
     }
-    geometry = @{
-      type = "Polygon"
-      coordinates = @(
-        @(
-          @(127.07220, 37.20245),
-          @(127.07235, 37.20245),
-          @(127.07235, 37.20260),
-          @(127.07220, 37.20260),
-          @(127.07220, 37.20245)
-        )
-      )
-    }
-  }
-  panelCapacityW = 640
-  panelAngle = 35
-  panelType = 1
-  cellsPerPanel = 2
-  mode = "fast"
+  },
+  "panelCapacityW": 640,
+  "panelAngle": 35,
+  "panelType": 1,
+  "cellsPerPanel": 2,
+  "mode": "fast"
 }
+'@
 
 $health = (Invoke-JsonRequest -Method "GET" -Url "$BackendBaseUrl/api/db-health").Json
 Assert-Condition ($health.ok -eq $true) "DB health endpoint did not return ok:true."
