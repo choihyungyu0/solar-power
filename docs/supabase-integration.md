@@ -163,6 +163,61 @@ GET /api/db-health
 
 응답에는 Supabase URL이나 service role key를 포함하지 않는다.
 
+## Supabase SQL Editor 수동 확인
+
+아래 쿼리는 Supabase SQL Editor에서 운영 저장 여부를 직접 확인하기 위한 것이다.
+이 결과를 공개 화면이나 공개 API로 노출하지 않는다. 특히 `consultation_requests`의 `name`, `contact`는 개인정보다.
+
+최신 분석 결과 확인:
+
+```sql
+select
+  id,
+  created_at,
+  building_id,
+  road_address,
+  annual_generation_kwh,
+  suitability_score,
+  suitability_grade
+from public.analysis_results
+order by created_at desc
+limit 5;
+```
+
+최신 학습 샘플 확인:
+
+```sql
+select
+  id,
+  created_at,
+  building_id,
+  shading_average,
+  panel_count,
+  install_capacity_kw,
+  annual_generation_kwh,
+  source
+from public.simulation_training_samples
+order by created_at desc
+limit 5;
+```
+
+최신 상담 신청 확인:
+
+```sql
+select
+  id,
+  created_at,
+  name,
+  contact,
+  consultation_type,
+  road_address,
+  analysis_result_id,
+  status
+from public.consultation_requests
+order by created_at desc
+limit 5;
+```
+
 ## RLS 메모
 
 운영 테이블은 RLS를 유지한다. Render 백엔드는 service role key로 서버 저장을 수행하고, 프론트엔드는 직접 쓰기 권한을 갖지 않는다. 사용자별 공개/비공개 조회 정책이 필요해지면 Supabase Auth 기반의 별도 읽기 API 또는 RLS 정책을 추가한다.
@@ -188,12 +243,16 @@ npm.cmd run build
 1. Render에 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ENABLE_SUPABASE_WRITE=true` 설정
 2. Render 재배포
 3. `https://solarmate-climate-backend.onrender.com/api/db-health` 확인
-4. `/risk-map`에서 건물 선택 후 분석 실행
-5. Supabase `analysis_results` row 생성 확인
-6. Supabase `simulation_training_samples` row 생성 확인
+4. 반복 가능한 운영 테스트 스크립트 실행
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\test-production-supabase-flow.ps1
+```
+
+5. Supabase SQL Editor에서 위 수동 확인 쿼리 실행
+6. `/risk-map`에서 건물 선택 후 분석 실행
 7. `/consultation`에서 상담 신청
-8. Supabase `consultation_requests` row 생성 확인
-9. 브라우저 Network, Vercel env, `apps/web` 소스에 service role key가 없는지 확인
+8. 브라우저 Network, Vercel env, `apps/web` 소스에 service role key가 없는지 확인
 
 ## 문제 해결
 
