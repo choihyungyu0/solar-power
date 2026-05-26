@@ -54,3 +54,13 @@ class ConsultationRequest(BaseModel):
     privacyAgreed: bool = False
     thirdPartyAgreed: bool = False
     agentPayload: Optional[dict[str, Any]] = None
+
+
+class AdminConsultationStatusUpdateRequest(BaseModel):
+    status: Literal[
+        "received",
+        "contacted",
+        "waiting_documents",
+        "proposal_sent",
+        "closed",
+    ]

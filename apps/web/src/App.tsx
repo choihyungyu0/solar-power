@@ -21,6 +21,7 @@ import {
 import type { InstallReview, PolicyProgram, SaveStatus, SolarRequestFormValues, SolarSimulationResult } from './lib/solarTypes';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { useSupabaseSession } from './lib/useSupabaseSession';
+import AdminConsultationsPage from './pages/AdminConsultationsPage';
 import ConsultationCompletePage from './pages/ConsultationCompletePage';
 import ConsultationPage from './pages/ConsultationPage';
 import LoginPage from './pages/LoginPage';
@@ -94,6 +95,7 @@ function App() {
       <Route path="/notice" element={<NoticePage />} />
       <Route path="/consultation" element={<ConsultationPage />} />
       <Route path="/consultation/complete" element={<ConsultationCompletePage />} />
+      <Route path="/admin/consultations" element={<AdminConsultationsPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/member/dashboard" element={<MemberDashboardPage />} />
       <Route path="/member/no-installation" element={<MemberNoInstallationPage />} />

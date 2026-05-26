@@ -93,34 +93,110 @@ function Invoke-JsonRequest {
   )
 
   $uri = "$BackendBaseUrl$Path"
-  $headers = @{
-    Accept = "application/json"
-  }
-  $requestParams = @{
-    Uri = $uri
-    Method = $Method
-    Headers = $headers
-    TimeoutSec = 180
-    ErrorAction = "Stop"
-  }
+  $statusMarker = "__SOLARMATE_HTTP_STATUS__:"
+  $bodyPath = $null
+  $curlArgs = @(
+    "--silent",
+    "--show-error",
+    "--location",
+    "--max-time",
+    "180",
+    "--request",
+    $Method,
+    "--header",
+    "Accept: application/json",
+    "--write-out",
+    "`n$statusMarker%{http_code}"
+  )
 
   if ($null -ne $Body) {
-    $requestParams["ContentType"] = "application/json; charset=utf-8"
-    $requestParams["Body"] = ($Body | ConvertTo-Json -Depth 30)
+    $bodyPath = [System.IO.Path]::GetTempFileName()
+    $bodyJson = $Body | ConvertTo-Json -Depth 30
+    $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+    [System.IO.File]::WriteAllText($bodyPath, $bodyJson, $utf8NoBom)
+    $curlArgs += @(
+      "--header",
+      "Content-Type: application/json; charset=utf-8",
+      "--data-binary",
+      "@$bodyPath"
+    )
   }
 
   try {
-    $response = Invoke-WebRequest @requestParams
-    $content = [string]$response.Content
+    $curlArgs += $uri
+    $curlOutput = & curl.exe @curlArgs 2>&1
+    $curlExitCode = $LASTEXITCODE
+    $rawOutput = ($curlOutput | Out-String)
+
+    if ($curlExitCode -ne 0) {
+      Write-Host "Request failed: $Method $uri"
+      Write-Host "curl.exe exit code: $curlExitCode"
+      if (-not [string]::IsNullOrWhiteSpace($rawOutput)) {
+        Write-Host "Response preview:"
+        Write-Host (Get-BodyPreview -Body $rawOutput)
+      }
+
+      return [pscustomobject]@{
+        Ok = $false
+        StatusCode = $null
+        Json = $null
+        Body = $rawOutput
+        Error = "curl.exe failed with exit code $curlExitCode"
+      }
+    }
+
+    $markerIndex = $rawOutput.LastIndexOf($statusMarker)
+
+    if ($markerIndex -lt 0) {
+      Write-Host "Request failed: $Method $uri"
+      Write-Host "Error: HTTP status marker was not found."
+      if (-not [string]::IsNullOrWhiteSpace($rawOutput)) {
+        Write-Host "Response preview:"
+        Write-Host (Get-BodyPreview -Body $rawOutput)
+      }
+
+      return [pscustomobject]@{
+        Ok = $false
+        StatusCode = $null
+        Json = $null
+        Body = $rawOutput
+        Error = "HTTP status marker was not found."
+      }
+    }
+
+    $content = $rawOutput.Substring(0, $markerIndex).Trim()
+    $statusText = $rawOutput.Substring($markerIndex + $statusMarker.Length).Trim()
+    $statusCode = $null
+
+    if ($statusText -match "^(\d{3})") {
+      $statusCode = [int]$Matches[1]
+    }
+
     $json = $null
 
     if (-not [string]::IsNullOrWhiteSpace($content)) {
       $json = $content | ConvertFrom-Json -ErrorAction Stop
     }
 
+    $statusOk = $null -ne $statusCode -and $statusCode -ge 200 -and $statusCode -lt 300
+
+    if (-not $statusOk) {
+      Write-Host "Request failed: $Method $uri"
+      if ($null -ne $statusCode) {
+        Write-Host "HTTP status: $statusCode"
+      }
+      else {
+        Write-Host "HTTP status: unknown"
+      }
+      if (-not [string]::IsNullOrWhiteSpace($content)) {
+        Write-Host "Response preview:"
+        Write-Host (Get-BodyPreview -Body $content)
+      }
+    }
+
     return [pscustomobject]@{
-      Ok = $true
-      StatusCode = [int]$response.StatusCode
+      Ok = $statusOk
+      StatusCode = $statusCode
       Json = $json
       Body = $content
       Error = $null
@@ -147,6 +223,11 @@ function Invoke-JsonRequest {
       Json = $null
       Body = $bodyText
       Error = $_.Exception.Message
+    }
+  }
+  finally {
+    if ($bodyPath -and (Test-Path -LiteralPath $bodyPath)) {
+      Remove-Item -LiteralPath $bodyPath -Force -ErrorAction SilentlyContinue
     }
   }
 }
@@ -208,6 +289,15 @@ $dbHealth = Invoke-JsonRequest -Method "GET" -Path "/api/db-health"
 if (-not $dbHealth.Ok) {
   Add-Failure "DB health request failed."
 }
+if (-not ($dbHealth.Json -and $dbHealth.Json.ok -eq $true)) {
+  Add-Failure "DB health response did not return ok:true."
+}
+if (-not ($dbHealth.Json -and $dbHealth.Json.supabaseEnabled -eq $true)) {
+  Add-Failure "DB health response did not confirm supabaseEnabled:true."
+}
+if (-not ($dbHealth.Json -and $dbHealth.Json.canConnect -eq $true)) {
+  Add-Failure "DB health response did not confirm canConnect:true."
+}
 
 $analysis = Invoke-JsonRequest -Method "POST" -Path "/api/climate-rooftop-analysis" -Body $analysisPayload
 if (-not $analysis.Ok) {
@@ -215,11 +305,15 @@ if (-not $analysis.Ok) {
 }
 
 $analysisResultId = if ($analysis.Json -and $analysis.Json.analysisResultId) { [string]$analysis.Json.analysisResultId } else { $null }
+$analysisDbEnabled = $analysis.Json -and $analysis.Json.dbSaveStatus -and $analysis.Json.dbSaveStatus.enabled -eq $true
 $analysisResultSaved = $analysis.Json -and $analysis.Json.dbSaveStatus -and $analysis.Json.dbSaveStatus.analysisResultOk -eq $true
 $trainingSampleSaved = $analysis.Json -and $analysis.Json.dbSaveStatus -and $analysis.Json.dbSaveStatus.trainingSampleOk -eq $true
 
 if (-not ($analysis.Json -and $analysis.Json.ok -eq $true)) {
   Add-Failure "Climate analysis response did not return ok:true."
+}
+if (-not $analysisDbEnabled) {
+  Add-Failure "Climate analysis response did not confirm dbSaveStatus.enabled:true."
 }
 if ([string]::IsNullOrWhiteSpace($analysisResultId)) {
   Add-Failure "Climate analysis response did not return analysisResultId."

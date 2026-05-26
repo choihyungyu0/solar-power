@@ -101,6 +101,125 @@ def save_consultation_request(row: dict[str, Any]) -> dict[str, Any]:
     return _insert_row(CONSULTATION_REQUESTS_TABLE, row)
 
 
+def _format_admin_consultation_row(
+    row: dict[str, Any],
+    analysis_by_id: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    analysis_result_id = row.get("analysis_result_id")
+    analysis = analysis_by_id.get(analysis_result_id) if isinstance(analysis_result_id, str) else None
+
+    return {
+        "id": row.get("id"),
+        "createdAt": row.get("created_at"),
+        "name": row.get("name"),
+        "contact": row.get("contact"),
+        "email": row.get("email"),
+        "consultationType": row.get("consultation_type"),
+        "roadAddress": row.get("road_address"),
+        "status": row.get("status"),
+        "analysisResultId": analysis_result_id,
+        "suitabilityScore": analysis.get("suitability_score") if analysis else None,
+        "suitabilityGrade": analysis.get("suitability_grade") if analysis else None,
+        "annualGenerationKwh": analysis.get("annual_generation_kwh") if analysis else None,
+        "installCapacityKw": analysis.get("install_capacity_kw") if analysis else None,
+    }
+
+
+def list_admin_consultations(limit: int = 100) -> dict[str, Any]:
+    client, disabled_or_failed = _get_enabled_client()
+
+    if disabled_or_failed:
+        return disabled_or_failed
+
+    try:
+        consultation_response = (
+            client.table(CONSULTATION_REQUESTS_TABLE)
+            .select(
+                "id,created_at,name,contact,email,consultation_type,road_address,status,analysis_result_id"
+            )
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        consultation_rows = (
+            consultation_response.data
+            if isinstance(consultation_response.data, list)
+            else []
+        )
+        analysis_ids = sorted(
+            {
+                row.get("analysis_result_id")
+                for row in consultation_rows
+                if isinstance(row, dict) and isinstance(row.get("analysis_result_id"), str)
+            }
+        )
+        analysis_by_id: dict[str, dict[str, Any]] = {}
+
+        if analysis_ids:
+            analysis_response = (
+                client.table(ANALYSIS_RESULTS_TABLE)
+                .select("id,suitability_score,suitability_grade,annual_generation_kwh,install_capacity_kw")
+                .in_("id", analysis_ids)
+                .execute()
+            )
+            analysis_rows = (
+                analysis_response.data
+                if isinstance(analysis_response.data, list)
+                else []
+            )
+            analysis_by_id = {
+                row["id"]: row
+                for row in analysis_rows
+                if isinstance(row, dict) and isinstance(row.get("id"), str)
+            }
+
+        return {
+            "ok": True,
+            "enabled": True,
+            "items": [
+                _format_admin_consultation_row(row, analysis_by_id)
+                for row in consultation_rows
+                if isinstance(row, dict)
+            ],
+        }
+    except Exception as error:
+        return _safe_failure_result(error)
+
+
+def update_consultation_status(consultation_id: str, status: str) -> dict[str, Any]:
+    client, disabled_or_failed = _get_enabled_client()
+
+    if disabled_or_failed:
+        return disabled_or_failed
+
+    try:
+        response = (
+            client.table(CONSULTATION_REQUESTS_TABLE)
+            .update({"status": status})
+            .eq("id", consultation_id)
+            .execute()
+        )
+        data = response.data if isinstance(response.data, list) else []
+        row = data[0] if data and isinstance(data[0], dict) else None
+
+        if row is None:
+            return {
+                "ok": False,
+                "enabled": True,
+                "reason": "Consultation request was not found.",
+                "errorType": "NotFound",
+            }
+
+        return {
+            "ok": True,
+            "enabled": True,
+            "id": row.get("id") if isinstance(row.get("id"), str) else consultation_id,
+            "status": row.get("status") if isinstance(row.get("status"), str) else status,
+        }
+    except Exception as error:
+        return _safe_failure_result(error)
+
+
 def _check_table_readable(table_name: str) -> bool:
     client, disabled_or_failed = _get_enabled_client()
 
