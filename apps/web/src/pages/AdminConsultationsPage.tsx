@@ -54,6 +54,22 @@ function formatNumber(value: number | null, unit: string) {
   return `${Math.round(value).toLocaleString('ko-KR')}${unit}`;
 }
 
+function formatKrw(value: number | null) {
+  if (value === null) {
+    return '-';
+  }
+
+  return `${Math.round(value).toLocaleString('ko-KR')}원`;
+}
+
+function formatYears(value: number | null) {
+  if (value === null || value <= 0) {
+    return '-';
+  }
+
+  return `약 ${value.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}년`;
+}
+
 function includesSearchText(row: AdminConsultationRow, searchText: string) {
   if (!searchText) {
     return true;
@@ -314,12 +330,32 @@ export default function AdminConsultationsPage() {
                             <dd>{row.analysisResultId || '-'}</dd>
                           </div>
                           <div>
+                            <dt>수익 리포트 ID</dt>
+                            <dd>{row.profitReportId || '-'}</dd>
+                          </div>
+                          <div>
                             <dt>예상 연간 발전량</dt>
                             <dd>{formatNumber(row.annualGenerationKwh, 'kWh')}</dd>
                           </div>
                           <div>
                             <dt>예상 설치 용량</dt>
                             <dd>{row.installCapacityKw !== null ? `${row.installCapacityKw.toLocaleString('ko-KR')}kW` : '-'}</dd>
+                          </div>
+                          <div>
+                            <dt>예상 초기 현금 필요액</dt>
+                            <dd>{formatKrw(row.estimatedCashNeededKrw)}</dd>
+                          </div>
+                          <div>
+                            <dt>추정 회수기간</dt>
+                            <dd>{formatYears(row.paybackYears)}</dd>
+                          </div>
+                          <div>
+                            <dt>보조금 기준</dt>
+                            <dd>{row.subsidyProgramName || '-'}</dd>
+                          </div>
+                          <div>
+                            <dt>대출 상태</dt>
+                            <dd>{row.loanApprovalStatus || '-'}</dd>
                           </div>
                         </dl>
                       </td>

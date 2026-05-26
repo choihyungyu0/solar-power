@@ -107,7 +107,7 @@ def _normalize_finance_input(user_finance_input: dict[str, Any] | None) -> dict[
 
     return {
         "availableCashKrw": _money(source.get("availableCashKrw")),
-        "preferredLoanYears": int(_clamp(preferred_loan_years, 1, 20)),
+        "preferredLoanYears": int(_clamp(preferred_loan_years, 1, 10)),
         "loanCoverageRatio": _clamp(loan_coverage_ratio, 0, 1),
     }
 

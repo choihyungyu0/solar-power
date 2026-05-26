@@ -112,6 +112,41 @@ def save_loan_scenario(row: dict[str, Any]) -> dict[str, Any]:
     return _insert_row(LOAN_SCENARIOS_TABLE, row)
 
 
+def get_latest_profit_report_by_analysis_result(analysis_result_id: str) -> dict[str, Any]:
+    client, disabled_or_failed = _get_enabled_client()
+
+    if disabled_or_failed:
+        return disabled_or_failed
+
+    try:
+        response = (
+            client.table(PROFIT_REPORTS_TABLE)
+            .select("id,created_at,report_json,report_markdown,loan_scenario,subsidy_matrix,disclaimer")
+            .eq("analysis_result_id", analysis_result_id)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        data = response.data if isinstance(response.data, list) else []
+        row = data[0] if data and isinstance(data[0], dict) else None
+
+        if row is None:
+            return {
+                "ok": False,
+                "enabled": True,
+                "reason": "Profit report was not found.",
+                "errorType": "NotFound",
+            }
+
+        return {
+            "ok": True,
+            "enabled": True,
+            "row": row,
+        }
+    except Exception as error:
+        return _safe_failure_result(error)
+
+
 def get_analysis_result_by_id(analysis_result_id: str) -> dict[str, Any]:
     client, disabled_or_failed = _get_enabled_client()
 
@@ -196,9 +231,41 @@ def get_latest_subsidy_program(
 def _format_admin_consultation_row(
     row: dict[str, Any],
     analysis_by_id: dict[str, dict[str, Any]],
+    profit_report_by_analysis_id: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     analysis_result_id = row.get("analysis_result_id")
     analysis = analysis_by_id.get(analysis_result_id) if isinstance(analysis_result_id, str) else None
+    profit_report = (
+        profit_report_by_analysis_id.get(analysis_result_id)
+        if isinstance(analysis_result_id, str)
+        else None
+    )
+    agent_payload = row.get("agent_payload") if isinstance(row.get("agent_payload"), dict) else {}
+    agent_profit_report = (
+        agent_payload.get("profitReport")
+        if isinstance(agent_payload.get("profitReport"), dict)
+        else {}
+    )
+    report_json = (
+        profit_report.get("report_json")
+        if profit_report and isinstance(profit_report.get("report_json"), dict)
+        else {}
+    )
+    net_investment = (
+        report_json.get("netInvestment")
+        if isinstance(report_json.get("netInvestment"), dict)
+        else {}
+    )
+    loan_scenario = (
+        report_json.get("loanSupportScenario")
+        if isinstance(report_json.get("loanSupportScenario"), dict)
+        else {}
+    )
+    subsidy_matrix = (
+        report_json.get("subsidyMatrix")
+        if isinstance(report_json.get("subsidyMatrix"), dict)
+        else {}
+    )
 
     return {
         "id": row.get("id"),
@@ -214,6 +281,15 @@ def _format_admin_consultation_row(
         "suitabilityGrade": analysis.get("suitability_grade") if analysis else None,
         "annualGenerationKwh": analysis.get("annual_generation_kwh") if analysis else None,
         "installCapacityKw": analysis.get("install_capacity_kw") if analysis else None,
+        "profitReportId": (
+            profit_report.get("id")
+            if profit_report and isinstance(profit_report.get("id"), str)
+            else agent_profit_report.get("profitReportId")
+        ),
+        "estimatedCashNeededKrw": net_investment.get("cashNeededKrw"),
+        "paybackYears": net_investment.get("paybackYears"),
+        "subsidyProgramName": subsidy_matrix.get("programName"),
+        "loanApprovalStatus": loan_scenario.get("loanApprovalStatus"),
     }
 
 
@@ -227,7 +303,7 @@ def list_admin_consultations(limit: int = 100) -> dict[str, Any]:
         consultation_response = (
             client.table(CONSULTATION_REQUESTS_TABLE)
             .select(
-                "id,created_at,name,contact,email,consultation_type,road_address,status,analysis_result_id"
+                "id,created_at,name,contact,email,consultation_type,road_address,status,analysis_result_id,agent_payload"
             )
             .order("created_at", desc=True)
             .limit(limit)
@@ -246,6 +322,7 @@ def list_admin_consultations(limit: int = 100) -> dict[str, Any]:
             }
         )
         analysis_by_id: dict[str, dict[str, Any]] = {}
+        profit_report_by_analysis_id: dict[str, dict[str, Any]] = {}
 
         if analysis_ids:
             analysis_response = (
@@ -265,11 +342,38 @@ def list_admin_consultations(limit: int = 100) -> dict[str, Any]:
                 if isinstance(row, dict) and isinstance(row.get("id"), str)
             }
 
+            try:
+                profit_response = (
+                    client.table(PROFIT_REPORTS_TABLE)
+                    .select("id,created_at,analysis_result_id,report_json")
+                    .in_("analysis_result_id", analysis_ids)
+                    .order("created_at", desc=True)
+                    .limit(limit)
+                    .execute()
+                )
+                profit_rows = (
+                    profit_response.data
+                    if isinstance(profit_response.data, list)
+                    else []
+                )
+                for profit_row in profit_rows:
+                    if not isinstance(profit_row, dict):
+                        continue
+
+                    profit_analysis_id = profit_row.get("analysis_result_id")
+                    if (
+                        isinstance(profit_analysis_id, str)
+                        and profit_analysis_id not in profit_report_by_analysis_id
+                    ):
+                        profit_report_by_analysis_id[profit_analysis_id] = profit_row
+            except Exception:
+                profit_report_by_analysis_id = {}
+
         return {
             "ok": True,
             "enabled": True,
             "items": [
-                _format_admin_consultation_row(row, analysis_by_id)
+                _format_admin_consultation_row(row, analysis_by_id, profit_report_by_analysis_id)
                 for row in consultation_rows
                 if isinstance(row, dict)
             ],
@@ -335,6 +439,9 @@ def check_supabase_health() -> dict[str, Any]:
         ANALYSIS_RESULTS_TABLE: False,
         CONSULTATION_REQUESTS_TABLE: False,
         SIMULATION_TRAINING_SAMPLES_TABLE: False,
+        PROFIT_REPORTS_TABLE: False,
+        SUBSIDY_PROGRAMS_TABLE: False,
+        LOAN_SCENARIOS_TABLE: False,
     }
 
     if enabled:

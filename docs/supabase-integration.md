@@ -301,6 +301,18 @@ order by created_at desc
 limit 5;
 ```
 
+동일한 점검 쿼리는 아래 파일에도 정리되어 있다.
+
+```text
+scripts/check-profit-report-tables.sql
+```
+
+운영 API 저장까지 한 번에 확인하려면 Render 재배포와 테이블 생성 후 아래 스크립트를 실행한다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\test-production-profit-report-flow.ps1
+```
+
 ## DB Health
 
 운영 점검용 endpoint:

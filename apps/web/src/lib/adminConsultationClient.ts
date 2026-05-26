@@ -22,6 +22,11 @@ export type AdminConsultationRow = {
   suitabilityGrade: string | null;
   annualGenerationKwh: number | null;
   installCapacityKw: number | null;
+  profitReportId: string | null;
+  estimatedCashNeededKrw: number | null;
+  paybackYears: number | null;
+  subsidyProgramName: string | null;
+  loanApprovalStatus: string | null;
 };
 
 type AdminStatusUpdateResponse = {
@@ -94,6 +99,11 @@ function normalizeConsultationRow(value: unknown): AdminConsultationRow | null {
     suitabilityGrade: normalizeText(value.suitabilityGrade),
     annualGenerationKwh: normalizeNumber(value.annualGenerationKwh),
     installCapacityKw: normalizeNumber(value.installCapacityKw),
+    profitReportId: normalizeText(value.profitReportId),
+    estimatedCashNeededKrw: normalizeNumber(value.estimatedCashNeededKrw),
+    paybackYears: normalizeNumber(value.paybackYears),
+    subsidyProgramName: normalizeText(value.subsidyProgramName),
+    loanApprovalStatus: normalizeText(value.loanApprovalStatus),
   };
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useCallback, useState, type CSSProperties } from 'react';
 import type { IconType } from 'react-icons';
 import {
   LuBuilding2,
@@ -257,19 +257,19 @@ function ProfitReportSection({
   profitReport,
   status,
   message,
-  result,
+  canGenerate,
+  actions,
 }: {
   profitReport: StoredProfitReport | null;
   status: 'idle' | 'loading' | 'ready' | 'error';
   message: string;
-  result: StoredSimulationResult;
+  canGenerate: boolean;
+  actions: {
+    onGenerate: () => void;
+    onConsultationApply: () => void;
+  };
 }) {
   const report = profitReport?.report;
-
-  const handleConsultationApply = () => {
-    saveSimulationResultToSession(result);
-    window.location.assign('/consultation');
-  };
 
   if (!report) {
     return (
@@ -285,8 +285,19 @@ function ProfitReportSection({
             ? message
             : status === 'error'
               ? message
-              : 'AI 리포트 입력값을 준비 중입니다. /risk-map 분석 결과가 있으면 자동 생성됩니다.'}
+              : canGenerate
+                ? 'AI 분석 결과를 바탕으로 수익·보조금·금융 리포트를 생성할 수 있습니다.'
+                : 'AI 리포트 입력값을 준비 중입니다. /risk-map에서 분석을 먼저 실행해주세요.'}
         </p>
+        <button
+          className="consultApplyButton profitReportCta"
+          type="button"
+          disabled={!canGenerate || status === 'loading'}
+          onClick={actions.onGenerate}
+        >
+          <LuChartNoAxesColumnIncreasing aria-hidden="true" />
+          {status === 'loading' ? '수익 리포트 생성 중' : '수익 리포트 생성하기'}
+        </button>
       </section>
     );
   }
@@ -310,7 +321,7 @@ function ProfitReportSection({
         <strong>{narrative.headline}</strong>
         <p>{narrative.summary}</p>
         <p>{narrative.salesMessage}</p>
-        <button className="consultApplyButton profitReportCta" type="button" onClick={handleConsultationApply}>
+        <button className="consultApplyButton profitReportCta" type="button" onClick={actions.onConsultationApply}>
           <LuPhone aria-hidden="true" />
           상담 신청하기
         </button>
@@ -421,55 +432,60 @@ function SimulationResultPage() {
     },
   ];
 
-  useEffect(() => {
-    if (profitReportStatus !== 'idle' || !result.aiSimulationResult || !result.agentPayload) {
+  const handleProfitReportGenerate = useCallback(async () => {
+    if (profitReportStatus === 'loading') {
       return;
     }
 
-    let isCancelled = false;
-    const aiSimulationResult = result.aiSimulationResult;
-    const agentPayload = result.agentPayload;
-
-    async function createReport() {
-      setProfitReportStatus('loading');
-      setProfitReportMessage('AI 수익·보조금·금융 리포트를 생성하고 있습니다.');
-
-      const response = await generateProfitReport({
-        analysisResultId: result.analysisResultId,
-        aiSimulationResult,
-        agentPayload,
-      });
-
-      if (isCancelled) {
-        return;
-      }
-
-      if (response.ok) {
-        const nextReport = {
-          profitReportId: response.profitReportId,
-          report: response.report,
-          reportMarkdown: response.reportMarkdown,
-          dbSaveStatus: response.dbSaveStatus,
-          storedAt: new Date().toISOString(),
-        };
-
-        saveProfitReportToSession(nextReport);
-        setProfitReport(nextReport);
-        setProfitReportStatus('ready');
-        setProfitReportMessage('AI 수익 리포트가 생성되었습니다.');
-        return;
-      }
-
+    if (!result.aiSimulationResult || !result.agentPayload) {
       setProfitReportStatus('error');
-      setProfitReportMessage(response.message ?? 'AI 수익 리포트를 생성하지 못했습니다.');
+      setProfitReportMessage('AI 수익 리포트를 만들 분석 결과가 없습니다. /risk-map에서 분석을 먼저 실행해주세요.');
+      return;
     }
 
-    void createReport();
+    setProfitReportStatus('loading');
+    setProfitReportMessage('AI 수익·보조금·금융 리포트를 생성하고 있습니다.');
 
-    return () => {
-      isCancelled = true;
-    };
-  }, [profitReportStatus, result.agentPayload, result.aiSimulationResult, result.analysisResultId]);
+    const response = await generateProfitReport({
+      analysisResultId: result.analysisResultId,
+      aiSimulationResult: result.aiSimulationResult,
+      agentPayload: result.agentPayload,
+    });
+
+    if (response.ok) {
+      const nextReport = {
+        profitReportId: response.profitReportId,
+        report: response.report,
+        reportMarkdown: response.reportMarkdown,
+        dbSaveStatus: response.dbSaveStatus,
+        storedAt: new Date().toISOString(),
+      };
+
+      saveProfitReportToSession(nextReport);
+      setProfitReport(nextReport);
+      setProfitReportStatus('ready');
+      setProfitReportMessage('AI 수익 리포트가 생성되었습니다.');
+      return;
+    }
+
+    setProfitReportStatus('error');
+    setProfitReportMessage(response.message ?? 'AI 수익 리포트를 생성하지 못했습니다.');
+  }, [
+    profitReportStatus,
+    result.agentPayload,
+    result.aiSimulationResult,
+    result.analysisResultId,
+  ]);
+
+  const handleConsultationApply = useCallback(() => {
+    saveSimulationResultToSession(result);
+    window.location.assign('/consultation');
+  }, [result]);
+
+  const profitReportActions = {
+    onGenerate: handleProfitReportGenerate,
+    onConsultationApply: handleConsultationApply,
+  };
 
   return (
     <div className="simulationResultPage">
@@ -499,7 +515,8 @@ function SimulationResultPage() {
               profitReport={profitReport}
               status={profitReportStatus}
               message={profitReportMessage}
-              result={result}
+              canGenerate={Boolean(result.aiSimulationResult?.agentPayload?.reportInputMetrics)}
+              actions={profitReportActions}
             />
 
             <div className="resultMetricGrid">

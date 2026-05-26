@@ -19,6 +19,7 @@ from .schemas import (
 from .supabase_client import (
     check_supabase_health,
     get_analysis_result_by_id,
+    get_latest_profit_report_by_analysis_result,
     get_latest_subsidy_program,
     list_admin_consultations,
     save_consultation_request,
@@ -243,6 +244,35 @@ async def create_ai_profit_report(payload: ProfitReportRequest):
     if analysis_result_id:
         agent_payload["analysisResultId"] = analysis_result_id
         ai_simulation_result["analysisResultId"] = analysis_result_id
+
+        if payload.forceRegenerate is not True:
+            existing_report_result = get_latest_profit_report_by_analysis_result(analysis_result_id)
+
+            if (
+                existing_report_result.get("ok") is True
+                and isinstance(existing_report_result.get("row"), dict)
+            ):
+                existing_row = existing_report_result["row"]
+                existing_report = existing_row.get("report_json")
+                existing_markdown = existing_row.get("report_markdown")
+
+                if isinstance(existing_report, dict):
+                    if not isinstance(existing_markdown, str) or not existing_markdown:
+                        existing_markdown = build_profit_report_markdown(existing_report)
+
+                    return {
+                        "ok": True,
+                        "profitReportId": existing_row.get("id") if isinstance(existing_row.get("id"), str) else None,
+                        "report": existing_report,
+                        "reportMarkdown": existing_markdown,
+                        "dbSaveStatus": {
+                            "enabled": True,
+                            "profitReportOk": True,
+                            "profitReportId": existing_row.get("id") if isinstance(existing_row.get("id"), str) else None,
+                            "loanScenarioOk": True,
+                            "reusedExisting": True,
+                        },
+                    }
 
     region_sido, region_sigungu = _extract_region_for_subsidy(agent_payload)
     subsidy_program_result = get_latest_subsidy_program(

@@ -58,9 +58,9 @@ class ConsultationRequest(BaseModel):
 
 
 class ProfitReportFinanceInput(BaseModel):
-    availableCashKrw: Optional[float] = None
-    preferredLoanYears: Optional[int] = None
-    loanCoverageRatio: Optional[float] = None
+    availableCashKrw: Optional[float] = Field(default=None, ge=0)
+    preferredLoanYears: Optional[int] = Field(default=None, ge=1, le=10)
+    loanCoverageRatio: Optional[float] = Field(default=None, ge=0, le=1)
 
 
 class ProfitReportRequest(BaseModel):
@@ -68,6 +68,7 @@ class ProfitReportRequest(BaseModel):
     aiSimulationResult: Optional[dict[str, Any]] = None
     agentPayload: Optional[dict[str, Any]] = None
     userFinanceInput: Optional[ProfitReportFinanceInput] = None
+    forceRegenerate: bool = False
 
 
 class AdminConsultationStatusUpdateRequest(BaseModel):
