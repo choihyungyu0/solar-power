@@ -1601,6 +1601,7 @@ function RiskMapPage() {
     activeBuildingSuitability?.modelType ?? activeAiSimulationResult?.generationPrediction.modelType ?? '-';
   const aiSuitabilityReasons = activeBuildingSuitability?.reasons.slice(0, 3) ?? [];
   const aiSuitabilityWarnings = activeBuildingSuitability?.warnings ?? [];
+  const activeReportInputMetrics = activeAiSimulationResult?.agentPayload?.reportInputMetrics ?? null;
   const activeClimatePanelGeojson = hasLiveClimatePanelLayout
     ? liveClimatePanelGeojson
     : hasStaticClimatePanelLayout
@@ -4867,6 +4868,37 @@ function RiskMapPage() {
                   </div>
 
                   <p className="aiSuitabilityLabel">{activeBuildingSuitability.label}</p>
+
+                  {activeReportInputMetrics && (
+                    <>
+                      <dl className="aiCounselingMetricGrid" aria-label="상담 에이전트 4대 입력 지표">
+                        <div>
+                          <dt>예상 발전량</dt>
+                          <dd>{formatEstimatedKwh(activeReportInputMetrics.annualGenerationKwh)}</dd>
+                        </div>
+                        <div>
+                          <dt>예상 자부담</dt>
+                          <dd>{formatEstimatedKrw(activeReportInputMetrics.selfPaymentEstimateKrw)}</dd>
+                        </div>
+                        <div>
+                          <dt>예상 회수기간</dt>
+                          <dd>{formatSimplePaybackYears(activeReportInputMetrics.paybackYears)}</dd>
+                        </div>
+                        <div>
+                          <dt>AI 적합도 등급</dt>
+                          <dd>
+                            {activeReportInputMetrics.installationSuitabilityGrade} ·{' '}
+                            {activeReportInputMetrics.installationSuitabilityScore}점
+                          </dd>
+                        </div>
+                      </dl>
+
+                      <p className="aiSuitabilityNote">
+                        보조금은 경기 주택태양광 지원사업 단일 기준으로 표시합니다. 실제 지원 여부는 공고와
+                        예산 잔여 여부에 따라 달라질 수 있습니다.
+                      </p>
+                    </>
+                  )}
 
                   <dl className="aiSuitabilityMeta">
                     <div>

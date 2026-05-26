@@ -195,6 +195,10 @@ function formatPaybackYears(value: number | null) {
   return `약 ${value.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}년`;
 }
 
+function formatOptionalPaybackYears(value: number) {
+  return formatPaybackYears(value > 0 ? value : null);
+}
+
 function formatChartKrw(value: number) {
   return value >= 10_000 ? `${Math.round(value / 10_000).toLocaleString('ko-KR')}만원` : formatKrw(value);
 }
@@ -370,6 +374,8 @@ function AiAnalysisReport({ aiResult }: { aiResult: NonNullable<StoredSimulation
   const warnings = suitability.warnings;
   const questions = aiResult.agentPayload.questionsToAskUser;
   const requiredDocuments = aiResult.agentPayload.requiredDocuments;
+  const reportInputMetrics = aiResult.agentPayload.reportInputMetrics;
+  const fieldCheckRequired = aiResult.agentPayload.fieldCheckRequired ?? [];
   const cluster = suitability.cluster;
 
   return (
@@ -383,6 +389,40 @@ function AiAnalysisReport({ aiResult }: { aiResult: NonNullable<StoredSimulation
       </div>
 
       <p className="aiReportSummary">{aiResult.agentPayload.summaryForCounselor}</p>
+
+      {reportInputMetrics && (
+        <>
+          <dl className="aiReportMetricTable" aria-label="상담 에이전트 4대 입력 지표">
+            <div>
+              <dt>예상 발전량</dt>
+              <dd>{formatKwh(reportInputMetrics.annualGenerationKwh)}</dd>
+            </div>
+            <div>
+              <dt>투입 비용 / 자부담</dt>
+              <dd>
+                {formatKrw(reportInputMetrics.estimatedInstallCostKrw)} /{' '}
+                {formatKrw(reportInputMetrics.selfPaymentEstimateKrw)}
+              </dd>
+            </div>
+            <div>
+              <dt>회수기간</dt>
+              <dd>{formatOptionalPaybackYears(reportInputMetrics.paybackYears)}</dd>
+            </div>
+            <div>
+              <dt>보조금 / 설치 적합도</dt>
+              <dd>
+                {reportInputMetrics.installationSuitabilityGrade}등급 ·{' '}
+                {formatKrw(reportInputMetrics.subsidyEstimateKrw)} 추정
+              </dd>
+            </div>
+          </dl>
+
+          <p className="aiReportPolicyNote">
+            보조금은 {reportInputMetrics.subsidyProgramName} 단일 기준으로 표시합니다. 실제 지원 여부는
+            공고와 예산 잔여 여부에 따라 달라질 수 있습니다.
+          </p>
+        </>
+      )}
 
       <dl className="aiReportGrid">
         <div>
@@ -421,6 +461,18 @@ function AiAnalysisReport({ aiResult }: { aiResult: NonNullable<StoredSimulation
               <li key={warning}>{warning}</li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {fieldCheckRequired.length > 0 && (
+        <div className="aiReportList">
+          <strong>현장 확인 필요</strong>
+          <ul>
+            {fieldCheckRequired.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+          <p>위 항목은 AI가 확정하지 않으며 리포트 경고 및 상담 확인 항목으로만 사용합니다.</p>
         </div>
       )}
 

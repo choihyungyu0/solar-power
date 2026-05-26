@@ -47,6 +47,8 @@ ENABLE_SUPABASE_WRITE=true
 ## 저장 동작
 
 `POST /api/climate-rooftop-analysis`는 `aiSimulationResult`와 `agentPayload` 생성 후 다음 순서로 저장을 시도한다.
+`agentPayload`에는 상담 에이전트가 우선 읽는 `reportInputMetrics`가 포함된다.
+이 4대 지표는 예상 발전량, 투입 비용/자부담, 회수기간, 보조금 적용 가능성/설치 적합도다.
 
 1. `analysis_results`에 분석 결과 저장
 2. 저장 성공 시 `analysisResultId`를 top-level 응답, `bundle`, `aiSimulationResult`, `agentPayload`에 추가
@@ -137,6 +139,25 @@ ENABLE_SUPABASE_WRITE=true
 ```text
 서버 저장에 실패하여 임시 저장되었습니다. 네트워크 상태를 확인해주세요.
 ```
+
+## 상담 에이전트 payload
+
+`analysis_results.agent_payload`와 `consultation_requests.agent_payload`에는 동일한 상담용 payload 구조가 저장된다.
+상담 LLM/RAG는 `agentPayload.reportInputMetrics`를 우선 사용한다.
+
+보조금 기준은 `경기 주택태양광 지원사업` 단일 기준이다.
+국가 보조금과 경기도 보조금을 중복 합산하지 않는다.
+
+```json
+{
+  "subsidyProgramName": "경기 주택태양광 지원사업",
+  "subsidyPolicyMode": "gyeonggi_home_solar_only",
+  "subsidyStackingAllowed": false
+}
+```
+
+`fieldCheckRequired`의 옥상 장애물, 구조안전성, 방수 상태 등은 현장 확인 및 리포트 경고 항목이다.
+AI가 구조안전성이나 장애물 여부를 확정했다고 표현하지 않는다.
 
 ## DB Health
 

@@ -1,4 +1,5 @@
 export type SimulationAiGrade = 'S' | 'A' | 'B' | 'C' | 'D';
+export type SimulationSubsidyPolicyMode = 'gyeonggi_home_solar_only' | string;
 
 export type SimulationAiFeatureScores = {
   shadingQuality: number;
@@ -59,9 +60,30 @@ export type SimulationAiPanelOptimizationSummary = {
   constraints: string[];
 };
 
+export type SimulationAiReportInputMetrics = {
+  annualGenerationKwh: number;
+  monthlyGenerationKwh: number[];
+  estimatedInstallCostKrw: number;
+  subsidyEstimateKrw: number;
+  selfPaymentEstimateKrw: number;
+  annualSavingKrw: number;
+  paybackYears: number;
+  subsidyProgramName: '경기 주택태양광 지원사업' | string;
+  subsidyPolicyMode: SimulationSubsidyPolicyMode;
+  subsidyStackingAllowed: boolean;
+  subsidyStackingReason: string;
+  installationSuitabilityScore: number;
+  installationSuitabilityGrade: SimulationAiGrade;
+  installationSuitabilityLabel: string;
+  recommendedAction: string;
+};
+
 export type SimulationAiAgentPayload = {
   analysisResultId?: string | null;
   summaryForCounselor: string;
+  reportInputMetrics?: SimulationAiReportInputMetrics;
+  fieldCheckRequired?: string[];
+  fieldCheckAffectsScore?: boolean;
   questionsToAskUser: string[];
   requiredDocuments: string[];
   nextStep: string;
@@ -77,10 +99,15 @@ export type SimulationAiAgentPayload = {
     buildingUsage: string;
     installCapacityKw: number;
     estimatedInstallCostKrw: number;
+    subsidyEstimateKrw?: number;
     selfPaymentEstimateKrw: number;
     paybackYears: number;
     suitabilityGrade: SimulationAiGrade | string;
     suitabilityCluster?: string;
+    subsidyProgramName?: string;
+    subsidyPolicyMode?: SimulationSubsidyPolicyMode;
+    subsidyStackingAllowed?: boolean;
+    subsidyStackingReason?: string;
     modelDisclosure?: string;
   };
   counselingHints?: {

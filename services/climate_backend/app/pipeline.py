@@ -37,6 +37,8 @@ MONTHLY_GENERATION_WEIGHTS = [
     0.049,
     0.043,
 ]
+GYEONGGI_HOME_SOLAR_SUBSIDY_RATE = 0.45
+GYEONGGI_HOME_SOLAR_SUBSIDY_CAP_KRW = 30_000_000
 
 
 def _elapsed_ms(started: float) -> int:
@@ -614,7 +616,12 @@ async def run_hybrid_pipeline(request):
         )
         install_capacity_kw = _coerce_float(expected_revenue.get("install_kw"), install_kw)
         monthly_generation_kwh = _build_monthly_generation_kwh(pv_output, annual_generation_kwh)
-        subsidy_estimate_krw = round(min(estimated_install_cost_krw * 0.45, 30_000_000))
+        subsidy_estimate_krw = round(
+            min(
+                estimated_install_cost_krw * GYEONGGI_HOME_SOLAR_SUBSIDY_RATE,
+                GYEONGGI_HOME_SOLAR_SUBSIDY_CAP_KRW,
+            )
+        )
         self_payment_estimate_krw = max(0, round(estimated_install_cost_krw - subsidy_estimate_krw))
         policy_loan_limit_krw = round(self_payment_estimate_krw * 0.75)
         payback_years = (
@@ -667,6 +674,10 @@ async def run_hybrid_pipeline(request):
             "monthlyGenerationKwh": monthly_generation_kwh,
             "estimatedInstallCostKrw": round(estimated_install_cost_krw),
             "subsidyEstimateKrw": subsidy_estimate_krw,
+            "subsidyProgramName": "경기 주택태양광 지원사업",
+            "subsidyPolicyMode": "gyeonggi_home_solar_only",
+            "subsidyStackingAllowed": False,
+            "subsidyStackingReason": "경기 주택태양광 지원사업 기준 단일 보조금 산정",
             "annualSavingKrw": round(annual_saving_krw),
             "policyLoanLimitKrw": policy_loan_limit_krw,
             "paybackYears": payback_years,
