@@ -51,9 +51,23 @@ class ConsultationRequest(BaseModel):
     roadAddress: Optional[str] = None
     jibunAddress: Optional[str] = None
     analysisResultId: Optional[str] = None
+    profitReportId: Optional[str] = None
     privacyAgreed: bool = False
     thirdPartyAgreed: bool = False
     agentPayload: Optional[dict[str, Any]] = None
+
+
+class ProfitReportFinanceInput(BaseModel):
+    availableCashKrw: Optional[float] = None
+    preferredLoanYears: Optional[int] = None
+    loanCoverageRatio: Optional[float] = None
+
+
+class ProfitReportRequest(BaseModel):
+    analysisResultId: Optional[str] = None
+    aiSimulationResult: Optional[dict[str, Any]] = None
+    agentPayload: Optional[dict[str, Any]] = None
+    userFinanceInput: Optional[ProfitReportFinanceInput] = None
 
 
 class AdminConsultationStatusUpdateRequest(BaseModel):

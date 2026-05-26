@@ -1,0 +1,103 @@
+{
+  "schemaVersion": "solarmate-profit-report-v1",
+  "reportType": "solar_profit_report",
+  "generatedAt": "2026-05-26T00:00:00+00:00",
+  "source": {
+    "aiSimulationModelVersion": "solarmate-ml-backed-simulation-ai-v1",
+    "analysisResultId": "example-analysis-result-id",
+    "generator": "deterministic_profit_report_agent",
+    "llmPolishEnabled": false,
+    "llmPolishNote": "TODO: OPENAI_API_KEY와 ENABLE_LLM_PROFIT_REPORT=true 설정 시 숫자 재계산 없이 문장 다듬기만 연결 가능"
+  },
+  "buildingSummary": {
+    "buildingName": "수동 Supabase 테스트 건물",
+    "roadAddress": "경기도 화성시 테스트 주소",
+    "jibunAddress": "경기도 화성시 테스트 지번",
+    "roofAreaM2": 420,
+    "usableAreaM2": 230,
+    "location": {
+      "roadAddress": "경기도 화성시 테스트 주소",
+      "jibunAddress": "경기도 화성시 테스트 지번"
+    }
+  },
+  "fourMetrics": {
+    "expectedGeneration": {
+      "annualGenerationKwh": 27550,
+      "monthlyGenerationKwh": [1984, 2176, 2535, 2783, 2948, 2865, 2672, 2645, 2397, 2011, 1350, 1185]
+    },
+    "costAndSelfPayment": {
+      "estimatedInstallCostKrw": 26764000,
+      "selfPaymentEstimateKrw": 14720000
+    },
+    "payback": {
+      "annualSavingKrw": 2310000,
+      "paybackYears": 6.3
+    },
+    "subsidyAndSuitability": {
+      "subsidyProgramName": "경기 주택태양광 지원사업",
+      "subsidyPolicyMode": "gyeonggi_home_solar_only",
+      "subsidyStackingAllowed": false,
+      "installationSuitabilityScore": 84,
+      "installationSuitabilityGrade": "A",
+      "installationSuitabilityLabel": "도입 검토 우선순위 높음"
+    }
+  },
+  "subsidyMatrix": {
+    "programName": "경기 주택태양광 지원사업",
+    "policyMode": "gyeonggi_home_solar_only",
+    "supportType": "주택태양광 설치 보조금",
+    "regionSido": "경기도",
+    "regionSigungu": "화성시",
+    "targetBuildingType": "주택/공동주택 검토",
+    "subsidyEstimateKrw": 12044000,
+    "subsidyAmountKrw": null,
+    "subsidyRate": null,
+    "maxSubsidyKrw": 12044000,
+    "stackingAllowed": false,
+    "stackingNote": "경기 주택태양광 지원사업 기준 단일 보조금 산정",
+    "eligibilityNote": "실제 지원 여부는 최신 공고, 예산 잔여 여부, 대상 요건 확인이 필요합니다.",
+    "sourceTitle": "경기 주택태양광 지원사업 공고 확인 필요",
+    "sourceUrl": null,
+    "sourceYear": null,
+    "status": "확인 필요"
+  },
+  "loanSupportScenario": {
+    "loanBasis": "예상 연간 절감액 기반 정책자금/금융 지원 검토 시나리오",
+    "loanYears": 5,
+    "loanCoverageRatio": 0.8,
+    "estimatedLoanLimitKrw": 9240000,
+    "annualRevenueBasisKrw": 2310000,
+    "monthlyPaymentEstimateKrw": 154000,
+    "availableCashKrw": 0,
+    "loanApprovalStatus": "금융기관 심사 필요",
+    "note": "대출 가능 금액과 조건은 추정값이며 실제 승인 여부는 금융기관 심사와 정책자금 공고 확인이 필요합니다."
+  },
+  "netInvestment": {
+    "estimatedInstallCostKrw": 26764000,
+    "subsidyEstimateKrw": 12044000,
+    "selfPaymentBeforeLoanKrw": 14720000,
+    "estimatedLoanLimitKrw": 9240000,
+    "cashNeededKrw": 5480000,
+    "annualSavingKrw": 2310000,
+    "paybackYears": 6.4,
+    "calculation": "installCost - subsidy - estimatedLoanLimit, minimum 0"
+  },
+  "reportNarrative": {
+    "headline": "AI 기준 설치 적합도 A등급, 수익성 검토 가치가 있는 태양광 후보지입니다.",
+    "summary": "예상 연간 발전량은 27,550kWh, 예상 연간 절감/수익 기준은 2,310,000원입니다. 경기 주택태양광 지원사업 단일 기준 보조금 적용 후 예상 자부담은 14,720,000원이며, 추정 회수기간은 6.4년입니다.",
+    "salesMessage": "금융 지원 시나리오를 함께 검토하면 예상 대출 검토 한도는 9,240,000원, 초기 현금 필요액은 5,480,000원까지 낮아질 가능성이 있습니다. 보조금 예산이 소진되기 전에 상담을 통해 가능 여부를 확인해보세요.",
+    "ctaMessage": "우리 아파트 태양광 설치하기"
+  },
+  "riskDisclaimers": [
+    "본 리포트는 시뮬레이션 기반 예상·추정 결과이며 실제 발전량과 절감액을 보장하지 않습니다.",
+    "경기 주택태양광 지원사업 지원 여부와 금액은 최신 공고, 예산 잔여 여부, 대상 요건 확인이 필요합니다.",
+    "국가 보조금과 경기도 보조금은 중복 합산하지 않았습니다.",
+    "대출 가능 금액과 조건은 추정 시나리오이며 실제 승인은 금융기관 심사가 필요합니다.",
+    "옥상 장애물, 구조안전성, 방수 상태, 관리주체 협의, 실제 공고 및 예산 잔여 여부는 AI 확정 항목이 아니며 현장조사와 관리주체 협의가 필요합니다."
+  ],
+  "cta": {
+    "label": "상담 신청하기",
+    "primaryMessage": "우리 아파트 태양광 설치하기",
+    "nextAction": "보조금 공고와 현장 확인 항목을 상담으로 검토"
+  }
+}

@@ -80,6 +80,105 @@ export type ClimateDbSaveStatus = {
   trainingSampleError?: string;
 };
 
+export type ProfitReportUserFinanceInput = {
+  availableCashKrw?: number;
+  preferredLoanYears?: number;
+  loanCoverageRatio?: number;
+};
+
+export type ProfitReportFourMetrics = {
+  expectedGeneration: {
+    annualGenerationKwh: number;
+    monthlyGenerationKwh: number[];
+  };
+  costAndSelfPayment: {
+    estimatedInstallCostKrw: number;
+    selfPaymentEstimateKrw: number;
+  };
+  payback: {
+    annualSavingKrw: number;
+    paybackYears: number;
+  };
+  subsidyAndSuitability: {
+    subsidyProgramName: string;
+    subsidyPolicyMode: string;
+    subsidyStackingAllowed: boolean;
+    installationSuitabilityScore: number;
+    installationSuitabilityGrade: string;
+    installationSuitabilityLabel: string;
+  };
+};
+
+export type ProfitReportJson = {
+  schemaVersion: string;
+  reportType: 'solar_profit_report' | string;
+  generatedAt: string;
+  source: Record<string, unknown>;
+  buildingSummary: Record<string, unknown>;
+  fourMetrics: ProfitReportFourMetrics;
+  subsidyMatrix: Record<string, unknown>;
+  loanSupportScenario: {
+    loanBasis?: string;
+    loanYears: number;
+    loanCoverageRatio: number;
+    estimatedLoanLimitKrw: number;
+    annualRevenueBasisKrw: number;
+    monthlyPaymentEstimateKrw: number;
+    availableCashKrw?: number;
+    loanApprovalStatus: string;
+    note: string;
+  };
+  netInvestment: {
+    estimatedInstallCostKrw: number;
+    subsidyEstimateKrw: number;
+    selfPaymentBeforeLoanKrw: number;
+    estimatedLoanLimitKrw: number;
+    cashNeededKrw: number;
+    annualSavingKrw: number;
+    paybackYears: number;
+    calculation?: string;
+  };
+  reportNarrative: {
+    headline: string;
+    summary: string;
+    salesMessage: string;
+    ctaMessage: string;
+  };
+  riskDisclaimers: string[];
+  cta: {
+    label: string;
+    primaryMessage: string;
+    nextAction: string;
+  };
+};
+
+export type ProfitReportDbSaveStatus = {
+  enabled: boolean;
+  profitReportOk?: boolean;
+  profitReportId?: string | null;
+  profitReportErrorType?: string;
+  profitReportReason?: string;
+  loanScenarioOk?: boolean;
+  loanScenarioId?: string | null;
+  loanScenarioErrorType?: string;
+  loanScenarioReason?: string;
+};
+
+export type ProfitReportResponse =
+  | {
+      ok: true;
+      profitReportId?: string | null;
+      report: ProfitReportJson;
+      reportMarkdown: string;
+      dbSaveStatus: ProfitReportDbSaveStatus;
+    }
+  | {
+      ok: false;
+      message?: string;
+      errorType?: string;
+      reason?: string;
+    };
+
 export type ClimateBundle = {
   analysisResultId?: string | null;
   analysis_result_id?: string | null;

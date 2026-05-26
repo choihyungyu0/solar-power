@@ -190,6 +190,7 @@
 
 .resultAddressSummary,
 .aiAnalysisReport,
+.profitReportSection,
 .resultMetricSection,
 .ecoResultCard,
 .resultChartCard,
@@ -361,6 +362,135 @@
 
 .aiReportMetricTable div {
   background: #ffffff;
+}
+
+.profitReportSection {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+}
+
+.profitReportHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.profitReportHeader span {
+  color: #0e7490;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.profitReportHeader h2 {
+  margin: 4px 0 0;
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 950;
+  line-height: 1.2;
+}
+
+.profitReportHeader strong {
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #ecfeff;
+  color: #0e7490;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.profitNarrativeBox {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 16px;
+  background: #f0f9ff;
+}
+
+.profitNarrativeBox strong {
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 950;
+  line-height: 1.35;
+}
+
+.profitNarrativeBox p,
+.profitReportMessage {
+  margin: 0;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.65;
+}
+
+.profitReportCta {
+  width: fit-content;
+  margin-top: 4px;
+}
+
+.profitReportCardGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.profitReportCardGrid article {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px;
+  background: #ffffff;
+}
+
+.profitReportCardGrid span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.profitReportCardGrid strong {
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 950;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.profitReportCardGrid p {
+  margin: 0;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.profitDisclaimerBox {
+  display: grid;
+  gap: 8px;
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: #fff7ed;
+}
+
+.profitDisclaimerBox strong {
+  color: #9a3412;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.profitDisclaimerBox ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: #7c2d12;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
 }
 
 .aiReportMetricTable dd {
@@ -965,6 +1095,10 @@
     grid-template-columns: 1fr;
   }
 
+  .profitReportCardGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .resultCostPanel {
     position: static;
   }
@@ -983,6 +1117,18 @@
   .resultTitleArea {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .profitReportHeader {
+    flex-direction: column;
+  }
+
+  .profitReportCardGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .profitReportCta {
+    width: 100%;
   }
 
   .resultHeaderActions {

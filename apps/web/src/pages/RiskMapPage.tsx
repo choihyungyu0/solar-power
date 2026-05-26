@@ -98,8 +98,10 @@ import {
 } from '../lib/vworldFeatureQuery';
 import {
   buildStoredSimulationResult,
+  saveProfitReportToSession,
   saveSimulationResultToSession,
 } from '../lib/simulationResultStorage';
+import { generateProfitReport } from '../lib/profitReportClient';
 import { isSimulationAiResult, type SimulationAiResult } from '../lib/simulationAiResult';
 import type {
   ClimateBundle,
@@ -1346,6 +1348,8 @@ function RiskMapPage() {
       : '',
   );
   const [analysisStatus, setAnalysisStatus] = useState('');
+  const [profitReportStatus, setProfitReportStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [profitReportMessage, setProfitReportMessage] = useState('');
   const [activeTab, setActiveTab] = useState<RiskPanelTab>('risk');
   const activeTabRef = useRef<RiskPanelTab>('risk');
   const [pvAnalysisStatus, setPvAnalysisStatus] = useState<PvAnalysisStatus>('idle');
@@ -2757,6 +2761,76 @@ function RiskMapPage() {
         : '브라우저 저장소를 사용할 수 없어 결과 화면에서 시나리오 기준 예시값을 표시합니다.',
     );
     window.location.assign('/simulation/setup');
+  }, [
+    activeAiSimulationResult,
+    liveClimateBundle,
+    liveClimateStatus,
+    overviewInvestmentKrw,
+    pvAnalysisResult,
+    selectedBuilding.address,
+    selectedBuilding.apartmentName,
+    selectedBuilding.estimatedAnnualGenerationKwh,
+    selectedBuilding.estimatedAnnualSavingsKrw,
+    selectedBuilding.estimatedCapacityKw,
+    selectedBuilding.estimatedPanelCount,
+    selectedBuilding.estimatedPaybackYears,
+    selectedBuildingFootprint,
+  ]);
+
+  const handleProfitReportRequest = useCallback(async () => {
+    if (!activeAiSimulationResult?.agentPayload?.reportInputMetrics) {
+      setProfitReportStatus('error');
+      setProfitReportMessage('AI 수익 리포트를 만들기 위한 분석 지표가 아직 없습니다. 먼저 발전량 분석을 실행해주세요.');
+      return;
+    }
+
+    const selectedAddress = selectedBuildingFootprint?.address ?? selectedBuilding.address;
+    const result = buildStoredSimulationResult({
+      building: {
+        name: selectedBuildingFootprint?.name ?? selectedBuilding.apartmentName,
+        roadAddress: selectedAddress,
+        jibunAddress: selectedBuildingFootprint ? '지번 정보 확인 필요' : selectedBuilding.address,
+        buildingId: selectedBuildingFootprint?.buildingId ?? 'demo-building',
+      },
+      liveClimateBundle:
+        liveClimateStatus === 'success' && liveClimateBundle?.pv_analysis_output ? liveClimateBundle : null,
+      aiSimulationResult: activeAiSimulationResult,
+      pvAnalysisResult,
+      selectedEstimate: {
+        panelCount: selectedBuilding.estimatedPanelCount,
+        installCapacityKw: selectedBuilding.estimatedCapacityKw,
+        annualGenerationKwh: selectedBuilding.estimatedAnnualGenerationKwh,
+        annualSavingKrw: selectedBuilding.estimatedAnnualSavingsKrw,
+        paybackYears: selectedBuilding.estimatedPaybackYears,
+        investmentKrw: overviewInvestmentKrw ?? undefined,
+      },
+    });
+
+    saveSimulationResultToSession(result);
+    setProfitReportStatus('loading');
+    setProfitReportMessage('AI 수익·보조금·금융 리포트를 생성하고 있습니다.');
+
+    const response = await generateProfitReport({
+      analysisResultId: result.analysisResultId,
+      aiSimulationResult: result.aiSimulationResult ?? activeAiSimulationResult,
+      agentPayload: result.agentPayload ?? activeAiSimulationResult.agentPayload,
+    });
+
+    if (response.ok) {
+      saveProfitReportToSession({
+        profitReportId: response.profitReportId,
+        report: response.report,
+        reportMarkdown: response.reportMarkdown,
+        dbSaveStatus: response.dbSaveStatus,
+      });
+      setProfitReportStatus('success');
+      setProfitReportMessage('AI 수익 리포트를 저장하고 결과 화면으로 이동합니다.');
+      window.location.assign('/simulation/result');
+      return;
+    }
+
+    setProfitReportStatus('error');
+    setProfitReportMessage(response.message ?? 'AI 수익 리포트를 생성하지 못했습니다. 잠시 후 다시 시도해주세요.');
   }, [
     activeAiSimulationResult,
     liveClimateBundle,
@@ -4938,6 +5012,54 @@ function RiskMapPage() {
                   <p className="aiSuitabilityNote">
                     현재 모델은 시뮬레이션 기반 대리 회귀 모델이며, 실측 데이터 누적 시 고도화됩니다.
                   </p>
+                </section>
+              )}
+
+              {activeReportInputMetrics && (
+                <section className="aiProfitReportCard" aria-label="AI 수익 리포트 요약">
+                  <div className="aiProfitReportHeader">
+                    <div>
+                      <span>AI 수익·보조금·금융 리포트</span>
+                      <strong>도입 판단용 핵심 요약</strong>
+                    </div>
+                  </div>
+
+                  <dl className="aiProfitReportGrid">
+                    <div>
+                      <dt>예상 발전량</dt>
+                      <dd>{formatEstimatedKwh(activeReportInputMetrics.annualGenerationKwh)}</dd>
+                    </div>
+                    <div>
+                      <dt>예상 자부담</dt>
+                      <dd>{formatEstimatedKrw(activeReportInputMetrics.selfPaymentEstimateKrw)}</dd>
+                    </div>
+                    <div>
+                      <dt>예상 회수기간</dt>
+                      <dd>{formatSimplePaybackYears(activeReportInputMetrics.paybackYears)}</dd>
+                    </div>
+                    <div>
+                      <dt>보조금 정책</dt>
+                      <dd>경기 주택태양광 지원사업</dd>
+                    </div>
+                  </dl>
+
+                  <p>
+                    보조금과 대출은 예상·검토 시나리오입니다. 실제 지원 여부는 공고, 예산 잔여 여부,
+                    금융기관 심사 확인이 필요합니다.
+                  </p>
+
+                  <button
+                    className="riskAnalysisButton aiProfitReportButton"
+                    type="button"
+                    onClick={handleProfitReportRequest}
+                    disabled={profitReportStatus === 'loading'}
+                  >
+                    {profitReportStatus === 'loading' ? 'AI 수익 리포트 생성 중...' : 'AI 수익 리포트 보기'}
+                  </button>
+
+                  {profitReportMessage && (
+                    <p className={`aiProfitReportStatus is-${profitReportStatus}`}>{profitReportMessage}</p>
+                  )}
                 </section>
               )}
 

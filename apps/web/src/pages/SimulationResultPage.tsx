@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import type { IconType } from 'react-icons';
 import {
   LuBuilding2,
@@ -13,11 +13,15 @@ import {
   LuZap,
 } from 'react-icons/lu';
 import SolarMateHeader from '../components/SolarMateHeader';
+import { generateProfitReport } from '../lib/profitReportClient';
 import { formatAgentPayloadJson } from '../lib/simulationAiResult';
 import {
+  readProfitReportFromSession,
   readSimulationResultFromSession,
+  saveProfitReportToSession,
   saveSimulationResultToSession,
   type SimulationResultSource,
+  type StoredProfitReport,
   type StoredSimulationResult,
 } from '../lib/simulationResultStorage';
 import './SimulationResultPage.css';
@@ -249,10 +253,131 @@ function getCostItems(normalized: NormalizedResult) {
   ];
 }
 
+function ProfitReportSection({
+  profitReport,
+  status,
+  message,
+  result,
+}: {
+  profitReport: StoredProfitReport | null;
+  status: 'idle' | 'loading' | 'ready' | 'error';
+  message: string;
+  result: StoredSimulationResult;
+}) {
+  const report = profitReport?.report;
+
+  const handleConsultationApply = () => {
+    saveSimulationResultToSession(result);
+    window.location.assign('/consultation');
+  };
+
+  if (!report) {
+    return (
+      <section className="profitReportSection" aria-label="AI 태양광 도입 종합 보고서">
+        <div className="profitReportHeader">
+          <div>
+            <span>AI 수익·보조금·금융 리포트</span>
+            <h2>AI 태양광 도입 종합 보고서</h2>
+          </div>
+        </div>
+        <p className="profitReportMessage">
+          {status === 'loading'
+            ? message
+            : status === 'error'
+              ? message
+              : 'AI 리포트 입력값을 준비 중입니다. /risk-map 분석 결과가 있으면 자동 생성됩니다.'}
+        </p>
+      </section>
+    );
+  }
+
+  const fourMetrics = report.fourMetrics;
+  const loanScenario = report.loanSupportScenario;
+  const netInvestment = report.netInvestment;
+  const narrative = report.reportNarrative;
+
+  return (
+    <section className="profitReportSection" aria-label="AI 태양광 도입 종합 보고서">
+      <div className="profitReportHeader">
+        <div>
+          <span>AI 수익·보조금·금융 리포트</span>
+          <h2>AI 태양광 도입 종합 보고서</h2>
+        </div>
+        {profitReport.profitReportId && <strong>리포트 ID {profitReport.profitReportId.slice(0, 8)}</strong>}
+      </div>
+
+      <div className="profitNarrativeBox">
+        <strong>{narrative.headline}</strong>
+        <p>{narrative.summary}</p>
+        <p>{narrative.salesMessage}</p>
+        <button className="consultApplyButton profitReportCta" type="button" onClick={handleConsultationApply}>
+          <LuPhone aria-hidden="true" />
+          상담 신청하기
+        </button>
+      </div>
+
+      <div className="profitReportCardGrid">
+        <article>
+          <span>AI 적합도</span>
+          <strong>
+            {fourMetrics.subsidyAndSuitability.installationSuitabilityGrade}등급 ·{' '}
+            {fourMetrics.subsidyAndSuitability.installationSuitabilityScore}점
+          </strong>
+          <p>{fourMetrics.subsidyAndSuitability.installationSuitabilityLabel}</p>
+        </article>
+        <article>
+          <span>예상 발전 수익</span>
+          <strong>{formatKwh(fourMetrics.expectedGeneration.annualGenerationKwh)}</strong>
+          <p>연 절감/수익 {formatKrw(fourMetrics.payback.annualSavingKrw)} 추정</p>
+        </article>
+        <article>
+          <span>설치 비용/보조금</span>
+          <strong>{formatKrw(fourMetrics.costAndSelfPayment.estimatedInstallCostKrw)}</strong>
+          <p>경기 주택태양광 지원사업 단일 기준</p>
+        </article>
+        <article>
+          <span>대출 지원 시나리오</span>
+          <strong>{formatKrw(loanScenario.estimatedLoanLimitKrw)}</strong>
+          <p>{loanScenario.loanApprovalStatus}</p>
+        </article>
+        <article>
+          <span>실투자금/회수기간</span>
+          <strong>{formatKrw(netInvestment.cashNeededKrw)}</strong>
+          <p>{formatPaybackYears(netInvestment.paybackYears)} 추정</p>
+        </article>
+      </div>
+
+      <div className="profitDisclaimerBox">
+        <strong>확인 필요</strong>
+        <ul>
+          {report.riskDisclaimers.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </div>
+
+      <details className="agentPayloadPreview">
+        <summary>개발자 JSON · profitReport</summary>
+        <pre>{JSON.stringify(report, null, 2)}</pre>
+      </details>
+
+      <details className="agentPayloadPreview">
+        <summary>개발자 Markdown · profitReport</summary>
+        <pre>{profitReport.reportMarkdown}</pre>
+      </details>
+    </section>
+  );
+}
+
 function SimulationResultPage() {
   const storedResult = readSimulationResultFromSession();
   const normalized = normalizeResult(storedResult ?? fallbackDemoResult);
   const { result } = normalized;
+  const [profitReport, setProfitReport] = useState<StoredProfitReport | null>(() => readProfitReportFromSession());
+  const [profitReportStatus, setProfitReportStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>(() =>
+    readProfitReportFromSession() ? 'ready' : 'idle',
+  );
+  const [profitReportMessage, setProfitReportMessage] = useState('');
   const sourceLabel = getSourceLabel(result.source);
   const isDemo = result.source === 'demo';
   const cumulativeSaving = createCumulativeValues(normalized.yearlyRevenue);
@@ -296,6 +421,56 @@ function SimulationResultPage() {
     },
   ];
 
+  useEffect(() => {
+    if (profitReportStatus !== 'idle' || !result.aiSimulationResult || !result.agentPayload) {
+      return;
+    }
+
+    let isCancelled = false;
+    const aiSimulationResult = result.aiSimulationResult;
+    const agentPayload = result.agentPayload;
+
+    async function createReport() {
+      setProfitReportStatus('loading');
+      setProfitReportMessage('AI 수익·보조금·금융 리포트를 생성하고 있습니다.');
+
+      const response = await generateProfitReport({
+        analysisResultId: result.analysisResultId,
+        aiSimulationResult,
+        agentPayload,
+      });
+
+      if (isCancelled) {
+        return;
+      }
+
+      if (response.ok) {
+        const nextReport = {
+          profitReportId: response.profitReportId,
+          report: response.report,
+          reportMarkdown: response.reportMarkdown,
+          dbSaveStatus: response.dbSaveStatus,
+          storedAt: new Date().toISOString(),
+        };
+
+        saveProfitReportToSession(nextReport);
+        setProfitReport(nextReport);
+        setProfitReportStatus('ready');
+        setProfitReportMessage('AI 수익 리포트가 생성되었습니다.');
+        return;
+      }
+
+      setProfitReportStatus('error');
+      setProfitReportMessage(response.message ?? 'AI 수익 리포트를 생성하지 못했습니다.');
+    }
+
+    void createReport();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [profitReportStatus, result.agentPayload, result.aiSimulationResult, result.analysisResultId]);
+
   return (
     <div className="simulationResultPage">
       <SolarMateHeader onBeforeLogin={() => saveSimulationResultToSession(normalized.result)} />
@@ -319,6 +494,13 @@ function SimulationResultPage() {
             <MobileCostCard normalized={normalized} />
 
             {result.aiSimulationResult && <AiAnalysisReport aiResult={result.aiSimulationResult} />}
+
+            <ProfitReportSection
+              profitReport={profitReport}
+              status={profitReportStatus}
+              message={profitReportMessage}
+              result={result}
+            />
 
             <div className="resultMetricGrid">
               {resultSections.map((section) => (

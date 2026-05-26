@@ -8,6 +8,7 @@ import {
 } from '../lib/consultationClient';
 import {
   attachConsultationRequestIdToStoredSimulationResult,
+  PROFIT_REPORT_STORAGE_KEY,
   SELECTED_SIMULATION_RESULT_STORAGE_KEY,
 } from '../lib/simulationResultStorage';
 import './ConsultationPage.css';
@@ -51,6 +52,7 @@ type ServiceConsultationInquiry = ConsultationFormValues &
     createdAt: string;
     analysisResultId?: string | null;
     consultationRequestId?: string | null;
+    profitReportId?: string | null;
     serverSaveStatus?: 'saved' | 'temporary';
     serverSaveMessage?: string;
   };
@@ -148,6 +150,8 @@ function getSelectedSimulationContext() {
     return {
       analysisResultId: null,
       agentPayload: null,
+      profitReportId: null,
+      profitReportSummary: null,
     };
   }
 
@@ -158,10 +162,21 @@ function getSelectedSimulationContext() {
   );
   const agentPayload = getPathValue(selectedSimulationResult, ['agentPayload']);
   const aiAgentPayload = getPathValue(selectedSimulationResult, ['aiSimulationResult', 'agentPayload']);
+  const profitReport = readSessionJson(PROFIT_REPORT_STORAGE_KEY);
+  const profitReportId = pickText(
+    getPathValue(profitReport, ['profitReportId']),
+    getPathValue(profitReport, ['report', 'source', 'profitReportId']),
+  );
+  const profitReportSummary = pickText(
+    getPathValue(profitReport, ['report', 'reportNarrative', 'summary']),
+    getPathValue(profitReport, ['report', 'reportNarrative', 'salesMessage']),
+  );
 
   return {
     analysisResultId,
     agentPayload: isRecord(agentPayload) ? agentPayload : isRecord(aiAgentPayload) ? aiAgentPayload : null,
+    profitReportId,
+    profitReportSummary,
   };
 }
 
@@ -235,11 +250,29 @@ export default function ConsultationPage() {
     }
 
     const selectedSimulationContext = getSelectedSimulationContext();
+    const agentPayloadWithProfitReport = {
+      ...(selectedSimulationContext.agentPayload ?? {}),
+      ...(selectedSimulationContext.profitReportId || selectedSimulationContext.profitReportSummary
+        ? {
+            profitReport: {
+              profitReportId: selectedSimulationContext.profitReportId,
+              summary: selectedSimulationContext.profitReportSummary,
+            },
+          }
+        : {}),
+    };
+    const contentWithProfitReport = selectedSimulationContext.profitReportSummary
+      ? `${trimmedFormValues.content || 'AI 수익 리포트 기반 상담을 요청합니다.'}\n\nAI 수익 리포트 요약: ${
+          selectedSimulationContext.profitReportSummary
+        }`
+      : trimmedFormValues.content;
     const inquiry: ServiceConsultationInquiry = {
       ...trimmedFormValues,
+      content: contentWithProfitReport,
       roadAddress: address.roadAddress,
       jibunAddress: address.jibunAddress,
       analysisResultId: selectedSimulationContext.analysisResultId,
+      profitReportId: selectedSimulationContext.profitReportId,
       createdAt: new Date().toISOString(),
     };
 
@@ -252,13 +285,14 @@ export default function ConsultationPage() {
       contact: trimmedFormValues.contact,
       email: trimmedFormValues.email || undefined,
       consultationType: trimmedFormValues.consultationType || undefined,
-      content: trimmedFormValues.content || undefined,
+      content: contentWithProfitReport || undefined,
       roadAddress: address.roadAddress,
       jibunAddress: address.jibunAddress,
       analysisResultId: selectedSimulationContext.analysisResultId,
+      profitReportId: selectedSimulationContext.profitReportId,
       privacyAgreed: trimmedFormValues.privacyAgreed,
       thirdPartyAgreed: trimmedFormValues.thirdPartyAgreed,
-      agentPayload: selectedSimulationContext.agentPayload,
+      agentPayload: Object.keys(agentPayloadWithProfitReport).length > 0 ? agentPayloadWithProfitReport : null,
     });
 
     if (response.ok) {

@@ -17,6 +17,9 @@ Vercel frontend -> Render FastAPI backend -> Supabase PostgreSQL
 - `analysis_results`: 건물 분석 결과, `aiSimulationResult`, `agentPayload`, 원본 분석 payload 저장
 - `consultation_requests`: 상담 신청 정보와 연결된 `analysis_result_id`, 상담 agent payload 저장
 - `simulation_training_samples`: Render 분석 결과에서 생성한 시뮬레이션 기반 학습 샘플 저장
+- `profit_reports`: AI 수익·보조금·금융 리포트 결과 저장
+- `subsidy_programs`: 경기 주택태양광 지원사업 기준 보조금 matrix 저장
+- `loan_scenarios`: 리포트 생성 시 사용한 대출 지원 시나리오 저장
 - `ai_model_versions`: AI 모델 버전과 메타데이터 관리용 테이블
 
 ## Render 환경 변수
@@ -158,6 +161,145 @@ ENABLE_SUPABASE_WRITE=true
 
 `fieldCheckRequired`의 옥상 장애물, 구조안전성, 방수 상태 등은 현장 확인 및 리포트 경고 항목이다.
 AI가 구조안전성이나 장애물 여부를 확정했다고 표현하지 않는다.
+
+## AI 수익·보조금·금융 리포트 API
+
+`POST /api/ai-profit-report`는 범용 상담 챗봇이 아니라 태양광 도입 수익성 리포트 생성 endpoint다.
+
+요청 예:
+
+```json
+{
+  "analysisResultId": "uuid",
+  "userFinanceInput": {
+    "availableCashKrw": 5000000,
+    "preferredLoanYears": 5,
+    "loanCoverageRatio": 0.8
+  }
+}
+```
+
+응답 예:
+
+```json
+{
+  "ok": true,
+  "profitReportId": "uuid",
+  "report": {
+    "schemaVersion": "solarmate-profit-report-v1",
+    "reportType": "solar_profit_report",
+    "fourMetrics": {},
+    "subsidyMatrix": {},
+    "loanSupportScenario": {},
+    "netInvestment": {}
+  },
+  "reportMarkdown": "# AI 수익·보조금·금융 리포트...",
+  "dbSaveStatus": {
+    "enabled": true,
+    "profitReportOk": true,
+    "loanScenarioOk": true
+  }
+}
+```
+
+보조금은 `경기 주택태양광 지원사업` 단일 기준이며 `subsidyStackingAllowed=false`다.
+대출은 예상 시나리오이며 실제 승인은 금융기관 심사가 필요하다.
+
+## AI 수익 리포트 테이블 SQL
+
+아래 SQL은 Supabase SQL Editor에서 수동으로 적용한다.
+운영 RLS 정책은 프로젝트 인증/관리자 API 설계에 맞게 강화해야 하며, 프론트엔드는 이 테이블에 직접 접근하지 않는다.
+Render FastAPI 백엔드는 service role key로 서버 저장만 수행한다.
+
+```sql
+create extension if not exists pgcrypto;
+
+create table if not exists public.profit_reports (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  analysis_result_id uuid references public.analysis_results(id),
+  consultation_request_id uuid references public.consultation_requests(id),
+  report_type text not null default 'solar_profit_report',
+  report_status text not null default 'generated',
+  input_payload jsonb,
+  subsidy_matrix jsonb,
+  loan_scenario jsonb,
+  report_json jsonb,
+  report_markdown text,
+  disclaimer text
+);
+
+alter table public.profit_reports enable row level security;
+
+create table if not exists public.subsidy_programs (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  program_name text,
+  region_sido text,
+  region_sigungu text,
+  target_building_type text,
+  support_type text,
+  subsidy_amount_krw bigint,
+  subsidy_rate numeric,
+  max_subsidy_krw bigint,
+  stacking_allowed boolean not null default false,
+  stacking_note text,
+  eligibility_note text,
+  source_title text,
+  source_url text,
+  source_year integer,
+  raw_payload jsonb
+);
+
+alter table public.subsidy_programs enable row level security;
+
+create table if not exists public.loan_scenarios (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  analysis_result_id uuid references public.analysis_results(id),
+  loan_basis text,
+  loan_years integer,
+  loan_coverage_ratio numeric,
+  estimated_loan_limit_krw bigint,
+  annual_revenue_basis_krw bigint,
+  monthly_payment_estimate_krw bigint,
+  note text,
+  raw_payload jsonb
+);
+
+alter table public.loan_scenarios enable row level security;
+```
+
+최신 수익 리포트 확인:
+
+```sql
+select
+  id,
+  created_at,
+  analysis_result_id,
+  report_type,
+  report_status,
+  report_json->'fourMetrics' as four_metrics
+from public.profit_reports
+order by created_at desc
+limit 5;
+```
+
+최신 대출 시나리오 확인:
+
+```sql
+select
+  id,
+  created_at,
+  analysis_result_id,
+  loan_years,
+  loan_coverage_ratio,
+  estimated_loan_limit_krw,
+  monthly_payment_estimate_krw
+from public.loan_scenarios
+order by created_at desc
+limit 5;
+```
 
 ## DB Health
 

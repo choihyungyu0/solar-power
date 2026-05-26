@@ -423,6 +423,8 @@ def build_agent_payload(input):
     }
 
     return {
+        "agentType": "ai_profit_subsidy_finance_report_agent",
+        "agentName": "AI 수익·보조금·금융 리포트 에이전트",
         "summaryForCounselor": (
             f"해당 건물은 예상 연간 발전량 {annual_generation_kwh:,}kWh, "
             f"예상 자부담 {self_payment_estimate_krw:,}원, "

@@ -6,6 +6,9 @@ from typing import Any
 ANALYSIS_RESULTS_TABLE = "analysis_results"
 CONSULTATION_REQUESTS_TABLE = "consultation_requests"
 SIMULATION_TRAINING_SAMPLES_TABLE = "simulation_training_samples"
+PROFIT_REPORTS_TABLE = "profit_reports"
+SUBSIDY_PROGRAMS_TABLE = "subsidy_programs"
+LOAN_SCENARIOS_TABLE = "loan_scenarios"
 
 
 def is_supabase_enabled() -> bool:
@@ -99,6 +102,95 @@ def save_training_sample(row: dict[str, Any]) -> dict[str, Any]:
 
 def save_consultation_request(row: dict[str, Any]) -> dict[str, Any]:
     return _insert_row(CONSULTATION_REQUESTS_TABLE, row)
+
+
+def save_profit_report(row: dict[str, Any]) -> dict[str, Any]:
+    return _insert_row(PROFIT_REPORTS_TABLE, row)
+
+
+def save_loan_scenario(row: dict[str, Any]) -> dict[str, Any]:
+    return _insert_row(LOAN_SCENARIOS_TABLE, row)
+
+
+def get_analysis_result_by_id(analysis_result_id: str) -> dict[str, Any]:
+    client, disabled_or_failed = _get_enabled_client()
+
+    if disabled_or_failed:
+        return disabled_or_failed
+
+    try:
+        response = (
+            client.table(ANALYSIS_RESULTS_TABLE)
+            .select(
+                "id,created_at,building_id,building_name,road_address,jibun_address,"
+                "annual_generation_kwh,annual_saving_krw,suitability_score,suitability_grade,"
+                "ai_simulation_result,agent_payload"
+            )
+            .eq("id", analysis_result_id)
+            .limit(1)
+            .execute()
+        )
+        data = response.data if isinstance(response.data, list) else []
+        row = data[0] if data and isinstance(data[0], dict) else None
+
+        if row is None:
+            return {
+                "ok": False,
+                "enabled": True,
+                "reason": "Analysis result was not found.",
+                "errorType": "NotFound",
+            }
+
+        return {
+            "ok": True,
+            "enabled": True,
+            "row": row,
+        }
+    except Exception as error:
+        return _safe_failure_result(error)
+
+
+def get_latest_subsidy_program(
+    region_sido: str | None = None,
+    region_sigungu: str | None = None,
+    target_building_type: str | None = None,
+) -> dict[str, Any]:
+    client, disabled_or_failed = _get_enabled_client()
+
+    if disabled_or_failed:
+        return disabled_or_failed
+
+    try:
+        query = client.table(SUBSIDY_PROGRAMS_TABLE).select("*")
+
+        if region_sido:
+            query = query.eq("region_sido", region_sido)
+
+        if region_sigungu:
+            query = query.eq("region_sigungu", region_sigungu)
+
+        if target_building_type:
+            query = query.eq("target_building_type", target_building_type)
+
+        response = query.order("source_year", desc=True).order("created_at", desc=True).limit(1).execute()
+        data = response.data if isinstance(response.data, list) else []
+        row = data[0] if data and isinstance(data[0], dict) else None
+
+        if row is None:
+            return {
+                "ok": False,
+                "enabled": True,
+                "reason": "Subsidy program was not found.",
+                "errorType": "NotFound",
+            }
+
+        return {
+            "ok": True,
+            "enabled": True,
+            "row": row,
+        }
+    except Exception as error:
+        return _safe_failure_result(error)
 
 
 def _format_admin_consultation_row(

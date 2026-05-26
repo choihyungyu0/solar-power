@@ -129,6 +129,8 @@
     ]
   },
   "agentPayload": {
+    "agentType": "ai_profit_subsidy_finance_report_agent",
+    "agentName": "AI 수익·보조금·금융 리포트 에이전트",
     "summaryForCounselor": "해당 건물은 예상 연간 발전량 27,550kWh, 예상 자부담 14,720,000원, 예상 회수기간 6.3년 기준으로 AI 설치 적합도 A등급입니다. 보조금은 경기 주택태양광 지원사업 단일 기준으로 산정했으며 실제 지원 여부는 공고와 예산 잔여 여부 확인이 필요합니다.",
     "reportInputMetrics": {
       "annualGenerationKwh": 27550,

@@ -23,7 +23,9 @@ SolarMate의 Render climate backend는 건물 선택, climate.gg 음영 셀, 패
 `agentPayload` 필수 필드:
 
 - `summaryForCounselor`: 상담사가 먼저 읽을 1문단 요약
-- `reportInputMetrics`: 상담 LLM/RAG가 우선 읽을 4대 입력 지표
+- `agentType`: `ai_profit_subsidy_finance_report_agent`
+- `agentName`: `AI 수익·보조금·금융 리포트 에이전트`
+- `reportInputMetrics`: 수익 리포트 에이전트가 우선 읽을 4대 입력 지표
 - `fieldCheckRequired`: 현장 확인 및 리포트 경고 항목
 - `fieldCheckAffectsScore`: 현장 확인 항목이 현재 AI 점수에 직접 반영되었는지 여부. 현재는 `false`
 - `questionsToAskUser`: 실제 상담에서 확인할 질문

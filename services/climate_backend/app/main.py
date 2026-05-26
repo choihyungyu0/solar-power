@@ -8,16 +8,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .pipeline import create_request_diagnostics, debug_geometry_pipeline, run_hybrid_pipeline
+from .profit_report_agent import build_profit_report, build_profit_report_markdown
 from .schemas import (
     AdminConsultationStatusUpdateRequest,
     ClimateAnalysisRequest,
     ConsultationRequest,
     GeometryDebugRequest,
+    ProfitReportRequest,
 )
 from .supabase_client import (
     check_supabase_health,
+    get_analysis_result_by_id,
+    get_latest_subsidy_program,
     list_admin_consultations,
     save_consultation_request,
+    save_loan_scenario,
+    save_profit_report,
     update_consultation_status,
 )
 
@@ -91,6 +97,50 @@ def db_health():
     return check_supabase_health()
 
 
+def _is_record(value: Any) -> bool:
+    return isinstance(value, dict)
+
+
+def _compact_save_status(prefix: str, save_result: dict[str, Any]) -> dict[str, Any]:
+    status = {
+        f"{prefix}Ok": save_result.get("ok") is True,
+        f"{prefix}Id": save_result.get("id") if isinstance(save_result.get("id"), str) else None,
+    }
+
+    if save_result.get("ok") is not True:
+        if save_result.get("errorType"):
+            status[f"{prefix}ErrorType"] = str(save_result.get("errorType"))
+
+        if save_result.get("reason"):
+            status[f"{prefix}Reason"] = str(save_result.get("reason"))
+
+    return status
+
+
+def _extract_region_for_subsidy(agent_payload: dict[str, Any]) -> tuple[str, str | None]:
+    location = None
+    subsidy_rag_input = agent_payload.get("subsidyRagInput")
+
+    if isinstance(subsidy_rag_input, dict):
+        location = subsidy_rag_input.get("location")
+
+    address = ""
+
+    if isinstance(location, dict):
+        address = str(location.get("roadAddress") or location.get("jibunAddress") or "")
+    elif isinstance(location, str):
+        address = location
+
+    region_sido = "경기도" if "경기" in address or not address else address.split()[0]
+    region_sigungu = None
+
+    parts = address.split()
+    if len(parts) >= 2 and parts[0].startswith("경기"):
+        region_sigungu = parts[1]
+
+    return region_sido, region_sigungu
+
+
 @app.get("/api/admin/consultations")
 def admin_consultations(_: bool = Depends(require_admin_access)):
     result = list_admin_consultations()
@@ -131,6 +181,148 @@ def admin_update_consultation_status(
             "message": "상담 상태를 변경하지 못했습니다.",
         },
     )
+
+
+@app.post("/api/ai-profit-report")
+async def create_ai_profit_report(payload: ProfitReportRequest):
+    analysis_result_id = payload.analysisResultId.strip() if payload.analysisResultId else None
+    ai_simulation_result = payload.aiSimulationResult if isinstance(payload.aiSimulationResult, dict) else None
+    agent_payload = payload.agentPayload if isinstance(payload.agentPayload, dict) else None
+    loaded_analysis_row: dict[str, Any] | None = None
+
+    if analysis_result_id:
+        load_result = get_analysis_result_by_id(analysis_result_id)
+
+        if load_result.get("ok") is True and isinstance(load_result.get("row"), dict):
+            loaded_analysis_row = load_result["row"]
+            ai_simulation_result = (
+                ai_simulation_result
+                if _is_record(ai_simulation_result)
+                else loaded_analysis_row.get("ai_simulation_result")
+            )
+            agent_payload = (
+                agent_payload
+                if _is_record(agent_payload)
+                else loaded_analysis_row.get("agent_payload")
+            )
+        elif not _is_record(ai_simulation_result) or not _is_record(agent_payload):
+            return JSONResponse(
+                status_code=404 if load_result.get("errorType") == "NotFound" else 503,
+                content={
+                    "ok": False,
+                    "message": "분석 결과를 불러오지 못했습니다.",
+                    "errorType": load_result.get("errorType"),
+                    "reason": load_result.get("reason"),
+                },
+            )
+
+    if not _is_record(ai_simulation_result):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "message": "aiSimulationResult가 필요합니다.",
+                "errorType": "ValidationError",
+            },
+        )
+
+    if not _is_record(agent_payload):
+        candidate_agent_payload = ai_simulation_result.get("agentPayload")
+        agent_payload = candidate_agent_payload if _is_record(candidate_agent_payload) else None
+
+    if not _is_record(agent_payload) or not _is_record(agent_payload.get("reportInputMetrics")):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "message": "agentPayload.reportInputMetrics가 필요합니다.",
+                "errorType": "ValidationError",
+            },
+        )
+
+    if analysis_result_id:
+        agent_payload["analysisResultId"] = analysis_result_id
+        ai_simulation_result["analysisResultId"] = analysis_result_id
+
+    region_sido, region_sigungu = _extract_region_for_subsidy(agent_payload)
+    subsidy_program_result = get_latest_subsidy_program(
+        region_sido=region_sido,
+        region_sigungu=region_sigungu,
+        target_building_type=None,
+    )
+    policy_data = (
+        subsidy_program_result.get("row")
+        if subsidy_program_result.get("ok") is True and isinstance(subsidy_program_result.get("row"), dict)
+        else None
+    )
+    user_finance_input = payload.userFinanceInput.dict(exclude_none=True) if payload.userFinanceInput else None
+
+    try:
+        report = build_profit_report(
+            agent_payload=agent_payload,
+            ai_simulation_result=ai_simulation_result,
+            user_finance_input=user_finance_input,
+            policy_data=policy_data,
+        )
+        report_markdown = build_profit_report_markdown(report)
+    except Exception as error:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "message": "AI 수익 리포트를 생성하지 못했습니다.",
+                "errorType": type(error).__name__,
+                "reason": str(error),
+            },
+        )
+
+    disclaimer = "\n".join(report.get("riskDisclaimers", []))
+    profit_save_result = save_profit_report(
+        {
+            "analysis_result_id": analysis_result_id,
+            "consultation_request_id": None,
+            "report_type": report.get("reportType") or "solar_profit_report",
+            "report_status": "generated",
+            "input_payload": {
+                "analysisResultId": analysis_result_id,
+                "agentPayload": agent_payload,
+                "userFinanceInput": user_finance_input,
+                "loadedAnalysisCreatedAt": loaded_analysis_row.get("created_at") if loaded_analysis_row else None,
+            },
+            "subsidy_matrix": report.get("subsidyMatrix"),
+            "loan_scenario": report.get("loanSupportScenario"),
+            "report_json": report,
+            "report_markdown": report_markdown,
+            "disclaimer": disclaimer,
+        }
+    )
+    loan_scenario = report.get("loanSupportScenario") if isinstance(report.get("loanSupportScenario"), dict) else {}
+    loan_save_result = save_loan_scenario(
+        {
+            "analysis_result_id": analysis_result_id,
+            "loan_basis": loan_scenario.get("loanBasis"),
+            "loan_years": loan_scenario.get("loanYears"),
+            "loan_coverage_ratio": loan_scenario.get("loanCoverageRatio"),
+            "estimated_loan_limit_krw": loan_scenario.get("estimatedLoanLimitKrw"),
+            "annual_revenue_basis_krw": loan_scenario.get("annualRevenueBasisKrw"),
+            "monthly_payment_estimate_krw": loan_scenario.get("monthlyPaymentEstimateKrw"),
+            "note": loan_scenario.get("note"),
+            "raw_payload": loan_scenario,
+        }
+    )
+    db_save_status = {
+        "enabled": profit_save_result.get("enabled") is True or loan_save_result.get("enabled") is True,
+        **_compact_save_status("profitReport", profit_save_result),
+        **_compact_save_status("loanScenario", loan_save_result),
+    }
+
+    return {
+        "ok": True,
+        "profitReportId": profit_save_result.get("id") if isinstance(profit_save_result.get("id"), str) else None,
+        "report": report,
+        "reportMarkdown": report_markdown,
+        "dbSaveStatus": db_save_status,
+    }
 
 
 @app.get("/debug/cors")
@@ -202,6 +394,14 @@ async def create_consultation(payload: ConsultationRequest):
             "error": "privacyAgreed must be true.",
         }
 
+    agent_payload = payload.agentPayload if isinstance(payload.agentPayload, dict) else {}
+
+    if payload.profitReportId:
+        agent_payload = {
+            **agent_payload,
+            "profitReportId": payload.profitReportId.strip(),
+        }
+
     save_result = save_consultation_request(
         {
             "name": name,
@@ -214,7 +414,7 @@ async def create_consultation(payload: ConsultationRequest):
             "analysis_result_id": payload.analysisResultId.strip() if payload.analysisResultId else None,
             "privacy_agreed": payload.privacyAgreed,
             "third_party_agreed": payload.thirdPartyAgreed,
-            "agent_payload": payload.agentPayload,
+            "agent_payload": agent_payload or None,
             "status": "received",
         }
     )

@@ -80,6 +80,8 @@ export type SimulationAiReportInputMetrics = {
 
 export type SimulationAiAgentPayload = {
   analysisResultId?: string | null;
+  agentType?: 'ai_profit_subsidy_finance_report_agent' | string;
+  agentName?: string;
   summaryForCounselor: string;
   reportInputMetrics?: SimulationAiReportInputMetrics;
   fieldCheckRequired?: string[];
