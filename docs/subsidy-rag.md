@@ -58,8 +58,11 @@ python scripts/seed_subsidy_rag_from_excel.py
 출력 예:
 
 ```text
-{'documentsInserted': 1, 'chunksInserted': 31, 'failedRows': 0}
+{'documentsDeactivated': 2, 'chunksDeactivated': 37, 'documentsInserted': 2, 'chunksInserted': 37, 'failedRows': 0}
 ```
+
+seed는 같은 `태양광 지원사업 정리 - ...` 출처의 기존 RAG row를 먼저 `is_active=false`로 비활성화한 뒤 새 chunk를 넣는다.
+엑셀 매핑이나 chunk 품질을 고친 뒤 다시 실행해도 예전 chunk가 검색 결과에 섞이지 않게 하기 위한 동작이다.
 
 ## 검색 API
 

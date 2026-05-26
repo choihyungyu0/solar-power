@@ -242,6 +242,39 @@ def insert_subsidy_chunk(row: dict[str, Any]) -> dict[str, Any]:
     return _insert_row(SUBSIDY_CHUNKS_TABLE, row)
 
 
+def deactivate_subsidy_rag_source(source_title_prefix: str) -> dict[str, Any]:
+    client, disabled_or_failed = _get_enabled_client()
+
+    if disabled_or_failed:
+        return disabled_or_failed
+
+    try:
+        pattern = f"{source_title_prefix}%"
+        chunks_response = (
+            client.table(SUBSIDY_CHUNKS_TABLE)
+            .update({"is_active": False})
+            .like("source_title", pattern)
+            .execute()
+        )
+        documents_response = (
+            client.table(SUBSIDY_DOCUMENTS_TABLE)
+            .update({"is_active": False})
+            .like("source_title", pattern)
+            .execute()
+        )
+        chunks = chunks_response.data if isinstance(chunks_response.data, list) else []
+        documents = documents_response.data if isinstance(documents_response.data, list) else []
+
+        return {
+            "ok": True,
+            "enabled": True,
+            "documentsDeactivated": len(documents),
+            "chunksDeactivated": len(chunks),
+        }
+    except Exception as error:
+        return _safe_failure_result(error)
+
+
 def match_subsidy_chunks(
     *,
     query_embedding: list[float],
