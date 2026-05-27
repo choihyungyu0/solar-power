@@ -2,11 +2,13 @@ import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import type { FormEvent } from 'react';
 import { useState } from 'react';
 import { clearDemoAuth } from '../lib/demoAuth';
+import { createPrivacyConsentMetadata } from '../lib/memberProfile';
 
 type AuthPanelProps = {
   supabase: SupabaseClient | null;
   session: Session | null;
   isConfigured: boolean;
+  setupMessage: string;
 };
 
 function getFriendlyAuthError(message: string) {
@@ -21,10 +23,14 @@ function getFriendlyAuthError(message: string) {
   return message;
 }
 
-function AuthPanel({ supabase, session, isConfigured }: AuthPanelProps) {
+function AuthPanel({ supabase, session, isConfigured, setupMessage }: AuthPanelProps) {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [birthDate, setBirthDate] = useState('');
+  const [phone, setPhone] = useState('');
+  const [privacyAgreed, setPrivacyAgreed] = useState(false);
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -32,12 +38,33 @@ function AuthPanel({ supabase, session, isConfigured }: AuthPanelProps) {
     event.preventDefault();
 
     if (!supabase || !isConfigured) {
-      setMessage('Supabase 환경변수 설정 후 로그인/회원가입을 사용할 수 있습니다.');
+      setMessage(setupMessage);
       return;
     }
 
-    if (!email || !password) {
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+    const trimmedName = name.trim();
+    const trimmedBirthDate = birthDate.trim();
+    const trimmedPhone = phone.trim();
+
+    if (!trimmedEmail || !trimmedPassword) {
       setMessage('이메일과 비밀번호를 입력해 주세요.');
+      return;
+    }
+
+    if (mode === 'signup' && !trimmedName) {
+      setMessage('회원가입을 위해 이름을 입력해 주세요.');
+      return;
+    }
+
+    if (mode === 'signup' && (!trimmedBirthDate || !trimmedPhone)) {
+      setMessage('회원가입을 위해 생년월일과 전화번호를 입력해 주세요.');
+      return;
+    }
+
+    if (mode === 'signup' && !privacyAgreed) {
+      setMessage('회원가입을 위해 개인정보 수집 및 이용에 동의해 주세요.');
       return;
     }
 
@@ -46,8 +73,14 @@ function AuthPanel({ supabase, session, isConfigured }: AuthPanelProps) {
 
     const response =
       mode === 'signup'
-        ? await supabase.auth.signUp({ email, password })
-        : await supabase.auth.signInWithPassword({ email, password });
+        ? await supabase.auth.signUp({
+            email: trimmedEmail,
+            password: trimmedPassword,
+            options: {
+              data: createPrivacyConsentMetadata(trimmedName, trimmedBirthDate, trimmedPhone),
+            },
+          })
+        : await supabase.auth.signInWithPassword({ email: trimmedEmail, password: trimmedPassword });
 
     setIsSubmitting(false);
 
@@ -88,7 +121,7 @@ function AuthPanel({ supabase, session, isConfigured }: AuthPanelProps) {
       <span className="panelKicker">Supabase Auth</span>
       <h2>계정 연결</h2>
       {!isConfigured && (
-        <p className="setupNotice">VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY를 설정하면 저장 기능이 켜집니다.</p>
+        <p className="setupNotice">{setupMessage}</p>
       )}
       <div className="segmentedControl" role="tablist" aria-label="인증 모드">
         <button className={mode === 'login' ? 'isActive' : ''} type="button" onClick={() => setMode('login')}>
@@ -107,6 +140,40 @@ function AuthPanel({ supabase, session, isConfigured }: AuthPanelProps) {
           비밀번호
           <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="8자 이상" />
         </label>
+        {mode === 'signup' && (
+          <>
+            <label>
+              이름
+              <input value={name} onChange={(event) => setName(event.target.value)} type="text" placeholder="예: 김솔라" />
+            </label>
+            <label>
+              생년월일
+              <input value={birthDate} onChange={(event) => setBirthDate(event.target.value)} type="date" autoComplete="bday" />
+            </label>
+            <label>
+              전화번호
+              <input
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                type="tel"
+                autoComplete="tel"
+                placeholder="예: 010-1234-5678"
+              />
+            </label>
+            <section className="authPrivacyBox" aria-label="개인정보 수집 및 이용 동의">
+              <strong>개인정보 수집 및 이용 동의</strong>
+              <p>계정 생성, 요청서·시뮬레이션 저장, 상담 및 알림 선호 관리에 필요한 정보만 MVP 범위에서 저장합니다.</p>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={privacyAgreed}
+                  onChange={(event) => setPrivacyAgreed(event.target.checked)}
+                />
+                위 개인정보 수집 및 이용에 동의합니다. (필수)
+              </label>
+            </section>
+          </>
+        )}
         <button className="primaryButton mvpPrimaryButton" type="submit" disabled={isSubmitting}>
           {isSubmitting ? '처리 중' : mode === 'login' ? '로그인' : '회원가입'}
         </button>

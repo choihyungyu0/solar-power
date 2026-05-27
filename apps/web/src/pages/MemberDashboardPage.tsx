@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   LuBotMessageSquare,
@@ -22,7 +22,19 @@ import {
   type ScenarioDayCard,
 } from '../lib/memberDashboardData';
 import { getDemoUserRole, isDemoLoggedIn } from '../lib/demoAuth';
+import {
+  emptyPrivacyConsent,
+  loadMemberProfile,
+  PRIVACY_CONSENT_VERSION,
+  saveMemberProfile,
+  toPrivacyConsent,
+  toProfileValues,
+  type MemberPrivacyConsent,
+  type MemberProfileValues,
+} from '../lib/memberProfile';
 import { SELECTED_SIMULATION_RESULT_STORAGE_KEY } from '../lib/simulationResultStorage';
+import { isSupabaseConfigured, supabase, supabaseConfigMessage } from '../lib/supabase';
+import { useSupabaseSession } from '../lib/useSupabaseSession';
 import './MemberDashboardPage.css';
 
 export type DashboardTab = 'generation' | 'as' | 'profile';
@@ -37,18 +49,15 @@ type FaqItem = {
   answer: string;
 };
 
-type ProfileValues = {
-  name: string;
-  birthDate: string;
-  phone: string;
-  email: string;
-};
+type ProfileValues = MemberProfileValues;
 
 type ProfileField = {
-  id: keyof ProfileValues | 'password';
+  id: keyof ProfileValues;
   label: string;
   name?: keyof ProfileValues;
   buttonText?: string;
+  inputType?: 'text' | 'date' | 'email' | 'tel';
+  autoComplete?: string;
 };
 
 type StoredConsultationInquiry = {
@@ -121,7 +130,7 @@ const SERVICE_CONSULTATION_INQUIRY_STORAGE_KEY = 'solarmate:serviceConsultationI
 
 const fallbackProfileValues: ProfileValues = {
   name: '김솔라',
-  birthDate: '1998.03.12',
+  birthDate: '1998-03-12',
   phone: '010-1234-5678',
   email: 'ecohat@example.com',
 };
@@ -131,28 +140,30 @@ const profileFields: ProfileField[] = [
     id: 'name',
     label: '이름',
     name: 'name',
+    autoComplete: 'name',
   },
   {
     id: 'birthDate',
     label: '생년월일',
     name: 'birthDate',
+    inputType: 'date',
+    autoComplete: 'bday',
   },
   {
     id: 'phone',
     label: '전화번호',
     name: 'phone',
-    buttonText: '변경',
+    buttonText: '저장',
+    inputType: 'tel',
+    autoComplete: 'tel',
   },
   {
     id: 'email',
     label: '이메일',
     name: 'email',
-    buttonText: '변경',
-  },
-  {
-    id: 'password',
-    label: '비밀번호',
-    buttonText: '변경',
+    buttonText: '저장',
+    inputType: 'email',
+    autoComplete: 'email',
   },
 ];
 
@@ -875,15 +886,178 @@ function MemberAsPanel() {
 }
 
 function MemberProfilePanel({ data }: { data: NormalizedDashboardData }) {
-  const initialProfileValues = useMemo(() => getInitialProfileValues(), []);
+  const { session } = useSupabaseSession();
+  const initialProfileValues = useMemo(() => getInitialProfileValues(session?.user.email), [session?.user.email]);
   const [profileValues, setProfileValues] = useState<ProfileValues>(initialProfileValues);
+  const [privacyConsent, setPrivacyConsent] = useState<MemberPrivacyConsent>(emptyPrivacyConsent);
+  const [privacyAgreed, setPrivacyAgreed] = useState(false);
+  const [message, setMessage] = useState('');
+  const [isProfileLoading, setIsProfileLoading] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isPasswordOpen, setIsPasswordOpen] = useState(false);
+  const [passwordValues, setPasswordValues] = useState({
+    password: '',
+    passwordConfirm: '',
+  });
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
   const address = data.building;
+  const canSaveProfile = Boolean(supabase && isSupabaseConfigured && session?.user);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fallbackValues = getInitialProfileValues(session?.user.email);
+
+    if (!supabase || !isSupabaseConfigured || !session?.user) {
+      setProfileValues(fallbackValues);
+      setPrivacyConsent(emptyPrivacyConsent);
+      setPrivacyAgreed(false);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    setIsProfileLoading(true);
+    setMessage('');
+
+    loadMemberProfile(supabase, session.user.id)
+      .then((row) => {
+        if (!isMounted) {
+          return;
+        }
+
+        const nextConsent = toPrivacyConsent(row);
+
+        setProfileValues(toProfileValues(row, session.user, fallbackValues));
+        setPrivacyConsent(nextConsent);
+        setPrivacyAgreed(nextConsent.privacyAgreed);
+      })
+      .catch((error) => {
+        if (isMounted) {
+          setProfileValues(fallbackValues);
+          setMessage(error instanceof Error ? error.message : String(error));
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsProfileLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session?.user]);
 
   const updateProfileValue = (name: keyof ProfileValues, value: string) => {
     setProfileValues((prevValues) => ({
       ...prevValues,
       [name]: value,
     }));
+  };
+
+  const handleProfileSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!supabase || !isSupabaseConfigured) {
+      setMessage(supabaseConfigMessage);
+      return;
+    }
+
+    if (!session?.user) {
+      setMessage('로그인 후 회원정보를 저장할 수 있습니다.');
+      return;
+    }
+
+    const trimmedValues: ProfileValues = {
+      name: profileValues.name.trim(),
+      birthDate: profileValues.birthDate.trim(),
+      phone: profileValues.phone.trim(),
+      email: profileValues.email.trim(),
+    };
+
+    if (!trimmedValues.name || !trimmedValues.email) {
+      setMessage('이름과 이메일을 입력해 주세요.');
+      return;
+    }
+
+    if (!privacyAgreed) {
+      setMessage('회원정보 저장을 위해 개인정보 수집 및 이용 동의가 필요합니다.');
+      return;
+    }
+
+    setIsSavingProfile(true);
+    setMessage('');
+
+    try {
+      let emailNotice = '';
+      const currentAuthEmail = session.user.email?.trim() ?? '';
+
+      if (trimmedValues.email !== currentAuthEmail) {
+        const { error } = await supabase.auth.updateUser({ email: trimmedValues.email });
+
+        if (error) {
+          throw new Error(`이메일 변경 실패: ${error.message}`);
+        }
+
+        emailNotice = ' 이메일 변경 확인 메일이 발송될 수 있습니다.';
+      }
+
+      const savedRow = await saveMemberProfile(supabase, session.user.id, trimmedValues, {
+        privacyAgreed,
+        privacyAgreedAt: privacyConsent.privacyAgreedAt,
+        privacyConsentVersion: privacyConsent.privacyConsentVersion ?? PRIVACY_CONSENT_VERSION,
+      });
+      const nextConsent = toPrivacyConsent(savedRow);
+
+      setProfileValues(toProfileValues(savedRow, session.user, trimmedValues));
+      setPrivacyConsent(nextConsent);
+      setPrivacyAgreed(nextConsent.privacyAgreed);
+      setMessage(`회원정보가 Supabase에 저장되었습니다.${emailNotice}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handlePasswordSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!supabase || !isSupabaseConfigured) {
+      setMessage(supabaseConfigMessage);
+      return;
+    }
+
+    if (!session?.user) {
+      setMessage('로그인 후 비밀번호를 변경할 수 있습니다.');
+      return;
+    }
+
+    if (passwordValues.password.length < 6) {
+      setMessage('새 비밀번호는 최소 6자 이상으로 입력해 주세요.');
+      return;
+    }
+
+    if (passwordValues.password !== passwordValues.passwordConfirm) {
+      setMessage('새 비밀번호와 확인 값이 서로 다릅니다.');
+      return;
+    }
+
+    setIsSavingPassword(true);
+    setMessage('');
+
+    const { error } = await supabase.auth.updateUser({ password: passwordValues.password });
+
+    setIsSavingPassword(false);
+
+    if (error) {
+      setMessage(`비밀번호 변경 실패: ${error.message}`);
+      return;
+    }
+
+    setPasswordValues({ password: '', passwordConfirm: '' });
+    setIsPasswordOpen(false);
+    setMessage('비밀번호가 변경되었습니다.');
   };
 
   return (
@@ -911,7 +1085,9 @@ function MemberProfilePanel({ data }: { data: NormalizedDashboardData }) {
         <ProfileHeroGraphic />
       </section>
 
-      <form className="member-dashboard-profile-form" onSubmit={(event) => event.preventDefault()}>
+      <form className="member-dashboard-profile-form" onSubmit={handleProfileSubmit}>
+        {isProfileLoading && <p className="member-dashboard-profile-status">회원정보를 불러오는 중입니다.</p>}
+
         {profileFields.map((field) => {
           const fieldName = field.name;
 
@@ -921,9 +1097,30 @@ function MemberProfilePanel({ data }: { data: NormalizedDashboardData }) {
               field={field}
               value={fieldName ? profileValues[fieldName] : ''}
               onChange={fieldName ? (value) => updateProfileValue(fieldName, value) : undefined}
+              disabled={isSavingProfile}
             />
           );
         })}
+
+        <section className="member-dashboard-profile-consent-box" aria-label="개인정보 동의 상태">
+          <div>
+            <strong>개인정보 수집 및 이용 동의</strong>
+            <p>
+              요청서, 시뮬레이션 결과, 상담 및 알림 선호 관리를 위해 필요한 정보만 저장합니다. 실제 운영 전 최종 약관과 법무 검토가 필요합니다.
+            </p>
+            <small>{formatPrivacyConsentStatus(privacyConsent)}</small>
+          </div>
+
+          <label>
+            <input
+              type="checkbox"
+              checked={privacyAgreed}
+              disabled={privacyConsent.privacyAgreed}
+              onChange={(event) => setPrivacyAgreed(event.target.checked)}
+            />
+            <span>{privacyConsent.privacyAgreed ? '회원가입 개인정보 동의가 저장되어 있습니다.' : '개인정보 수집 및 이용에 동의합니다. (필수)'}</span>
+          </label>
+        </section>
 
         <div className="member-dashboard-profile-row">
           <span className="member-dashboard-profile-label">간편로그인 연동</span>
@@ -938,7 +1135,57 @@ function MemberProfilePanel({ data }: { data: NormalizedDashboardData }) {
             네이버
           </button>
         </div>
+
+        <div className="member-dashboard-profile-action-row">
+          <button className="member-dashboard-profile-save-button" type="submit" disabled={isSavingProfile || !canSaveProfile}>
+            {isSavingProfile ? '저장 중' : '회원정보 저장'}
+          </button>
+          {!canSaveProfile && <span>{supabase ? '로그인 후 저장 가능합니다.' : supabaseConfigMessage}</span>}
+        </div>
       </form>
+
+      <form className="member-dashboard-password-panel" onSubmit={handlePasswordSubmit}>
+        <div className="member-dashboard-profile-row">
+          <span className="member-dashboard-profile-label">비밀번호</span>
+          <button
+            className="member-dashboard-profile-change-button"
+            type="button"
+            onClick={() => setIsPasswordOpen((isOpen) => !isOpen)}
+          >
+            변경
+          </button>
+        </div>
+
+        {isPasswordOpen && (
+          <div className="member-dashboard-password-fields">
+            <label>
+              새 비밀번호
+              <input
+                type="password"
+                value={passwordValues.password}
+                autoComplete="new-password"
+                onChange={(event) => setPasswordValues((prevValues) => ({ ...prevValues, password: event.target.value }))}
+              />
+            </label>
+            <label>
+              새 비밀번호 확인
+              <input
+                type="password"
+                value={passwordValues.passwordConfirm}
+                autoComplete="new-password"
+                onChange={(event) =>
+                  setPasswordValues((prevValues) => ({ ...prevValues, passwordConfirm: event.target.value }))
+                }
+              />
+            </label>
+            <button className="member-dashboard-profile-save-button" type="submit" disabled={isSavingPassword || !canSaveProfile}>
+              {isSavingPassword ? '변경 중' : '비밀번호 저장'}
+            </button>
+          </div>
+        )}
+      </form>
+
+      {message && <p className="member-dashboard-profile-message">{message}</p>}
     </section>
   );
 }
@@ -966,10 +1213,12 @@ function ProfileRow({
   field,
   value,
   onChange,
+  disabled,
 }: {
   field: ProfileField;
   value: string;
   onChange?: (value: string) => void;
+  disabled?: boolean;
 }) {
   const inputId = `member-dashboard-profile-${field.id}`;
 
@@ -989,8 +1238,10 @@ function ProfileRow({
             id={inputId}
             className="member-dashboard-profile-input"
             name={field.name}
-            type="text"
+            type={field.inputType ?? 'text'}
             value={value}
+            autoComplete={field.autoComplete}
+            disabled={disabled}
             onChange={(event) => onChange?.(event.target.value)}
           />
         )}
@@ -998,9 +1249,9 @@ function ProfileRow({
         {field.buttonText && (
           <button
             className="member-dashboard-profile-change-button"
-            type="button"
+            type="submit"
             aria-label={`${field.label} 변경`}
-            onClick={showDemoChangeAlert}
+            disabled={disabled}
           >
             {field.buttonText}
           </button>
@@ -1298,19 +1549,32 @@ function readConsultationInquiryFromSession() {
   }
 }
 
-function getInitialProfileValues(): ProfileValues {
+function getInitialProfileValues(authEmail?: string | null): ProfileValues {
   const inquiry = readConsultationInquiryFromSession();
 
   return {
     name: pickText(inquiry?.name) ?? fallbackProfileValues.name,
     birthDate: fallbackProfileValues.birthDate,
     phone: pickText(inquiry?.contact) ?? pickText(inquiry?.phone) ?? fallbackProfileValues.phone,
-    email: pickText(inquiry?.email) ?? fallbackProfileValues.email,
+    email: authEmail ?? pickText(inquiry?.email) ?? fallbackProfileValues.email,
   };
 }
 
-function showDemoChangeAlert() {
-  window.alert('데모 화면에서는 실제 정보 변경이 저장되지 않습니다.');
+function formatPrivacyConsentStatus(consent: MemberPrivacyConsent) {
+  if (!consent.privacyAgreed) {
+    return '저장된 회원가입 개인정보 동의 이력이 없습니다. 기존 계정은 아래 동의 후 저장해 주세요.';
+  }
+
+  const agreedDate = consent.privacyAgreedAt ? new Date(consent.privacyAgreedAt) : null;
+  const agreedAt =
+    agreedDate && !Number.isNaN(agreedDate.getTime())
+      ? new Intl.DateTimeFormat('ko-KR', {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        }).format(agreedDate)
+      : '동의 시각 확인 필요';
+
+  return `${agreedAt} 저장 · ${consent.privacyConsentVersion ?? PRIVACY_CONSENT_VERSION}`;
 }
 
 function polarToCartesian(cx: number, cy: number, r: number, angle: number) {

@@ -11,6 +11,7 @@ export type ConsultationSubmitPayload = {
   roadAddress?: string;
   jibunAddress?: string;
   analysisResultId?: string | null;
+  profitReportId?: string | null;
   privacyAgreed: boolean;
   thirdPartyAgreed?: boolean;
   agentPayload?: SimulationAiAgentPayload | Record<string, unknown> | null;

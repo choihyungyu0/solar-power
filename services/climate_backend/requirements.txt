@@ -11,6 +11,8 @@ httpx==0.28.1
 idna==3.16
 joblib
 numpy==2.4.6
+openai>=1.55.0,<2
+openpyxl>=3.1.5,<4
 pydantic==2.13.4
 pydantic_core==2.46.4
 pyproj==3.7.2

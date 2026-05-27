@@ -8,6 +8,7 @@ import {
 } from '../lib/consultationClient';
 import {
   attachConsultationRequestIdToStoredSimulationResult,
+  PROFIT_REPORT_STORAGE_KEY,
   SELECTED_SIMULATION_RESULT_STORAGE_KEY,
 } from '../lib/simulationResultStorage';
 import './ConsultationPage.css';
@@ -15,6 +16,12 @@ import './ConsultationPage.css';
 const LEGACY_CONSULTATION_INQUIRY_STORAGE_KEY = 'solarmate:consultationInquiry';
 const SERVICE_CONSULTATION_INQUIRY_STORAGE_KEY = 'solarmate:serviceConsultationInquiry';
 const TEMPORARY_SAVE_MESSAGE = '서버 저장에 실패하여 임시 저장되었습니다. 네트워크 상태를 확인해주세요.';
+const CONSULTATION_INPUT_LIMITS = {
+  name: 50,
+  contact: 50,
+  email: 120,
+  content: 2000,
+};
 
 const consultationTypes = [
   '설치 가능 여부 상담',
@@ -51,6 +58,7 @@ type ServiceConsultationInquiry = ConsultationFormValues &
     createdAt: string;
     analysisResultId?: string | null;
     consultationRequestId?: string | null;
+    profitReportId?: string | null;
     serverSaveStatus?: 'saved' | 'temporary';
     serverSaveMessage?: string;
   };
@@ -148,6 +156,8 @@ function getSelectedSimulationContext() {
     return {
       analysisResultId: null,
       agentPayload: null,
+      profitReportId: null,
+      profitReportSummary: null,
     };
   }
 
@@ -158,10 +168,21 @@ function getSelectedSimulationContext() {
   );
   const agentPayload = getPathValue(selectedSimulationResult, ['agentPayload']);
   const aiAgentPayload = getPathValue(selectedSimulationResult, ['aiSimulationResult', 'agentPayload']);
+  const profitReport = readSessionJson(PROFIT_REPORT_STORAGE_KEY);
+  const profitReportId = pickText(
+    getPathValue(profitReport, ['profitReportId']),
+    getPathValue(profitReport, ['report', 'source', 'profitReportId']),
+  );
+  const profitReportSummary = pickText(
+    getPathValue(profitReport, ['report', 'reportNarrative', 'summary']),
+    getPathValue(profitReport, ['report', 'reportNarrative', 'salesMessage']),
+  );
 
   return {
     analysisResultId,
     agentPayload: isRecord(agentPayload) ? agentPayload : isRecord(aiAgentPayload) ? aiAgentPayload : null,
+    profitReportId,
+    profitReportSummary,
   };
 }
 
@@ -234,12 +255,41 @@ export default function ConsultationPage() {
       return;
     }
 
+    if (
+      trimmedFormValues.name.length > CONSULTATION_INPUT_LIMITS.name ||
+      trimmedFormValues.contact.length > CONSULTATION_INPUT_LIMITS.contact ||
+      trimmedFormValues.email.length > CONSULTATION_INPUT_LIMITS.email ||
+      trimmedFormValues.content.length > CONSULTATION_INPUT_LIMITS.content
+    ) {
+      window.alert('입력 가능한 글자 수를 초과했습니다.');
+      return;
+    }
+
     const selectedSimulationContext = getSelectedSimulationContext();
+    const agentPayloadWithProfitReport = {
+      ...(selectedSimulationContext.agentPayload ?? {}),
+      ...(selectedSimulationContext.profitReportId || selectedSimulationContext.profitReportSummary
+        ? {
+            profitReport: {
+              profitReportId: selectedSimulationContext.profitReportId,
+              summary: selectedSimulationContext.profitReportSummary,
+            },
+          }
+        : {}),
+    };
+    const rawContentWithProfitReport = selectedSimulationContext.profitReportSummary
+      ? `${trimmedFormValues.content || 'AI 수익 리포트 기반 상담을 요청합니다.'}\n\nAI 수익 리포트 요약: ${
+          selectedSimulationContext.profitReportSummary
+        }`
+      : trimmedFormValues.content;
+    const contentWithProfitReport = rawContentWithProfitReport.slice(0, CONSULTATION_INPUT_LIMITS.content);
     const inquiry: ServiceConsultationInquiry = {
       ...trimmedFormValues,
+      content: contentWithProfitReport,
       roadAddress: address.roadAddress,
       jibunAddress: address.jibunAddress,
       analysisResultId: selectedSimulationContext.analysisResultId,
+      profitReportId: selectedSimulationContext.profitReportId,
       createdAt: new Date().toISOString(),
     };
 
@@ -252,13 +302,14 @@ export default function ConsultationPage() {
       contact: trimmedFormValues.contact,
       email: trimmedFormValues.email || undefined,
       consultationType: trimmedFormValues.consultationType || undefined,
-      content: trimmedFormValues.content || undefined,
+      content: contentWithProfitReport || undefined,
       roadAddress: address.roadAddress,
       jibunAddress: address.jibunAddress,
       analysisResultId: selectedSimulationContext.analysisResultId,
+      profitReportId: selectedSimulationContext.profitReportId,
       privacyAgreed: trimmedFormValues.privacyAgreed,
       thirdPartyAgreed: trimmedFormValues.thirdPartyAgreed,
-      agentPayload: selectedSimulationContext.agentPayload,
+      agentPayload: Object.keys(agentPayloadWithProfitReport).length > 0 ? agentPayloadWithProfitReport : null,
     });
 
     if (response.ok) {
@@ -268,6 +319,7 @@ export default function ConsultationPage() {
         ...inquiry,
         consultationRequestId: response.consultationRequestId,
         serverSaveStatus: 'saved',
+        serverSaveMessage: response.message,
       });
       navigate('/consultation/complete');
       return;
@@ -305,6 +357,7 @@ export default function ConsultationPage() {
                   name="name"
                   type="text"
                   value={formValues.name}
+                  maxLength={CONSULTATION_INPUT_LIMITS.name}
                   placeholder="이름을 입력해주세요."
                   onChange={handleChange}
                 />
@@ -317,6 +370,7 @@ export default function ConsultationPage() {
                   name="contact"
                   type="text"
                   value={formValues.contact}
+                  maxLength={CONSULTATION_INPUT_LIMITS.contact}
                   placeholder="연락처를 입력해주세요."
                   onChange={handleChange}
                 />
@@ -329,6 +383,7 @@ export default function ConsultationPage() {
                   name="email"
                   type="email"
                   value={formValues.email}
+                  maxLength={CONSULTATION_INPUT_LIMITS.email}
                   placeholder="선택 입력"
                   onChange={handleChange}
                 />
@@ -363,10 +418,33 @@ export default function ConsultationPage() {
                   id="consultation-content"
                   name="content"
                   value={formValues.content}
+                  maxLength={CONSULTATION_INPUT_LIMITS.content}
                   placeholder="상담 내용을 입력해주세요."
                   onChange={handleChange}
                 />
               </label>
+
+              <section className="consultation-privacy-notice" aria-label="개인정보 수집 및 이용 안내">
+                <strong>개인정보 수집 및 이용 안내</strong>
+                <dl>
+                  <div>
+                    <dt>수집 항목</dt>
+                    <dd>이름, 연락처, 이메일, 상담 내용, 설치 검토 주소, 분석/수익 리포트 식별자</dd>
+                  </div>
+                  <div>
+                    <dt>이용 목적</dt>
+                    <dd>태양광 설치 가능성 검토, 보조금/금융 상담 안내, 접수 이력 관리</dd>
+                  </div>
+                  <div>
+                    <dt>보유 기간</dt>
+                    <dd>상담 종료 후 1년 또는 관련 법령상 보관 기간까지 보관 후 파기</dd>
+                  </div>
+                  <div>
+                    <dt>제3자 제공</dt>
+                    <dd>동의한 경우에만 설치 가능성 검토를 위해 협력 상담사에게 필요한 범위로 전달</dd>
+                  </div>
+                </dl>
+              </section>
 
               <label className="consultation-consent-row" htmlFor="consultation-privacy-agreed">
                 <input

@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any
 
@@ -6,6 +7,12 @@ from typing import Any
 ANALYSIS_RESULTS_TABLE = "analysis_results"
 CONSULTATION_REQUESTS_TABLE = "consultation_requests"
 SIMULATION_TRAINING_SAMPLES_TABLE = "simulation_training_samples"
+PROFIT_REPORTS_TABLE = "profit_reports"
+SUBSIDY_PROGRAMS_TABLE = "subsidy_programs"
+LOAN_SCENARIOS_TABLE = "loan_scenarios"
+SUBSIDY_DOCUMENTS_TABLE = "subsidy_documents"
+SUBSIDY_CHUNKS_TABLE = "subsidy_chunks"
+OPTIONAL_COMPAT_COLUMNS = {"is_test", "source"}
 
 
 def is_supabase_enabled() -> bool:
@@ -29,6 +36,41 @@ def _safe_failure_result(error: Exception) -> dict[str, Any]:
         "errorType": type(error).__name__,
         "error": str(error),
     }
+
+
+def _is_missing_optional_column_error(error: Exception) -> bool:
+    message = str(error).lower()
+
+    if not any(column_name in message for column_name in OPTIONAL_COMPAT_COLUMNS):
+        return False
+
+    return any(
+        marker in message
+        for marker in (
+            "pgrst204",
+            "schema cache",
+            "could not find",
+            "does not exist",
+            "column",
+        )
+    )
+
+
+def _strip_optional_columns(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    skipped_columns = [
+        column_name
+        for column_name in OPTIONAL_COMPAT_COLUMNS
+        if column_name in payload
+    ]
+
+    return (
+        {
+            key: value
+            for key, value in payload.items()
+            if key not in OPTIONAL_COMPAT_COLUMNS
+        },
+        sorted(skipped_columns),
+    )
 
 
 @lru_cache(maxsize=1)
@@ -86,6 +128,27 @@ def _insert_row(table_name: str, payload: dict[str, Any]) -> dict[str, Any]:
             "id": row_id,
         }
     except Exception as error:
+        if (
+            any(column_name in payload for column_name in OPTIONAL_COMPAT_COLUMNS)
+            and _is_missing_optional_column_error(error)
+        ):
+            compatible_payload, skipped_columns = _strip_optional_columns(payload)
+
+            try:
+                response = client.table(table_name).insert(compatible_payload).execute()
+                data = response.data if isinstance(response.data, list) else []
+                row = data[0] if data and isinstance(data[0], dict) else {}
+                row_id = row.get("id") if isinstance(row.get("id"), str) else None
+
+                return {
+                    "ok": True,
+                    "enabled": True,
+                    "id": row_id,
+                    "optionalColumnsSkipped": skipped_columns,
+                }
+            except Exception as retry_error:
+                return _safe_failure_result(retry_error)
+
         return _safe_failure_result(error)
 
 
@@ -101,12 +164,364 @@ def save_consultation_request(row: dict[str, Any]) -> dict[str, Any]:
     return _insert_row(CONSULTATION_REQUESTS_TABLE, row)
 
 
+def find_recent_duplicate_consultation_request(
+    *,
+    contact: str,
+    analysis_result_id: str | None = None,
+    road_address: str | None = None,
+    window_minutes: int = 5,
+) -> dict[str, Any]:
+    client, disabled_or_failed = _get_enabled_client()
+
+    if disabled_or_failed:
+        return disabled_or_failed
+
+    normalized_contact = contact.strip()
+    normalized_analysis_result_id = analysis_result_id.strip() if analysis_result_id else ""
+    normalized_road_address = road_address.strip() if road_address else ""
+
+    if not normalized_contact or (not normalized_analysis_result_id and not normalized_road_address):
+        return {
+            "ok": False,
+            "enabled": True,
+            "reason": "Duplicate check was skipped because match keys are incomplete.",
+            "errorType": "DuplicateCheckSkipped",
+        }
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=window_minutes)).isoformat()
+
+    try:
+        query = (
+            client.table(CONSULTATION_REQUESTS_TABLE)
+            .select("id,created_at")
+            .eq("contact", normalized_contact)
+            .gte("created_at", cutoff)
+            .order("created_at", desc=True)
+            .limit(1)
+        )
+
+        if normalized_analysis_result_id:
+            query = query.eq("analysis_result_id", normalized_analysis_result_id)
+        else:
+            query = query.eq("road_address", normalized_road_address)
+
+        response = query.execute()
+        data = response.data if isinstance(response.data, list) else []
+        row = data[0] if data and isinstance(data[0], dict) else None
+
+        if row is None:
+            return {
+                "ok": False,
+                "enabled": True,
+                "reason": "Recent duplicate consultation request was not found.",
+                "errorType": "NotFound",
+            }
+
+        return {
+            "ok": True,
+            "enabled": True,
+            "id": row.get("id") if isinstance(row.get("id"), str) else None,
+        }
+    except Exception as error:
+        return _safe_failure_result(error)
+
+
+def save_profit_report(row: dict[str, Any]) -> dict[str, Any]:
+    return _insert_row(PROFIT_REPORTS_TABLE, row)
+
+
+def save_loan_scenario(row: dict[str, Any]) -> dict[str, Any]:
+    return _insert_row(LOAN_SCENARIOS_TABLE, row)
+
+
+def insert_subsidy_document(row: dict[str, Any]) -> dict[str, Any]:
+    return _insert_row(SUBSIDY_DOCUMENTS_TABLE, row)
+
+
+def insert_subsidy_chunk(row: dict[str, Any]) -> dict[str, Any]:
+    return _insert_row(SUBSIDY_CHUNKS_TABLE, row)
+
+
+def deactivate_subsidy_rag_source(source_title_prefix: str) -> dict[str, Any]:
+    client, disabled_or_failed = _get_enabled_client()
+
+    if disabled_or_failed:
+        return disabled_or_failed
+
+    try:
+        pattern = f"{source_title_prefix}%"
+        chunks_response = (
+            client.table(SUBSIDY_CHUNKS_TABLE)
+            .update({"is_active": False})
+            .like("source_title", pattern)
+            .execute()
+        )
+        documents_response = (
+            client.table(SUBSIDY_DOCUMENTS_TABLE)
+            .update({"is_active": False})
+            .like("source_title", pattern)
+            .execute()
+        )
+        chunks = chunks_response.data if isinstance(chunks_response.data, list) else []
+        documents = documents_response.data if isinstance(documents_response.data, list) else []
+
+        return {
+            "ok": True,
+            "enabled": True,
+            "documentsDeactivated": len(documents),
+            "chunksDeactivated": len(chunks),
+        }
+    except Exception as error:
+        return _safe_failure_result(error)
+
+
+def match_subsidy_chunks(
+    *,
+    query_embedding: list[float],
+    match_count: int = 5,
+    filter_region_sido: str | None = None,
+    filter_region_sigungu: str | None = None,
+) -> dict[str, Any]:
+    client, disabled_or_failed = _get_enabled_client()
+
+    if disabled_or_failed:
+        return disabled_or_failed
+
+    try:
+        response = client.rpc(
+            "match_subsidy_chunks",
+            {
+                "query_embedding": query_embedding,
+                "match_count": match_count,
+                "filter_region_sido": filter_region_sido,
+                "filter_region_sigungu": filter_region_sigungu,
+            },
+        ).execute()
+        data = response.data if isinstance(response.data, list) else []
+
+        return {
+            "ok": True,
+            "enabled": True,
+            "matches": [row for row in data if isinstance(row, dict)],
+        }
+    except Exception as error:
+        return _safe_failure_result(error)
+
+
+def get_latest_profit_report_by_analysis_result(analysis_result_id: str) -> dict[str, Any]:
+    client, disabled_or_failed = _get_enabled_client()
+
+    if disabled_or_failed:
+        return disabled_or_failed
+
+    try:
+        response = (
+            client.table(PROFIT_REPORTS_TABLE)
+            .select("id,created_at,report_json,report_markdown,loan_scenario,subsidy_matrix,disclaimer")
+            .eq("analysis_result_id", analysis_result_id)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        data = response.data if isinstance(response.data, list) else []
+        row = data[0] if data and isinstance(data[0], dict) else None
+
+        if row is None:
+            return {
+                "ok": False,
+                "enabled": True,
+                "reason": "Profit report was not found.",
+                "errorType": "NotFound",
+            }
+
+        return {
+            "ok": True,
+            "enabled": True,
+            "row": row,
+        }
+    except Exception as error:
+        return _safe_failure_result(error)
+
+
+def get_consultation_profit_report(consultation_id: str) -> dict[str, Any]:
+    client, disabled_or_failed = _get_enabled_client()
+
+    if disabled_or_failed:
+        return disabled_or_failed
+
+    try:
+        consultation_response = (
+            client.table(CONSULTATION_REQUESTS_TABLE)
+            .select("id,analysis_result_id")
+            .eq("id", consultation_id)
+            .limit(1)
+            .execute()
+        )
+        consultation_data = consultation_response.data if isinstance(consultation_response.data, list) else []
+        consultation_row = (
+            consultation_data[0]
+            if consultation_data and isinstance(consultation_data[0], dict)
+            else None
+        )
+
+        if consultation_row is None:
+            return {
+                "ok": False,
+                "enabled": True,
+                "reason": "Consultation request was not found.",
+                "errorType": "NotFound",
+            }
+
+        analysis_result_id = consultation_row.get("analysis_result_id")
+
+        if not isinstance(analysis_result_id, str) or not analysis_result_id:
+            return {
+                "ok": False,
+                "enabled": True,
+                "reason": "Consultation request has no linked analysis result.",
+                "errorType": "NoLinkedAnalysis",
+                "consultationId": consultation_id,
+            }
+
+        profit_report_result = get_latest_profit_report_by_analysis_result(analysis_result_id)
+
+        if profit_report_result.get("ok") is not True:
+            return {
+                **profit_report_result,
+                "consultationId": consultation_id,
+                "analysisResultId": analysis_result_id,
+            }
+
+        return {
+            "ok": True,
+            "enabled": True,
+            "consultationId": consultation_id,
+            "analysisResultId": analysis_result_id,
+            "row": profit_report_result.get("row"),
+        }
+    except Exception as error:
+        return _safe_failure_result(error)
+
+
+def get_analysis_result_by_id(analysis_result_id: str) -> dict[str, Any]:
+    client, disabled_or_failed = _get_enabled_client()
+
+    if disabled_or_failed:
+        return disabled_or_failed
+
+    try:
+        response = (
+            client.table(ANALYSIS_RESULTS_TABLE)
+            .select(
+                "id,created_at,building_id,building_name,road_address,jibun_address,"
+                "annual_generation_kwh,annual_saving_krw,suitability_score,suitability_grade,"
+                "ai_simulation_result,agent_payload"
+            )
+            .eq("id", analysis_result_id)
+            .limit(1)
+            .execute()
+        )
+        data = response.data if isinstance(response.data, list) else []
+        row = data[0] if data and isinstance(data[0], dict) else None
+
+        if row is None:
+            return {
+                "ok": False,
+                "enabled": True,
+                "reason": "Analysis result was not found.",
+                "errorType": "NotFound",
+            }
+
+        return {
+            "ok": True,
+            "enabled": True,
+            "row": row,
+        }
+    except Exception as error:
+        return _safe_failure_result(error)
+
+
+def get_latest_subsidy_program(
+    region_sido: str | None = None,
+    region_sigungu: str | None = None,
+    target_building_type: str | None = None,
+) -> dict[str, Any]:
+    client, disabled_or_failed = _get_enabled_client()
+
+    if disabled_or_failed:
+        return disabled_or_failed
+
+    try:
+        query = client.table(SUBSIDY_PROGRAMS_TABLE).select("*")
+
+        if region_sido:
+            query = query.eq("region_sido", region_sido)
+
+        if region_sigungu:
+            query = query.eq("region_sigungu", region_sigungu)
+
+        if target_building_type:
+            query = query.eq("target_building_type", target_building_type)
+
+        response = query.order("source_year", desc=True).order("created_at", desc=True).limit(1).execute()
+        data = response.data if isinstance(response.data, list) else []
+        row = data[0] if data and isinstance(data[0], dict) else None
+
+        if row is None:
+            return {
+                "ok": False,
+                "enabled": True,
+                "reason": "Subsidy program was not found.",
+                "errorType": "NotFound",
+            }
+
+        return {
+            "ok": True,
+            "enabled": True,
+            "row": row,
+        }
+    except Exception as error:
+        return _safe_failure_result(error)
+
+
 def _format_admin_consultation_row(
     row: dict[str, Any],
     analysis_by_id: dict[str, dict[str, Any]],
+    profit_report_by_analysis_id: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     analysis_result_id = row.get("analysis_result_id")
     analysis = analysis_by_id.get(analysis_result_id) if isinstance(analysis_result_id, str) else None
+    profit_report = (
+        profit_report_by_analysis_id.get(analysis_result_id)
+        if isinstance(analysis_result_id, str)
+        else None
+    )
+    agent_payload = row.get("agent_payload") if isinstance(row.get("agent_payload"), dict) else {}
+    agent_profit_report = (
+        agent_payload.get("profitReport")
+        if isinstance(agent_payload.get("profitReport"), dict)
+        else {}
+    )
+    report_json = (
+        profit_report.get("report_json")
+        if profit_report and isinstance(profit_report.get("report_json"), dict)
+        else {}
+    )
+    net_investment = (
+        report_json.get("netInvestment")
+        if isinstance(report_json.get("netInvestment"), dict)
+        else {}
+    )
+    loan_scenario = (
+        report_json.get("loanSupportScenario")
+        if isinstance(report_json.get("loanSupportScenario"), dict)
+        else {}
+    )
+    subsidy_matrix = (
+        report_json.get("subsidyMatrix")
+        if isinstance(report_json.get("subsidyMatrix"), dict)
+        else {}
+    )
 
     return {
         "id": row.get("id"),
@@ -122,7 +537,48 @@ def _format_admin_consultation_row(
         "suitabilityGrade": analysis.get("suitability_grade") if analysis else None,
         "annualGenerationKwh": analysis.get("annual_generation_kwh") if analysis else None,
         "installCapacityKw": analysis.get("install_capacity_kw") if analysis else None,
+        "profitReportId": (
+            profit_report.get("id")
+            if profit_report and isinstance(profit_report.get("id"), str)
+            else agent_profit_report.get("profitReportId")
+        ),
+        "estimatedCashNeededKrw": net_investment.get("cashNeededKrw"),
+        "paybackYears": net_investment.get("paybackYears"),
+        "subsidyProgramName": subsidy_matrix.get("programName"),
+        "loanApprovalStatus": loan_scenario.get("loanApprovalStatus"),
+        "isTest": row.get("is_test") is True,
+        "source": row.get("source") if isinstance(row.get("source"), str) else None,
     }
+
+
+def _select_admin_consultation_rows(client: Any, limit: int) -> list[dict[str, Any]]:
+    base_columns = (
+        "id,created_at,name,contact,email,consultation_type,road_address,status,"
+        "analysis_result_id,agent_payload"
+    )
+    extended_columns = f"{base_columns},is_test,source"
+
+    try:
+        response = (
+            client.table(CONSULTATION_REQUESTS_TABLE)
+            .select(extended_columns)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+    except Exception as error:
+        if not _is_missing_optional_column_error(error):
+            raise
+
+        response = (
+            client.table(CONSULTATION_REQUESTS_TABLE)
+            .select(base_columns)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+
+    return response.data if isinstance(response.data, list) else []
 
 
 def list_admin_consultations(limit: int = 100) -> dict[str, Any]:
@@ -132,20 +588,7 @@ def list_admin_consultations(limit: int = 100) -> dict[str, Any]:
         return disabled_or_failed
 
     try:
-        consultation_response = (
-            client.table(CONSULTATION_REQUESTS_TABLE)
-            .select(
-                "id,created_at,name,contact,email,consultation_type,road_address,status,analysis_result_id"
-            )
-            .order("created_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        consultation_rows = (
-            consultation_response.data
-            if isinstance(consultation_response.data, list)
-            else []
-        )
+        consultation_rows = _select_admin_consultation_rows(client, limit)
         analysis_ids = sorted(
             {
                 row.get("analysis_result_id")
@@ -154,6 +597,7 @@ def list_admin_consultations(limit: int = 100) -> dict[str, Any]:
             }
         )
         analysis_by_id: dict[str, dict[str, Any]] = {}
+        profit_report_by_analysis_id: dict[str, dict[str, Any]] = {}
 
         if analysis_ids:
             analysis_response = (
@@ -173,11 +617,38 @@ def list_admin_consultations(limit: int = 100) -> dict[str, Any]:
                 if isinstance(row, dict) and isinstance(row.get("id"), str)
             }
 
+            try:
+                profit_response = (
+                    client.table(PROFIT_REPORTS_TABLE)
+                    .select("id,created_at,analysis_result_id,report_json")
+                    .in_("analysis_result_id", analysis_ids)
+                    .order("created_at", desc=True)
+                    .limit(limit)
+                    .execute()
+                )
+                profit_rows = (
+                    profit_response.data
+                    if isinstance(profit_response.data, list)
+                    else []
+                )
+                for profit_row in profit_rows:
+                    if not isinstance(profit_row, dict):
+                        continue
+
+                    profit_analysis_id = profit_row.get("analysis_result_id")
+                    if (
+                        isinstance(profit_analysis_id, str)
+                        and profit_analysis_id not in profit_report_by_analysis_id
+                    ):
+                        profit_report_by_analysis_id[profit_analysis_id] = profit_row
+            except Exception:
+                profit_report_by_analysis_id = {}
+
         return {
             "ok": True,
             "enabled": True,
             "items": [
-                _format_admin_consultation_row(row, analysis_by_id)
+                _format_admin_consultation_row(row, analysis_by_id, profit_report_by_analysis_id)
                 for row in consultation_rows
                 if isinstance(row, dict)
             ],
@@ -233,6 +704,20 @@ def _check_table_readable(table_name: str) -> bool:
         return False
 
 
+def _check_rpc_available(rpc_name: str) -> bool:
+    if rpc_name != "match_subsidy_chunks":
+        return False
+
+    result = match_subsidy_chunks(
+        query_embedding=[0.0] * 1536,
+        match_count=1,
+        filter_region_sido=None,
+        filter_region_sigungu=None,
+    )
+
+    return result.get("ok") is True
+
+
 def check_supabase_health() -> dict[str, Any]:
     enabled = (
         is_supabase_enabled()
@@ -243,16 +728,26 @@ def check_supabase_health() -> dict[str, Any]:
         ANALYSIS_RESULTS_TABLE: False,
         CONSULTATION_REQUESTS_TABLE: False,
         SIMULATION_TRAINING_SAMPLES_TABLE: False,
+        PROFIT_REPORTS_TABLE: False,
+        SUBSIDY_PROGRAMS_TABLE: False,
+        LOAN_SCENARIOS_TABLE: False,
+        SUBSIDY_DOCUMENTS_TABLE: False,
+        SUBSIDY_CHUNKS_TABLE: False,
+    }
+    rpcs = {
+        "match_subsidy_chunks": False,
     }
 
     if enabled:
         tables = {table_name: _check_table_readable(table_name) for table_name in tables}
+        rpcs = {rpc_name: _check_rpc_available(rpc_name) for rpc_name in rpcs}
 
     return {
         "ok": True,
         "supabaseEnabled": enabled,
         "canConnect": enabled and any(tables.values()) and all(tables.values()),
         "tables": tables,
+        "rpcs": rpcs,
     }
 
 

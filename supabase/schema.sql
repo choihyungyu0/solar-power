@@ -3,6 +3,7 @@
 -- Frontend keys must be VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY only.
 
 create extension if not exists pgcrypto;
+create extension if not exists vector with schema extensions;
 
 -- 1. User profile linked to Supabase Auth users.
 create table if not exists public.profiles (
@@ -10,11 +11,21 @@ create table if not exists public.profiles (
   email text,
   name text,
   phone text,
+  birth_date date,
+  privacy_agreed boolean not null default false,
+  privacy_agreed_at timestamptz,
+  privacy_consent_version text,
   user_type text not null default 'resident'
     check (user_type in ('resident', 'manager', 'owner', 'public_officer', 'admin')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.profiles
+  add column if not exists birth_date date,
+  add column if not exists privacy_agreed boolean not null default false,
+  add column if not exists privacy_agreed_at timestamptz,
+  add column if not exists privacy_consent_version text;
 
 -- 2. Apartment/public-housing solar installation request.
 create table if not exists public.apartment_solar_requests (
@@ -105,10 +116,153 @@ create table if not exists public.subsidy_programs (
   unique (title, region)
 );
 
--- 5b. (이동됨) climate.gg API 응답 캐시 테이블은 supabase/reference_bundle_cache.sql 로 분리.
+-- Compatibility columns for projects that already ran the subsidy RAG/admin schema.
+-- Older schemas used program_name/region_sido/source_title and did not have the
+-- landing-page policy card columns used by apps/web.
+alter table public.subsidy_programs
+  add column if not exists title text,
+  add column if not exists region text,
+  add column if not exists target text,
+  add column if not exists support_type text,
+  add column if not exists amount_text text,
+  add column if not exists source_name text,
+  add column if not exists source_url text,
+  add column if not exists status text default '확인 필요',
+  add column if not exists last_checked_at date,
+  add column if not exists note text,
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists program_name text,
+  add column if not exists region_sido text,
+  add column if not exists region_sigungu text,
+  add column if not exists target_building_type text,
+  add column if not exists subsidy_amount_krw bigint,
+  add column if not exists subsidy_rate numeric,
+  add column if not exists max_subsidy_krw bigint,
+  add column if not exists stacking_allowed boolean not null default false,
+  add column if not exists stacking_note text,
+  add column if not exists eligibility_note text,
+  add column if not exists source_title text,
+  add column if not exists source_year integer,
+  add column if not exists raw_payload jsonb;
+
+do $$
+declare
+  status_constraint_name text;
+begin
+  for status_constraint_name in
+    select conname
+    from pg_constraint
+    where conrelid = 'public.subsidy_programs'::regclass
+      and contype = 'c'
+      and pg_get_constraintdef(oid) ilike '%status%'
+  loop
+    execute format('alter table public.subsidy_programs drop constraint if exists %I', status_constraint_name);
+  end loop;
+end $$;
+
+update public.subsidy_programs
+set
+  title = coalesce(title, program_name, source_title, '정책 후보 ' || id::text),
+  program_name = coalesce(program_name, title, source_title, '정책 후보 ' || id::text),
+  region = coalesce(region, region_sigungu, region_sido, '지역 확인 필요'),
+  region_sido = coalesce(region_sido, region, '지역 확인 필요'),
+  target = coalesce(target, target_building_type, '대상 확인 필요'),
+  target_building_type = coalesce(target_building_type, target, '대상 확인 필요'),
+  amount_text = coalesce(
+    amount_text,
+    case
+      when max_subsidy_krw is not null then '최대 ' || max_subsidy_krw::text || '원'
+      when subsidy_amount_krw is not null then subsidy_amount_krw::text || '원'
+      when subsidy_rate is not null then subsidy_rate::text || '%'
+      else '공고 확인 필요'
+    end
+  ),
+  source_name = coalesce(source_name, source_title, '공고 확인 필요'),
+  source_url = coalesce(source_url, ''),
+  source_title = coalesce(source_title, source_name, title, program_name, '공고 확인 필요'),
+  source_year = coalesce(source_year, extract(year from current_date)::integer),
+  raw_payload = coalesce(raw_payload, jsonb_build_object('source', 'schema_compat')),
+  eligibility_note = coalesce(eligibility_note, note, '실제 공고 확인 필요'),
+  stacking_note = coalesce(stacking_note, note, '중복 지원 여부 확인 필요'),
+  status = coalesce(status, '확인 필요'),
+  note = coalesce(note, eligibility_note, stacking_note, '실제 공고 확인이 필요한 후보입니다.')
+where title is null
+  or program_name is null
+  or region is null
+  or region_sido is null
+  or source_url is null
+  or target is null
+  or target_building_type is null
+  or amount_text is null
+  or source_name is null
+  or source_title is null
+  or source_year is null
+  or raw_payload is null
+  or eligibility_note is null
+  or stacking_note is null
+  or status is null
+  or note is null;
+
+-- 6. Subsidy RAG source documents and searchable pgvector chunks.
+-- These tables are written/read by the production backend with a service-role key.
+create table if not exists public.subsidy_documents (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  source_type text not null,
+  source_title text not null,
+  source_url text,
+  source_year integer,
+  region_sido text,
+  region_sigungu text,
+  program_name text,
+  document_version text,
+  raw_metadata jsonb,
+  is_active boolean not null default true,
+  is_test boolean not null default false
+);
+
+create table if not exists public.subsidy_chunks (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  document_id uuid references public.subsidy_documents(id) on delete cascade,
+  chunk_index integer not null,
+  chunk_text text not null,
+  chunk_type text,
+  region_sido text,
+  region_sigungu text,
+  program_name text,
+  target_building_type text,
+  subsidy_amount_krw bigint,
+  subsidy_rate numeric,
+  max_subsidy_krw bigint,
+  self_payment_krw bigint,
+  stacking_allowed boolean,
+  eligibility_note text,
+  source_title text,
+  source_url text,
+  source_year integer,
+  embedding extensions.vector(1536),
+  raw_payload jsonb,
+  is_active boolean not null default true,
+  is_test boolean not null default false
+);
+
+create index if not exists subsidy_documents_active_idx
+  on public.subsidy_documents(is_active);
+
+create index if not exists subsidy_chunks_document_id_idx
+  on public.subsidy_chunks(document_id);
+
+create index if not exists subsidy_chunks_region_idx
+  on public.subsidy_chunks(region_sido, region_sigungu);
+
+create index if not exists subsidy_chunks_active_idx
+  on public.subsidy_chunks(is_active);
+
+-- 6b. (이동됨) climate.gg API 응답 캐시 테이블은 supabase/reference_bundle_cache.sql 로 분리.
 --      해당 캐시는 services/climate_proxy (참고 구현) 채택 시에만 필요.
 
--- 6. Public demo/review content.
+-- 7. Public demo/review content.
 create table if not exists public.install_reviews (
   id uuid primary key default gen_random_uuid(),
   apartment_name text,
@@ -166,8 +320,26 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles (id, email, name)
-  values (new.id, new.email, coalesce(new.raw_user_meta_data->>'name', ''))
+  insert into public.profiles (
+    id,
+    email,
+    name,
+    phone,
+    birth_date,
+    privacy_agreed,
+    privacy_agreed_at,
+    privacy_consent_version
+  )
+  values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data->>'name', ''),
+    nullif(new.raw_user_meta_data->>'phone', ''),
+    nullif(new.raw_user_meta_data->>'birth_date', '')::date,
+    coalesce((new.raw_user_meta_data->>'privacy_agreed')::boolean, false),
+    nullif(new.raw_user_meta_data->>'privacy_agreed_at', '')::timestamptz,
+    nullif(new.raw_user_meta_data->>'privacy_consent_version', '')
+  )
   on conflict (id) do nothing;
   return new;
 end;
@@ -184,13 +356,71 @@ alter table public.apartment_solar_requests enable row level security;
 alter table public.solar_simulations enable row level security;
 alter table public.notification_preferences enable row level security;
 alter table public.subsidy_programs enable row level security;
+alter table public.subsidy_documents enable row level security;
+alter table public.subsidy_chunks enable row level security;
 alter table public.install_reviews enable row level security;
+
+create or replace function public.match_subsidy_chunks (
+  query_embedding extensions.vector(1536),
+  match_count int default 5,
+  filter_region_sido text default null,
+  filter_region_sigungu text default null
+)
+returns table (
+  id uuid,
+  document_id uuid,
+  chunk_text text,
+  program_name text,
+  region_sido text,
+  region_sigungu text,
+  subsidy_amount_krw bigint,
+  subsidy_rate numeric,
+  max_subsidy_krw bigint,
+  self_payment_krw bigint,
+  stacking_allowed boolean,
+  source_title text,
+  source_url text,
+  source_year integer,
+  similarity float
+)
+language sql stable
+as $$
+  select
+    c.id,
+    c.document_id,
+    c.chunk_text,
+    c.program_name,
+    c.region_sido,
+    c.region_sigungu,
+    c.subsidy_amount_krw,
+    c.subsidy_rate,
+    c.max_subsidy_krw,
+    c.self_payment_krw,
+    c.stacking_allowed,
+    c.source_title,
+    c.source_url,
+    c.source_year,
+    1 - (c.embedding <=> query_embedding) as similarity
+  from public.subsidy_chunks c
+  where c.is_active = true
+    and c.embedding is not null
+    and (filter_region_sido is null or c.region_sido = filter_region_sido)
+    and (filter_region_sigungu is null or c.region_sigungu = filter_region_sigungu)
+  order by c.embedding <=> query_embedding
+  limit match_count;
+$$;
 
 drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own"
 on public.profiles for select
 to authenticated
 using (id = auth.uid());
+
+drop policy if exists "profiles_insert_own" on public.profiles;
+create policy "profiles_insert_own"
+on public.profiles for insert
+to authenticated
+with check (id = auth.uid());
 
 drop policy if exists "profiles_update_own" on public.profiles;
 create policy "profiles_update_own"
@@ -263,8 +493,51 @@ using (true);
 
 -- Demo seed data. These rows are public candidates, not live subsidy guarantees.
 insert into public.subsidy_programs
-  (title, region, target, support_type, amount_text, source_name, source_url, status, last_checked_at, note)
-values
+  (
+    title,
+    program_name,
+    region,
+    region_sido,
+    region_sigungu,
+    target,
+    target_building_type,
+    support_type,
+    amount_text,
+    source_name,
+    source_title,
+    source_url,
+    source_year,
+    raw_payload,
+    stacking_allowed,
+    stacking_note,
+    eligibility_note,
+    status,
+    last_checked_at,
+    note
+  )
+select
+  seed.title,
+  seed.title,
+  seed.region,
+  split_part(seed.region, '/', 1),
+  seed.region,
+  seed.target,
+  seed.target,
+  seed.support_type,
+  seed.amount_text,
+  seed.source_name,
+  seed.source_name,
+  coalesce(seed.source_url, ''),
+  extract(year from current_date)::integer,
+  jsonb_build_object('source', 'mvp_seed', 'title', seed.title, 'region', seed.region),
+  false,
+  '중복 지원 여부는 실제 공고 확인 필요',
+  seed.note,
+  seed.status,
+  seed.last_checked_at,
+  seed.note
+from (
+  values
   (
     '경기도 공동주택 태양광 지원 후보',
     '경기도',
@@ -301,16 +574,13 @@ values
     current_date,
     '정책 참여 확대와 예산 소진 개선 관점의 후보입니다. 실제 사업화는 지자체 협의가 필요합니다.'
   )
-on conflict (title, region) do update
-set
-  target = excluded.target,
-  support_type = excluded.support_type,
-  amount_text = excluded.amount_text,
-  source_name = excluded.source_name,
-  source_url = excluded.source_url,
-  status = excluded.status,
-  last_checked_at = excluded.last_checked_at,
-  note = excluded.note;
+) as seed(title, region, target, support_type, amount_text, source_name, source_url, status, last_checked_at, note)
+where not exists (
+  select 1
+  from public.subsidy_programs existing
+  where existing.title = seed.title
+    and existing.region = seed.region
+);
 
 insert into public.install_reviews (apartment_name, region, content, saving_text, rating, is_demo)
 select seed.apartment_name, seed.region, seed.content, seed.saving_text, seed.rating, seed.is_demo

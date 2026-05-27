@@ -1,8 +1,10 @@
 import { type ChangeEvent, type FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { LuShieldCheck } from 'react-icons/lu';
 import SolarMateHeader from '../components/SolarMateHeader';
 import { clearDemoAuth, setDemoAuth } from '../lib/demoAuth';
-import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { createPrivacyConsentMetadata } from '../lib/memberProfile';
+import { isSupabaseConfigured, supabase, supabaseConfigMessage } from '../lib/supabase';
 import { useSupabaseSession } from '../lib/useSupabaseSession';
 import './LoginPage.css';
 
@@ -11,6 +13,10 @@ type AuthMode = 'login' | 'signup';
 type LoginFormState = {
   email: string;
   password: string;
+  name: string;
+  birthDate: string;
+  phone: string;
+  privacyAgreed: boolean;
 };
 
 function LockIcon() {
@@ -73,16 +79,20 @@ export default function LoginPage() {
   const [form, setForm] = useState<LoginFormState>({
     email: '',
     password: '',
+    name: '',
+    birthDate: '',
+    phone: '',
+    privacyAgreed: false,
   });
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = event.target;
+    const { name, type, value, checked } = event.target;
 
     setForm((prevForm) => ({
       ...prevForm,
-      [name]: value,
+      [name]: type === 'checkbox' ? checked : value,
     }));
   };
 
@@ -92,6 +102,10 @@ export default function LoginPage() {
     }
 
     navigate('/member/dashboard?tab=generation');
+  };
+
+  const handleAdminClick = () => {
+    navigate('/admin/consultations');
   };
 
   const handleLogout = async () => {
@@ -104,15 +118,33 @@ export default function LoginPage() {
     event.preventDefault();
 
     if (!supabase || !isSupabaseConfigured) {
-      setMessage('VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY 설정 후 Supabase Auth를 사용할 수 있습니다.');
+      setMessage(supabaseConfigMessage);
       return;
     }
 
     const email = form.email.trim();
     const password = form.password.trim();
+    const name = form.name.trim();
+    const birthDate = form.birthDate.trim();
+    const phone = form.phone.trim();
 
     if (!email || !password) {
       setMessage('이메일과 비밀번호를 입력해 주세요.');
+      return;
+    }
+
+    if (mode === 'signup' && !name) {
+      setMessage('회원가입을 위해 이름을 입력해 주세요.');
+      return;
+    }
+
+    if (mode === 'signup' && (!birthDate || !phone)) {
+      setMessage('회원가입을 위해 생년월일과 전화번호를 입력해 주세요.');
+      return;
+    }
+
+    if (mode === 'signup' && !form.privacyAgreed) {
+      setMessage('회원가입을 위해 개인정보 수집 및 이용에 동의해 주세요.');
       return;
     }
 
@@ -121,7 +153,13 @@ export default function LoginPage() {
 
     const response =
       mode === 'signup'
-        ? await supabase.auth.signUp({ email, password })
+        ? await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+              data: createPrivacyConsentMetadata(name, birthDate, phone),
+            },
+          })
         : await supabase.auth.signInWithPassword({ email, password });
 
     setIsSubmitting(false);
@@ -154,7 +192,7 @@ export default function LoginPage() {
 
   const handleFindAccountClick = async () => {
     if (!supabase || !isSupabaseConfigured) {
-      setMessage('Supabase 환경변수 설정 후 비밀번호 재설정 메일을 요청할 수 있습니다.');
+      setMessage(supabaseConfigMessage);
       return;
     }
 
@@ -183,7 +221,7 @@ export default function LoginPage() {
           <h1 id="login-title">{session?.user ? '로그인 상태' : mode === 'signup' ? '회원가입' : '로그인'}</h1>
           <p>Supabase 이메일/비밀번호 계정으로 요청서와 시뮬레이션 결과를 사용자별로 저장합니다.</p>
           {!isSupabaseConfigured && (
-            <p className="login-demo-help">apps/web/.env.local에 VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY를 설정해 주세요.</p>
+            <p className="login-demo-help">{supabaseConfigMessage}</p>
           )}
 
           {session?.user ? (
@@ -195,6 +233,10 @@ export default function LoginPage() {
               </button>
               <button className="login-outline-button" type="button" onClick={handleLogout}>
                 로그아웃
+              </button>
+              <button className="login-admin-button" type="button" onClick={handleAdminClick}>
+                <LuShieldCheck aria-hidden="true" />
+                관리자 화면으로 이동
               </button>
             </div>
           ) : (
@@ -225,6 +267,76 @@ export default function LoginPage() {
                 />
               </div>
 
+              {mode === 'signup' && (
+                <>
+                  <div className="login-form-row">
+                    <label htmlFor="login-name">이름</label>
+                    <input
+                      id="login-name"
+                      name="name"
+                      type="text"
+                      value={form.name}
+                      autoComplete="name"
+                      placeholder="예: 김솔라"
+                      onChange={handleChange}
+                    />
+                  </div>
+
+                  <div className="login-form-row">
+                    <label htmlFor="login-birth-date">생년월일</label>
+                    <input
+                      id="login-birth-date"
+                      name="birthDate"
+                      type="date"
+                      value={form.birthDate}
+                      autoComplete="bday"
+                      onChange={handleChange}
+                    />
+                  </div>
+
+                  <div className="login-form-row">
+                    <label htmlFor="login-phone">전화번호</label>
+                    <input
+                      id="login-phone"
+                      name="phone"
+                      type="tel"
+                      value={form.phone}
+                      autoComplete="tel"
+                      placeholder="예: 010-1234-5678"
+                      onChange={handleChange}
+                    />
+                  </div>
+
+                  <section className="login-privacy-box" aria-label="개인정보 수집 및 이용 동의">
+                    <strong>개인정보 수집 및 이용 동의</strong>
+                    <dl>
+                      <div>
+                        <dt>수집 항목</dt>
+                        <dd>이메일, 이름, 생년월일, 전화번호, 비밀번호 인증정보, 요청서 입력 시 아파트 정보</dd>
+                      </div>
+                      <div>
+                        <dt>이용 목적</dt>
+                        <dd>계정 생성, 요청서·시뮬레이션 저장, 상담 및 알림 선호 관리</dd>
+                      </div>
+                      <div>
+                        <dt>보유 기간</dt>
+                        <dd>회원 탈퇴 또는 처리 목적 달성 시까지. 실제 서비스 전 법무 검토가 필요합니다.</dd>
+                      </div>
+                    </dl>
+                    <label className="login-consent-row" htmlFor="login-privacy-agreed">
+                      <input
+                        id="login-privacy-agreed"
+                        name="privacyAgreed"
+                        type="checkbox"
+                        checked={form.privacyAgreed}
+                        onChange={handleChange}
+                      />
+                      <span>위 개인정보 수집 및 이용에 동의합니다. (필수)</span>
+                    </label>
+                  </section>
+                </>
+              )}
+
               <button className="login-submit-button" type="submit" disabled={isSubmitting}>
                 {isSubmitting ? '처리 중' : mode === 'signup' ? '회원가입' : '로그인'}
               </button>
@@ -240,6 +352,11 @@ export default function LoginPage() {
                   비밀번호 찾기
                 </button>
               </div>
+
+              <button type="button" className="login-admin-button" onClick={handleAdminClick}>
+                <LuShieldCheck aria-hidden="true" />
+                관리자 화면으로 이동
+              </button>
             </form>
           )}
 

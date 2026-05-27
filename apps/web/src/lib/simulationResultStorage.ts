@@ -1,4 +1,4 @@
-import type { ClimateBundle, ClimateDbSaveStatus } from '../types/climateBundle';
+import type { ClimateBundle, ClimateDbSaveStatus, ProfitReportDbSaveStatus, ProfitReportJson } from '../types/climateBundle';
 import type { PvAnalysisResult } from '../types/pvAnalysis';
 import {
   isSimulationAiResult,
@@ -11,6 +11,7 @@ export const SELECTED_SIMULATION_RESULT_STORAGE_KEY = 'solarmate:selectedSimulat
 export const SELECTED_AI_SIMULATION_RESULT_STORAGE_KEY = 'solarmate:aiSimulationResult';
 export const SELECTED_AGENT_PAYLOAD_STORAGE_KEY = 'solarmate:agentPayload';
 export const SELECTED_AI_MODEL_METADATA_STORAGE_KEY = 'solarmate:aiModelMetadata';
+export const PROFIT_REPORT_STORAGE_KEY = 'solarmate:profitReport';
 
 export type SimulationResultSource = 'climate-live-hybrid' | 'pv-analysis' | 'demo';
 
@@ -52,6 +53,14 @@ export type StoredSimulationResult = {
   aiSimulationResult?: SimulationAiResult | null;
   agentPayload?: SimulationAiAgentPayload | null;
   aiModelMetadata?: SimulationAiModelMetadata | null;
+};
+
+export type StoredProfitReport = {
+  profitReportId?: string | null;
+  report: ProfitReportJson;
+  reportMarkdown: string;
+  dbSaveStatus?: ProfitReportDbSaveStatus | null;
+  storedAt: string;
 };
 
 type SimulationResultSnapshotInput = {
@@ -498,6 +507,50 @@ export function readSimulationResultFromSession() {
     }
 
     return storedResult;
+  } catch {
+    return null;
+  }
+}
+
+export function saveProfitReportToSession(report: Omit<StoredProfitReport, 'storedAt'> & { storedAt?: string }) {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  try {
+    window.sessionStorage.setItem(
+      PROFIT_REPORT_STORAGE_KEY,
+      JSON.stringify({
+        ...report,
+        storedAt: report.storedAt ?? new Date().toISOString(),
+      }),
+    );
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function readProfitReportFromSession() {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const rawValue = window.sessionStorage.getItem(PROFIT_REPORT_STORAGE_KEY);
+
+    if (!rawValue) {
+      return null;
+    }
+
+    const parsedValue = JSON.parse(rawValue) as Partial<StoredProfitReport>;
+
+    if (!parsedValue || typeof parsedValue !== 'object' || !parsedValue.report || !parsedValue.reportMarkdown) {
+      return null;
+    }
+
+    return parsedValue as StoredProfitReport;
   } catch {
     return null;
   }

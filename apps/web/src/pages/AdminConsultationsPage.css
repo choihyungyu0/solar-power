@@ -11,6 +11,97 @@
   font-family: inherit;
 }
 
+.admin-consultations-header {
+  min-height: 78px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid #dfe6ef;
+  padding: 0 30px;
+  background: #ffffff;
+}
+
+.admin-consultations-brand {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: #0f172a;
+  text-decoration: none;
+}
+
+.admin-consultations-brand-mark {
+  width: 45px;
+  height: 42px;
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.admin-consultations-brand-mark span:first-child {
+  width: 20px;
+  height: 20px;
+  position: absolute;
+  top: 0;
+  right: 5px;
+  border-radius: 50%;
+  background: #facc15;
+}
+
+.admin-consultations-brand-mark span:last-child {
+  width: 34px;
+  height: 24px;
+  border: 3px solid #1d4ed8;
+  border-radius: 5px;
+  background:
+    linear-gradient(90deg, transparent 31%, #1d4ed8 31% 38%, transparent 38% 62%, #1d4ed8 62% 69%, transparent 69%),
+    linear-gradient(0deg, transparent 44%, #1d4ed8 44% 56%, transparent 56%),
+    #60a5fa;
+  transform: skewX(-10deg);
+}
+
+.admin-consultations-brand strong,
+.admin-consultations-brand small {
+  display: block;
+  line-height: 1;
+}
+
+.admin-consultations-brand strong {
+  color: #0f2a5f;
+  font-size: 25px;
+  font-weight: 950;
+}
+
+.admin-consultations-brand small {
+  margin-top: 4px;
+  color: #0e7490;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.admin-consultations-header-actions a {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0 14px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.admin-consultations-header-actions svg {
+  width: 18px;
+  height: 18px;
+}
+
 .admin-consultations-main {
   width: min(1420px, calc(100% - 48px));
   margin: 30px auto 0;
@@ -183,6 +274,25 @@
   white-space: nowrap;
 }
 
+.admin-consultations-controls .admin-consultations-test-toggle {
+  min-height: 42px;
+  flex: 0 0 auto;
+  gap: 8px;
+  padding: 0 12px;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.admin-consultations-controls .admin-consultations-test-toggle input {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #1267e8;
+}
+
 .admin-consultations-error {
   margin: 0 0 14px;
   border: 1px solid #f4b8b8;
@@ -257,6 +367,19 @@
   font-weight: 800;
 }
 
+.admin-consultations-test-badge {
+  width: fit-content;
+  display: inline-flex;
+  margin-top: 7px;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: #fff7ed;
+  color: #c2410c;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 950;
+}
+
 .admin-consultations-detail-button {
   min-height: 38px;
   display: inline-flex;
@@ -271,6 +394,34 @@
   font-size: 13px;
   font-weight: 900;
   cursor: pointer;
+}
+
+.admin-consultations-row-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-consultations-report-button {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid #0e7490;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #ecfeff;
+  color: #0e7490;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.admin-consultations-report-button svg {
+  width: 17px;
+  height: 17px;
 }
 
 .admin-consultations-detail-button svg {
@@ -319,6 +470,290 @@
   text-align: center;
 }
 
+.admin-report-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.admin-report-modal {
+  width: min(1060px, 100%);
+  max-height: min(820px, calc(100vh - 48px));
+  overflow: auto;
+  display: grid;
+  gap: 16px;
+  border-radius: 8px;
+  padding: 22px;
+  background: #ffffff;
+  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.24);
+}
+
+.admin-report-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid #e6ebf3;
+  padding-bottom: 14px;
+}
+
+.admin-report-modal-header span {
+  color: #0e7490;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.admin-report-modal-header h2 {
+  margin: 5px 0 6px;
+  color: #0f172a;
+  font-size: 28px;
+  font-weight: 950;
+  letter-spacing: 0;
+}
+
+.admin-report-modal-header p {
+  margin: 0;
+  color: #667085;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.admin-report-modal-header button {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid #d8e0eb;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #344054;
+  cursor: pointer;
+}
+
+.admin-report-modal-header svg {
+  width: 20px;
+  height: 20px;
+}
+
+.admin-report-modal-status,
+.admin-report-modal-error {
+  margin: 0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.admin-report-modal-status {
+  background: #eff6ff;
+  color: #0758c7;
+}
+
+.admin-report-modal-error {
+  background: #fff5f5;
+  color: #b42318;
+}
+
+.admin-report-narrative-box {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(30, 64, 175, 0.16);
+  border-radius: 8px;
+  padding: 16px;
+  background: #eff6ff;
+}
+
+.admin-report-narrative-box div {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-report-narrative-box span {
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.admin-report-narrative-box strong {
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 950;
+  line-height: 1.45;
+}
+
+.admin-report-narrative-box p {
+  margin: 0;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.55;
+}
+
+.admin-report-card-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.admin-report-card-grid div {
+  min-width: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.admin-report-card-grid dt {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.admin-report-card-grid dd {
+  margin: 6px 0 0;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 950;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.admin-report-card-grid p {
+  margin: 7px 0 0;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.admin-report-rag-box {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: #eff6ff;
+}
+
+.admin-report-rag-box > div {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-report-rag-box span {
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.admin-report-rag-box strong {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.admin-report-rag-box p {
+  margin: 0;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.5;
+}
+
+.admin-report-rag-box ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-report-rag-box li {
+  display: grid;
+  gap: 7px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  padding: 10px;
+  background: #ffffff;
+}
+
+.admin-report-rag-box summary {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.admin-report-rag-box pre {
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.admin-report-warning-box {
+  display: grid;
+  gap: 8px;
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: #fff7ed;
+}
+
+.admin-report-warning-box strong {
+  color: #9a3412;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.admin-report-warning-box ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: #7c2d12;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.5;
+}
+
+.admin-report-preview {
+  border: 1px solid #dfe6ef;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.admin-report-preview summary {
+  cursor: pointer;
+  padding: 12px 14px;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.admin-report-preview pre {
+  max-height: 320px;
+  overflow: auto;
+  margin: 0;
+  border-top: 1px solid #e6ebf3;
+  padding: 14px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 980px) {
   .admin-consultations-toolbar,
   .admin-consultations-key-form,
@@ -338,6 +773,10 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .admin-report-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .admin-consultations-controls p {
     white-space: normal;
   }
@@ -348,12 +787,45 @@
 }
 
 @media (max-width: 620px) {
+  .admin-consultations-header {
+    min-height: auto;
+    align-items: stretch;
+    flex-direction: column;
+    padding: 16px;
+  }
+
+  .admin-consultations-header-actions a {
+    width: 100%;
+  }
+
   .admin-consultations-main {
     width: calc(100% - 24px);
     margin-top: 20px;
   }
 
   .admin-consultations-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-report-modal-backdrop {
+    padding: 12px;
+  }
+
+  .admin-report-modal {
+    max-height: calc(100vh - 24px);
+    padding: 16px;
+  }
+
+  .admin-report-modal-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-report-modal-header button {
+    align-self: flex-end;
+  }
+
+  .admin-report-card-grid {
     grid-template-columns: 1fr;
   }
 }

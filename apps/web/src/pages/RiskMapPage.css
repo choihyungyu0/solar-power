@@ -1120,6 +1120,90 @@
   background: #ffffff;
 }
 
+.aiProfitReportCard {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  border: 1px solid rgba(14, 116, 144, 0.2);
+  border-radius: 14px;
+  padding: 16px;
+  background: #f8feff;
+}
+
+.aiProfitReportHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.aiProfitReportHeader span {
+  color: #0e7490;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.aiProfitReportHeader strong {
+  display: block;
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.aiProfitReportGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.aiProfitReportGrid div {
+  min-width: 0;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #ffffff;
+}
+
+.aiProfitReportGrid dt {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.aiProfitReportGrid dd {
+  overflow-wrap: anywhere;
+  margin: 4px 0 0;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+.aiProfitReportCard p {
+  margin: 0;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.aiProfitReportButton {
+  margin-top: 0;
+  background: linear-gradient(180deg, #0891b2 0%, #0e7490 100%);
+  color: #ffffff;
+  box-shadow: 0 16px 30px rgba(14, 116, 144, 0.2);
+}
+
+.aiProfitReportStatus.is-error {
+  color: #b45309;
+}
+
+.aiProfitReportStatus.is-success {
+  color: #047857;
+}
+
 .aiSuitabilityHeader {
   display: flex;
   align-items: center;
@@ -1180,7 +1264,15 @@
   margin: 0;
 }
 
-.aiSuitabilityMeta div {
+.aiCounselingMetricGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.aiSuitabilityMeta div,
+.aiCounselingMetricGrid div {
   min-width: 0;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
@@ -1188,13 +1280,15 @@
   background: #f8fafc;
 }
 
-.aiSuitabilityMeta dt {
+.aiSuitabilityMeta dt,
+.aiCounselingMetricGrid dt {
   color: #64748b;
   font-size: 11px;
   font-weight: 900;
 }
 
-.aiSuitabilityMeta dd {
+.aiSuitabilityMeta dd,
+.aiCounselingMetricGrid dd {
   overflow-wrap: anywhere;
   margin: 4px 0 0;
   color: #0f172a;

@@ -11,7 +11,7 @@ const CLIMATE_BACKEND_POST_RETRY_DELAYS_MS = [1800, 4500];
 const CLIMATE_BACKEND_DISABLED_MESSAGE =
   '백엔드 서버 연결은 성공했습니다. climate.gg 파이프라인은 다음 단계에서 연결됩니다.';
 const CLIMATE_BACKEND_UNAVAILABLE_MESSAGE =
-  '백엔드 서버에 연결할 수 없습니다. VITE_CLIMATE_BACKEND_BASE_URL과 /health 응답을 확인해주세요.';
+  'climate.gg 백엔드에 연결할 수 없어 건물 footprint 기반 자체 배치와 프론트엔드 데모 산식으로 표시합니다.';
 
 function getClimateBackendBaseUrl() {
   return (import.meta.env.VITE_CLIMATE_BACKEND_BASE_URL ?? '').trim().replace(/\/+$/, '');
@@ -335,7 +335,7 @@ export async function runExternalClimateBackendAnalysis(
 
     return createFailureResponse(
       input,
-      isAbortLikeError(errorName) ? errorMessage : `백엔드 서버 요청 실패: ${errorMessage}`,
+      isAbortLikeError(errorName) ? errorMessage : CLIMATE_BACKEND_UNAVAILABLE_MESSAGE,
       isAbortLikeError(errorName) ? 'climate-backend-health-aborted' : 'climate-backend-fetch-error',
       false,
       {
@@ -404,7 +404,7 @@ export async function runExternalClimateBackendAnalysis(
 
     return createFailureResponse(
       input,
-      isAbortLikeError(errorName) ? errorMessage : `백엔드 서버 요청 실패: ${errorMessage}`,
+      isAbortLikeError(errorName) ? errorMessage : CLIMATE_BACKEND_UNAVAILABLE_MESSAGE,
       isAbortLikeError(errorName) ? 'climate-backend-post-aborted' : 'climate-backend-fetch-error',
       false,
       {

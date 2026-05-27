@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import { useCallback, useState, type CSSProperties } from 'react';
 import type { IconType } from 'react-icons';
 import {
   LuBuilding2,
@@ -9,15 +9,20 @@ import {
   LuInfo,
   LuMapPin,
   LuPhone,
+  LuPrinter,
   LuSunMedium,
   LuZap,
 } from 'react-icons/lu';
 import SolarMateHeader from '../components/SolarMateHeader';
+import { generateProfitReport } from '../lib/profitReportClient';
 import { formatAgentPayloadJson } from '../lib/simulationAiResult';
 import {
+  readProfitReportFromSession,
   readSimulationResultFromSession,
+  saveProfitReportToSession,
   saveSimulationResultToSession,
   type SimulationResultSource,
+  type StoredProfitReport,
   type StoredSimulationResult,
 } from '../lib/simulationResultStorage';
 import './SimulationResultPage.css';
@@ -175,6 +180,16 @@ function formatKrw(value: number) {
   return `${Math.round(value).toLocaleString('ko-KR')}원`;
 }
 
+function formatOptionalKrw(value: number | null | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) ? formatKrw(value) : '확인 필요';
+}
+
+function formatSimilarity(value: number | null | undefined) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : '확인 필요';
+}
+
 function formatPercent(value: number) {
   return `${value.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 }
@@ -193,6 +208,10 @@ function formatPaybackYears(value: number | null) {
   }
 
   return `약 ${value.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}년`;
+}
+
+function formatOptionalPaybackYears(value: number) {
+  return formatPaybackYears(value > 0 ? value : null);
 }
 
 function formatChartKrw(value: number) {
@@ -245,10 +264,193 @@ function getCostItems(normalized: NormalizedResult) {
   ];
 }
 
+function ProfitReportSection({
+  profitReport,
+  status,
+  message,
+  canGenerate,
+  actions,
+}: {
+  profitReport: StoredProfitReport | null;
+  status: 'idle' | 'loading' | 'ready' | 'error';
+  message: string;
+  canGenerate: boolean;
+  actions: {
+    onGenerate: () => void;
+    onConsultationApply: () => void;
+  };
+}) {
+  const report = profitReport?.report;
+
+  if (!report) {
+    return (
+      <section className="profitReportSection" aria-label="AI 태양광 도입 종합 보고서">
+        <div className="profitReportHeader">
+          <div>
+            <span>AI 수익·보조금·금융 리포트</span>
+            <h2>AI 태양광 도입 종합 보고서</h2>
+          </div>
+        </div>
+        <p className="profitReportMessage">
+          {status === 'loading'
+            ? message
+            : status === 'error'
+              ? message
+              : canGenerate
+                ? 'AI 분석 결과를 바탕으로 수익·보조금·금융 리포트를 생성할 수 있습니다.'
+                : 'AI 리포트 입력값을 준비 중입니다. /risk-map에서 분석을 먼저 실행해주세요.'}
+        </p>
+        <button
+          className="consultApplyButton profitReportCta"
+          type="button"
+          disabled={!canGenerate || status === 'loading'}
+          onClick={actions.onGenerate}
+        >
+          <LuChartNoAxesColumnIncreasing aria-hidden="true" />
+          {status === 'loading' ? '수익 리포트 생성 중' : '수익 리포트 생성하기'}
+        </button>
+      </section>
+    );
+  }
+
+  const fourMetrics = report.fourMetrics;
+  const loanScenario = report.loanSupportScenario;
+  const netInvestment = report.netInvestment;
+  const narrative = report.reportNarrative;
+
+  return (
+    <section className="profitReportSection" aria-label="AI 태양광 도입 종합 보고서">
+      <div className="profitReportHeader">
+        <div>
+          <span>AI 수익·보조금·금융 리포트</span>
+          <h2>AI 태양광 도입 종합 보고서</h2>
+        </div>
+        {profitReport.profitReportId && <strong>리포트 ID {profitReport.profitReportId.slice(0, 8)}</strong>}
+      </div>
+
+      <div className="profitNarrativeBox">
+        <strong>{narrative.headline}</strong>
+        <p>{narrative.summary}</p>
+        <p>{narrative.salesMessage}</p>
+        <button className="consultApplyButton profitReportCta" type="button" onClick={actions.onConsultationApply}>
+          <LuPhone aria-hidden="true" />
+          상담 신청하기
+        </button>
+      </div>
+
+      <div className="profitReportCardGrid">
+        <article>
+          <span>AI 적합도</span>
+          <strong>
+            {fourMetrics.subsidyAndSuitability.installationSuitabilityGrade}등급 ·{' '}
+            {fourMetrics.subsidyAndSuitability.installationSuitabilityScore}점
+          </strong>
+          <p>{fourMetrics.subsidyAndSuitability.installationSuitabilityLabel}</p>
+        </article>
+        <article>
+          <span>예상 발전 수익</span>
+          <strong>{formatKwh(fourMetrics.expectedGeneration.annualGenerationKwh)}</strong>
+          <p>연 절감/수익 {formatKrw(fourMetrics.payback.annualSavingKrw)} 추정</p>
+        </article>
+        <article>
+          <span>설치 비용/보조금</span>
+          <strong>{formatKrw(fourMetrics.costAndSelfPayment.estimatedInstallCostKrw)}</strong>
+          <p>경기 주택태양광 지원사업 단일 기준</p>
+        </article>
+        <article>
+          <span>대출 지원 시나리오</span>
+          <strong>{formatKrw(loanScenario.estimatedLoanLimitKrw)}</strong>
+          <p>{loanScenario.loanApprovalStatus}</p>
+        </article>
+        <article>
+          <span>실투자금/회수기간</span>
+          <strong>{formatKrw(netInvestment.cashNeededKrw)}</strong>
+          <p>{formatPaybackYears(netInvestment.paybackYears)} 추정</p>
+        </article>
+      </div>
+
+      <div className="profitDisclaimerBox">
+        <strong>확인 필요</strong>
+        <ul>
+          {report.riskDisclaimers.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </div>
+
+      <SubsidyRagEvidence report={report} />
+
+      <details className="agentPayloadPreview">
+        <summary>개발자 JSON · profitReport</summary>
+        <pre>{JSON.stringify(report, null, 2)}</pre>
+      </details>
+
+      <details className="agentPayloadPreview">
+        <summary>개발자 Markdown · profitReport</summary>
+        <pre>{profitReport.reportMarkdown}</pre>
+      </details>
+    </section>
+  );
+}
+
+function SubsidyRagEvidence({ report }: { report: NonNullable<StoredProfitReport['report']> }) {
+  const ragContext = report.subsidyRagContext;
+  const matches = ragContext?.matches ?? [];
+  const references = report.sourceReferences ?? [];
+
+  if (!ragContext?.enabled || matches.length === 0) {
+    return (
+      <section className="subsidyRagEvidenceBox">
+        <div>
+          <span>보조금 RAG 근거</span>
+          <strong>정책 매트릭스 기준 표시</strong>
+        </div>
+        <p>보조금 RAG 근거가 없어 정책 매트릭스 기준으로 표시합니다. 실제 지원 여부는 최신 공고 확인이 필요합니다.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="subsidyRagEvidenceBox">
+      <div>
+        <span>보조금 RAG 근거</span>
+        <strong>{references[0]?.sourceTitle || matches[0]?.sourceTitle || '검색된 보조금 근거'}</strong>
+      </div>
+      <ul className="subsidyRagSourceList">
+        {matches.slice(0, 3).map((match, index) => (
+          <li key={`${match.sourceTitle ?? 'source'}-${index}`}>
+            <div>
+              <strong>{match.programName || '경기 주택태양광 지원사업'}</strong>
+              <span>
+                {[match.regionSido, match.regionSigungu].filter(Boolean).join(' ')}
+                {match.sourceYear ? ` · ${match.sourceYear}` : ''}
+                {` · 유사도 ${formatSimilarity(match.similarity)}`}
+              </span>
+            </div>
+            <p>
+              보조금 {formatOptionalKrw(match.subsidyAmountKrw ?? match.maxSubsidyKrw)} · 자부담{' '}
+              {formatOptionalKrw(match.selfPaymentKrw)} · 중복지원 {match.stackingAllowed ? '검토 필요' : '불가'}
+            </p>
+            <details>
+              <summary>근거 chunk 보기</summary>
+              <pre>{match.chunkText || '근거 텍스트가 없습니다.'}</pre>
+            </details>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function SimulationResultPage() {
   const storedResult = readSimulationResultFromSession();
   const normalized = normalizeResult(storedResult ?? fallbackDemoResult);
   const { result } = normalized;
+  const [profitReport, setProfitReport] = useState<StoredProfitReport | null>(() => readProfitReportFromSession());
+  const [profitReportStatus, setProfitReportStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>(() =>
+    readProfitReportFromSession() ? 'ready' : 'idle',
+  );
+  const [profitReportMessage, setProfitReportMessage] = useState('');
   const sourceLabel = getSourceLabel(result.source);
   const isDemo = result.source === 'demo';
   const cumulativeSaving = createCumulativeValues(normalized.yearlyRevenue);
@@ -292,6 +494,65 @@ function SimulationResultPage() {
     },
   ];
 
+  const handleProfitReportGenerate = useCallback(async () => {
+    if (profitReportStatus === 'loading') {
+      return;
+    }
+
+    if (!result.aiSimulationResult || !result.agentPayload) {
+      setProfitReportStatus('error');
+      setProfitReportMessage('AI 수익 리포트를 만들 분석 결과가 없습니다. /risk-map에서 분석을 먼저 실행해주세요.');
+      return;
+    }
+
+    setProfitReportStatus('loading');
+    setProfitReportMessage('AI 수익·보조금·금융 리포트를 생성하고 있습니다.');
+
+    const response = await generateProfitReport({
+      analysisResultId: result.analysisResultId,
+      aiSimulationResult: result.aiSimulationResult,
+      agentPayload: result.agentPayload,
+    });
+
+    if (response.ok) {
+      const nextReport = {
+        profitReportId: response.profitReportId,
+        report: response.report,
+        reportMarkdown: response.reportMarkdown,
+        dbSaveStatus: response.dbSaveStatus,
+        storedAt: new Date().toISOString(),
+      };
+
+      saveProfitReportToSession(nextReport);
+      setProfitReport(nextReport);
+      setProfitReportStatus('ready');
+      setProfitReportMessage('AI 수익 리포트가 생성되었습니다.');
+      return;
+    }
+
+    setProfitReportStatus('error');
+    setProfitReportMessage(response.message ?? 'AI 수익 리포트를 생성하지 못했습니다.');
+  }, [
+    profitReportStatus,
+    result.agentPayload,
+    result.aiSimulationResult,
+    result.analysisResultId,
+  ]);
+
+  const handleConsultationApply = useCallback(() => {
+    saveSimulationResultToSession(result);
+    window.location.assign('/consultation');
+  }, [result]);
+
+  const handlePrintSave = useCallback(() => {
+    window.print();
+  }, []);
+
+  const profitReportActions = {
+    onGenerate: handleProfitReportGenerate,
+    onConsultationApply: handleConsultationApply,
+  };
+
   return (
     <div className="simulationResultPage">
       <SolarMateHeader onBeforeLogin={() => saveSimulationResultToSession(normalized.result)} />
@@ -303,9 +564,15 @@ function SimulationResultPage() {
             <h1 id="simulation-result-title">설치 결과 시뮬레이션</h1>
             <p>선택하신 아파트의 태양광 설치 비용, 예상 수익, 절감 효과를 확인해보세요.</p>
           </div>
-          <a className="mapBackButton" href="/risk-map">
-            지도 다시 보기
-          </a>
+          <div className="resultTitleActions">
+            <button className="printSaveButton" type="button" onClick={handlePrintSave}>
+              <LuPrinter aria-hidden="true" />
+              PDF로 저장
+            </button>
+            <a className="mapBackButton" href="/risk-map">
+              지도 다시 보기
+            </a>
+          </div>
         </section>
 
         <section className="simulationResultLayout">
@@ -315,6 +582,14 @@ function SimulationResultPage() {
             <MobileCostCard normalized={normalized} />
 
             {result.aiSimulationResult && <AiAnalysisReport aiResult={result.aiSimulationResult} />}
+
+            <ProfitReportSection
+              profitReport={profitReport}
+              status={profitReportStatus}
+              message={profitReportMessage}
+              canGenerate={Boolean(result.aiSimulationResult?.agentPayload?.reportInputMetrics)}
+              actions={profitReportActions}
+            />
 
             <div className="resultMetricGrid">
               {resultSections.map((section) => (
@@ -360,6 +635,11 @@ function SimulationResultPage() {
           <LuInfo aria-hidden="true" />
           본 시뮬레이션은 예상치로 실제 결과와 다를 수 있습니다.
         </p>
+
+        <section className="printContactCta" aria-label="인쇄용 상담 안내">
+          <strong>우리 아파트 태양광 설치하기</strong>
+          <p>예상 리포트를 바탕으로 실제 보조금, 대출 가능성, 현장 확인 항목을 상담에서 검토하세요.</p>
+        </section>
       </main>
     </div>
   );
@@ -370,6 +650,8 @@ function AiAnalysisReport({ aiResult }: { aiResult: NonNullable<StoredSimulation
   const warnings = suitability.warnings;
   const questions = aiResult.agentPayload.questionsToAskUser;
   const requiredDocuments = aiResult.agentPayload.requiredDocuments;
+  const reportInputMetrics = aiResult.agentPayload.reportInputMetrics;
+  const fieldCheckRequired = aiResult.agentPayload.fieldCheckRequired ?? [];
   const cluster = suitability.cluster;
 
   return (
@@ -383,6 +665,40 @@ function AiAnalysisReport({ aiResult }: { aiResult: NonNullable<StoredSimulation
       </div>
 
       <p className="aiReportSummary">{aiResult.agentPayload.summaryForCounselor}</p>
+
+      {reportInputMetrics && (
+        <>
+          <dl className="aiReportMetricTable" aria-label="상담 에이전트 4대 입력 지표">
+            <div>
+              <dt>예상 발전량</dt>
+              <dd>{formatKwh(reportInputMetrics.annualGenerationKwh)}</dd>
+            </div>
+            <div>
+              <dt>투입 비용 / 자부담</dt>
+              <dd>
+                {formatKrw(reportInputMetrics.estimatedInstallCostKrw)} /{' '}
+                {formatKrw(reportInputMetrics.selfPaymentEstimateKrw)}
+              </dd>
+            </div>
+            <div>
+              <dt>회수기간</dt>
+              <dd>{formatOptionalPaybackYears(reportInputMetrics.paybackYears)}</dd>
+            </div>
+            <div>
+              <dt>보조금 / 설치 적합도</dt>
+              <dd>
+                {reportInputMetrics.installationSuitabilityGrade}등급 ·{' '}
+                {formatKrw(reportInputMetrics.subsidyEstimateKrw)} 추정
+              </dd>
+            </div>
+          </dl>
+
+          <p className="aiReportPolicyNote">
+            보조금은 {reportInputMetrics.subsidyProgramName} 단일 기준으로 표시합니다. 실제 지원 여부는
+            공고와 예산 잔여 여부에 따라 달라질 수 있습니다.
+          </p>
+        </>
+      )}
 
       <dl className="aiReportGrid">
         <div>
@@ -421,6 +737,18 @@ function AiAnalysisReport({ aiResult }: { aiResult: NonNullable<StoredSimulation
               <li key={warning}>{warning}</li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {fieldCheckRequired.length > 0 && (
+        <div className="aiReportList">
+          <strong>현장 확인 필요</strong>
+          <ul>
+            {fieldCheckRequired.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+          <p>위 항목은 AI가 확정하지 않으며 리포트 경고 및 상담 확인 항목으로만 사용합니다.</p>
         </div>
       )}
 

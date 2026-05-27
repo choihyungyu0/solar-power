@@ -281,6 +281,8 @@ $analysisPayload = @{
   panelType = 1
   cellsPerPanel = 2
   mode = "fast"
+  isTest = $true
+  source = "manual-production-test"
 }
 
 Write-Host "Testing SolarMate production Supabase flow against $BackendBaseUrl"
@@ -342,6 +344,8 @@ $consultationPayload = @{
   analysisResultId = $analysisResultId
   privacyAgreed = $true
   thirdPartyAgreed = $false
+  isTest = $true
+  source = "manual-production-test"
   agentPayload = @{
     summaryForCounselor = (Convert-JsonEscapedString "\uc218\ub3d9 \ud14c\uc2a4\ud2b8 \uc0c1\ub2f4 payload\uc785\ub2c8\ub2e4.")
     nextStep = (Convert-JsonEscapedString "\uc800\uc7a5 \ud655\uc778")

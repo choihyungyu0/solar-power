@@ -15,6 +15,8 @@ class ClimateAnalysisRequest(BaseModel):
     cellsPerPanel: int = 2
     includePvAnalysis: bool = False
     mode: Literal["fast", "full"] = "fast"
+    isTest: bool = False
+    source: Optional[str] = None
 
 
 class ClimateAnalysisResponse(BaseModel):
@@ -51,9 +53,36 @@ class ConsultationRequest(BaseModel):
     roadAddress: Optional[str] = None
     jibunAddress: Optional[str] = None
     analysisResultId: Optional[str] = None
+    profitReportId: Optional[str] = None
     privacyAgreed: bool = False
     thirdPartyAgreed: bool = False
     agentPayload: Optional[dict[str, Any]] = None
+    isTest: bool = False
+    source: Optional[str] = None
+
+
+class ProfitReportFinanceInput(BaseModel):
+    availableCashKrw: Optional[float] = Field(default=None, ge=0)
+    preferredLoanYears: Optional[int] = Field(default=None, ge=1, le=10)
+    loanCoverageRatio: Optional[float] = Field(default=None, ge=0, le=1)
+
+
+class ProfitReportRequest(BaseModel):
+    analysisResultId: Optional[str] = None
+    aiSimulationResult: Optional[dict[str, Any]] = None
+    agentPayload: Optional[dict[str, Any]] = None
+    userFinanceInput: Optional[ProfitReportFinanceInput] = None
+    forceRegenerate: bool = False
+    isTest: bool = False
+    source: Optional[str] = None
+
+
+class SubsidyRagSearchRequest(BaseModel):
+    regionSido: Optional[str] = "경기도"
+    regionSigungu: Optional[str] = None
+    buildingUsage: Optional[str] = None
+    installCapacityKw: Optional[float] = None
+    query: Optional[str] = None
 
 
 class AdminConsultationStatusUpdateRequest(BaseModel):
