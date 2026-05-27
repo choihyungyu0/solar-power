@@ -669,6 +669,369 @@
   line-height: 1.5;
 }
 
+.profitReportSection.profitReportPagedView {
+  gap: 16px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.profitReportPagerBar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  min-height: 42px;
+}
+
+.profitReportDots {
+  display: inline-flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.profitReportDots i {
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  background: #d1d5db;
+}
+
+.profitReportDots i.isActive {
+  background: #1268ef;
+}
+
+.profitReportPagerControls {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid #dbe5f1;
+  border-radius: 999px;
+  background: #ffffff;
+}
+
+.profitReportPagerControls button {
+  width: 44px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: #0f172a;
+}
+
+.profitReportPagerControls button:disabled {
+  cursor: not-allowed;
+  color: #cbd5e1;
+}
+
+.profitReportPagerControls strong {
+  min-width: 68px;
+  border-inline: 1px solid #edf2f7;
+  padding: 0 14px;
+  color: #1268ef;
+  font-size: 16px;
+  font-weight: 950;
+  text-align: center;
+}
+
+.profitReportPagedView .resultAddressSummary,
+.profitReportPagedView > .profitReportHeader,
+.profitReviewPointPanel,
+.profitNextStepPanel {
+  border: 1px solid #dbe5f1;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.04);
+}
+
+.profitReportPagedView .resultAddressSummary {
+  padding: 22px 34px;
+}
+
+.profitReportPagedView > .profitReportHeader {
+  padding: 28px 34px 6px;
+  border-bottom: 0;
+  box-shadow: none;
+}
+
+.profitReportPagedView > .profitReportHeader.is-detail,
+.profitReportPagedView > .profitReportHeader.is-reference {
+  display: block;
+  border: 0;
+  padding: 4px 0 8px;
+  background: transparent;
+}
+
+.profitReportPagedView .profitReportHeader span {
+  color: #006be6;
+  font-size: 15px;
+}
+
+.profitReportPagedView .profitReportHeader h2 {
+  margin-top: 8px;
+  color: #071634;
+  font-size: clamp(28px, 2.2vw, 38px);
+}
+
+.profitReportPagedView .profitReportHeader p {
+  margin: 8px 0 0;
+  color: #334155;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.profitReportPagedView .profitReportHeader > strong {
+  margin-top: 4px;
+  padding: 12px 18px;
+  background: #e0f7ff;
+  color: #0e7490;
+  font-size: 16px;
+}
+
+.profitReportPagedView .profitNarrativeBox {
+  position: relative;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px 16px;
+  border-color: #bfdbfe;
+  padding: 22px 28px;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef7ff 100%);
+}
+
+.profitNarrativeIcon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #2f6df6;
+  color: #ffffff;
+}
+
+.profitReportPagedView .profitNarrativeBox strong {
+  font-size: 21px;
+}
+
+.profitReportPagedView .profitNarrativeBox p {
+  font-size: 16px;
+}
+
+.profitReportPagedView .profitNarrativeBox .profitReportCta {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: 62px;
+  margin-top: 8px;
+  font-size: 24px;
+}
+
+.profitReportCardGrid.is-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.profitReportCardGrid.is-detail {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.profitMetricTile {
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  min-height: 128px;
+  padding: 22px;
+}
+
+.profitMetricIcon,
+.profitPointIcon {
+  width: 62px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: #ffffff;
+}
+
+.profitMetricIcon svg,
+.profitPointIcon svg {
+  width: 31px;
+  height: 31px;
+}
+
+.profitMetricTile.is-blue .profitMetricIcon {
+  background: #2f6df6;
+}
+
+.profitMetricTile.is-green .profitMetricIcon,
+.profitPointIcon.is-green {
+  background: #22c55e;
+}
+
+.profitMetricTile.is-purple .profitMetricIcon,
+.profitPointIcon.is-purple {
+  background: #7c3aed;
+}
+
+.profitMetricTile.is-cyan .profitMetricIcon,
+.profitPointIcon.is-cyan {
+  background: #0891b2;
+}
+
+.profitMetricTile.is-orange .profitMetricIcon,
+.profitPointIcon.is-orange {
+  background: #f97316;
+}
+
+.profitMetricTile div {
+  min-width: 0;
+}
+
+.profitMetricTile div > span {
+  color: #27324f;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.profitMetricTile div > strong {
+  display: block;
+  margin-top: 8px;
+  color: #071634;
+  font-size: 24px;
+  font-weight: 950;
+}
+
+.profitMetricTile div > p {
+  margin-top: 8px;
+  color: #334155;
+  font-size: 14px;
+}
+
+.profitReviewPointPanel {
+  display: grid;
+  gap: 20px;
+  padding: 26px;
+}
+
+.profitReviewPointPanel h3 {
+  margin: 0;
+  color: #071634;
+  font-size: 23px;
+  font-weight: 950;
+}
+
+.profitReviewPointPanel > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.profitReviewPointPanel article {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 14px;
+  border: 1px solid #dbe5f1;
+  border-radius: 8px;
+  padding: 24px;
+  background: #ffffff;
+}
+
+.profitReviewPointPanel article strong {
+  color: #0f766e;
+  font-size: 18px;
+  font-weight: 950;
+}
+
+.profitReviewPointPanel article p {
+  margin: 10px 0 0;
+  color: #27324f;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.65;
+}
+
+.profitReviewPointPanel article b {
+  color: #006be6;
+}
+
+.profitReportPagedView .profitDisclaimerBox {
+  border: 1px solid #fed7aa;
+  padding: 22px 28px;
+  background: #fff7ed;
+}
+
+.profitReportPagedView .profitDisclaimerBox strong {
+  font-size: 19px;
+}
+
+.profitReportPagedView .profitDisclaimerBox ul {
+  font-size: 15px;
+}
+
+.profitReportPagedView .subsidyRagEvidenceBox {
+  padding: 24px 28px;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef7ff 100%);
+}
+
+.profitReportPagedView .subsidyRagSourceList li {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding: 22px;
+}
+
+.profitReportPagedView .subsidyRagSourceList details {
+  justify-self: end;
+}
+
+.profitReportPagedView .agentPayloadPreview {
+  border: 1px solid #99f6e4;
+  border-radius: 8px;
+  padding: 18px 22px;
+  background: #f0fdfa;
+}
+
+.profitNextStepPanel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 420px);
+  gap: 28px;
+  align-items: center;
+  border-color: #fcd34d;
+  padding: 28px;
+  background: #fffaf0;
+}
+
+.profitNextStepPanel > div {
+  display: grid;
+  grid-template-columns: 66px minmax(0, 1fr);
+  gap: 18px;
+}
+
+.profitNextStepPanel strong {
+  color: #071634;
+  font-size: 24px;
+  font-weight: 950;
+}
+
+.profitNextStepPanel p {
+  margin: 8px 0 0;
+  color: #27324f;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.profitNextStepPanel ul {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding-left: 18px;
+  color: #0f5132;
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.profitNextStepPanel .profitReportCta {
+  width: 100%;
+  min-height: 62px;
+  font-size: 22px;
+}
+
 .resultMetricSection {
   overflow: hidden;
 }
@@ -2257,6 +2620,64 @@
 
 .analysisEmptyState .mapBackButton {
   justify-self: start;
+}
+
+@media (max-width: 1120px) {
+  .profitReportCardGrid.is-summary,
+  .profitReportCardGrid.is-detail,
+  .profitReviewPointPanel > div {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .profitNextStepPanel {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .profitReportPagerBar {
+    align-items: flex-end;
+    flex-direction: column;
+  }
+
+  .profitReportPagedView .resultAddressSummary,
+  .profitReportPagedView > .profitReportHeader,
+  .profitReportPagedView .profitNarrativeBox,
+  .profitReviewPointPanel,
+  .profitReportPagedView .profitDisclaimerBox,
+  .profitReportPagedView .subsidyRagEvidenceBox,
+  .profitNextStepPanel {
+    padding: 18px;
+  }
+
+  .profitReportCardGrid.is-summary,
+  .profitReportCardGrid.is-detail,
+  .profitReviewPointPanel > div {
+    grid-template-columns: 1fr;
+  }
+
+  .profitMetricTile,
+  .profitReviewPointPanel article,
+  .profitNextStepPanel > div {
+    grid-template-columns: 54px minmax(0, 1fr);
+  }
+
+  .profitMetricIcon,
+  .profitPointIcon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .profitMetricIcon svg,
+  .profitPointIcon svg {
+    width: 25px;
+    height: 25px;
+  }
+
+  .profitMetricTile div > strong,
+  .profitNextStepPanel strong {
+    font-size: 20px;
+  }
 }
 
 @media print {

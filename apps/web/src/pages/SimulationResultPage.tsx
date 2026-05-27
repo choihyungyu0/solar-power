@@ -3,6 +3,7 @@ import type { IconType } from 'react-icons';
 import {
   LuBuilding2,
   LuChartNoAxesColumnIncreasing,
+  LuChevronLeft,
   LuChevronRight,
   LuCircleCheck,
   LuCoins,
@@ -270,12 +271,14 @@ function getCostItems(normalized: NormalizedResult) {
 }
 
 function ProfitReportSection({
+  result,
   profitReport,
   status,
   message,
   canGenerate,
   actions,
 }: {
+  result: StoredSimulationResult;
   profitReport: StoredProfitReport | null;
   status: 'idle' | 'loading' | 'ready' | 'error';
   message: string;
@@ -285,6 +288,7 @@ function ProfitReportSection({
     onConsultationApply: () => void;
   };
 }) {
+  const [activePage, setActivePage] = useState(1);
   const report = profitReport?.report;
 
   if (!report) {
@@ -319,82 +323,264 @@ function ProfitReportSection({
   }
 
   const fourMetrics = report.fourMetrics;
+  const generation = fourMetrics.expectedGeneration;
+  const cost = fourMetrics.costAndSelfPayment;
+  const payback = fourMetrics.payback;
+  const suitability = fourMetrics.subsidyAndSuitability;
   const loanScenario = report.loanSupportScenario;
   const netInvestment = report.netInvestment;
   const narrative = report.reportNarrative;
+  const primaryReference = report.sourceReferences?.[0];
+  const primaryRagMatch = report.subsidyRagContext?.matches?.[0];
+  const subsidyProgramName =
+    primaryRagMatch?.programName || primaryReference?.sourceTitle || suitability.subsidyProgramName;
+  const reportId = profitReport.profitReportId?.slice(0, 8);
+  const pageCount = 3;
 
   return (
-    <section className="profitReportSection" aria-label="AI 태양광 도입 종합 보고서">
-      <div className="profitReportHeader">
-        <div>
-          <span>AI 수익·보조금·금융 리포트</span>
-          <h2>AI 태양광 도입 종합 보고서</h2>
-        </div>
-        {profitReport.profitReportId && <strong>리포트 ID {profitReport.profitReportId.slice(0, 8)}</strong>}
-      </div>
-
-      <div className="profitNarrativeBox">
-        <strong>{narrative.headline}</strong>
-        <p>{narrative.summary}</p>
-        <p>{narrative.salesMessage}</p>
-        <button className="consultApplyButton profitReportCta" type="button" onClick={actions.onConsultationApply}>
-          <LuPhone aria-hidden="true" />
-          상담 신청하기
-        </button>
-      </div>
-
-      <div className="profitReportCardGrid">
-        <article>
-          <span>AI 적합도</span>
-          <strong>
-            {fourMetrics.subsidyAndSuitability.installationSuitabilityGrade}등급 ·{' '}
-            {fourMetrics.subsidyAndSuitability.installationSuitabilityScore}점
-          </strong>
-          <p>{fourMetrics.subsidyAndSuitability.installationSuitabilityLabel}</p>
-        </article>
-        <article>
-          <span>예상 발전 수익</span>
-          <strong>{formatKwh(fourMetrics.expectedGeneration.annualGenerationKwh)}</strong>
-          <p>연 절감/수익 {formatKrw(fourMetrics.payback.annualSavingKrw)} 추정</p>
-        </article>
-        <article>
-          <span>설치 비용/보조금</span>
-          <strong>{formatKrw(fourMetrics.costAndSelfPayment.estimatedInstallCostKrw)}</strong>
-          <p>{fourMetrics.subsidyAndSuitability.subsidyProgramName} 기준</p>
-        </article>
-        <article>
-          <span>대출 지원 시나리오</span>
-          <strong>{formatKrw(loanScenario.estimatedLoanLimitKrw)}</strong>
-          <p>{loanScenario.loanApprovalStatus}</p>
-        </article>
-        <article>
-          <span>실투자금/회수기간</span>
-          <strong>{formatKrw(netInvestment.cashNeededKrw)}</strong>
-          <p>{formatPaybackYears(netInvestment.paybackYears)} 추정</p>
-        </article>
-      </div>
-
-      <div className="profitDisclaimerBox">
-        <strong>확인 필요</strong>
-        <ul>
-          {report.riskDisclaimers.map((item) => (
-            <li key={item}>{item}</li>
+    <section className={`profitReportSection profitReportPagedView is-page-${activePage}`} aria-label="AI 태양광 도입 종합 보고서">
+      <div className="profitReportPagerBar" aria-label="AI 수익 리포트 페이지 이동">
+        <div className="profitReportDots" aria-hidden="true">
+          {Array.from({ length: pageCount }, (_, index) => (
+            <i className={activePage === index + 1 ? 'isActive' : ''} key={index} />
           ))}
-        </ul>
+        </div>
+        <div className="profitReportPagerControls">
+          <button
+            type="button"
+            onClick={() => setActivePage((current) => Math.max(1, current - 1))}
+            disabled={activePage === 1}
+            aria-label="이전 페이지"
+          >
+            <LuChevronLeft aria-hidden="true" />
+          </button>
+          <strong>{activePage} / {pageCount}</strong>
+          <button
+            type="button"
+            onClick={() => setActivePage((current) => Math.min(pageCount, current + 1))}
+            disabled={activePage === pageCount}
+            aria-label="다음 페이지"
+          >
+            <LuChevronRight aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
-      <SubsidyRagEvidence report={report} />
+      {activePage === 1 && (
+        <>
+          <AddressSummary result={result} />
 
-      <details className="agentPayloadPreview">
-        <summary>개발자 JSON · profitReport</summary>
-        <pre>{JSON.stringify(report, null, 2)}</pre>
-      </details>
+          <div className="profitReportHeader">
+            <div>
+              <span>AI 수익·보조금·금융 리포트</span>
+              <h2>AI 태양광 도입 종합 보고서</h2>
+            </div>
+            {reportId && <strong>리포트 ID {reportId}</strong>}
+          </div>
 
-      <details className="agentPayloadPreview">
-        <summary>개발자 Markdown · profitReport</summary>
-        <pre>{profitReport.reportMarkdown}</pre>
-      </details>
+          <div className="profitNarrativeBox">
+            <span className="profitNarrativeIcon" aria-hidden="true">
+              <LuInfo />
+            </span>
+            <div>
+              <strong>{narrative.headline}</strong>
+              <p>{narrative.summary}</p>
+              <p>{narrative.salesMessage}</p>
+            </div>
+            <button className="consultApplyButton profitReportCta" type="button" onClick={actions.onConsultationApply}>
+              <LuPhone aria-hidden="true" />
+              상담 신청하기
+            </button>
+          </div>
+
+          <div className="profitReportCardGrid is-summary">
+            <ProfitMetricTile
+              color="blue"
+              icon={LuCircleCheck}
+              label="AI 적합도"
+              value={`${suitability.installationSuitabilityGrade}등급 · ${suitability.installationSuitabilityScore}점`}
+              note={suitability.installationSuitabilityLabel}
+            />
+            <ProfitMetricTile
+              color="green"
+              icon={LuZap}
+              label="예상 발전 수익"
+              value={formatKwh(generation.annualGenerationKwh)}
+              note={`연 절감/수익 ${formatKrw(payback.annualSavingKrw)} 추정`}
+            />
+            <ProfitMetricTile
+              color="orange"
+              icon={LuCoins}
+              label="실투자금/회수기간"
+              value={formatKrw(netInvestment.cashNeededKrw)}
+              note={`약 ${formatPaybackYears(netInvestment.paybackYears)} 추정`}
+            />
+          </div>
+        </>
+      )}
+
+      {activePage === 2 && (
+        <>
+          <div className="profitReportHeader is-detail">
+            <div>
+              <span>AI 수익·보조금·금융 리포트</span>
+              <h2>AI 수익 리포트 상세 분석</h2>
+              <p>태양광 도입을 위한 핵심 지표와 금융 분석을 상세하게 확인하세요.</p>
+            </div>
+          </div>
+
+          <div className="profitReportCardGrid is-detail">
+            <ProfitMetricTile
+              color="blue"
+              icon={LuCircleCheck}
+              label="AI 적합도"
+              value={`${suitability.installationSuitabilityGrade}등급 · ${suitability.installationSuitabilityScore}점`}
+              note={suitability.installationSuitabilityLabel}
+            />
+            <ProfitMetricTile
+              color="green"
+              icon={LuZap}
+              label="예상 발전 수익"
+              value={formatKwh(generation.annualGenerationKwh)}
+              note={`연 절감·수익 ${formatKrw(payback.annualSavingKrw)} 추정`}
+            />
+            <ProfitMetricTile
+              color="purple"
+              icon={LuCoins}
+              label="설치 비용/보조금"
+              value={formatKrw(cost.estimatedInstallCostKrw)}
+              note={`${subsidyProgramName} 기준`}
+            />
+            <ProfitMetricTile
+              color="cyan"
+              icon={LuBuilding2}
+              label="대출 지원 시나리오"
+              value={formatKrw(loanScenario.estimatedLoanLimitKrw)}
+              note={loanScenario.loanApprovalStatus}
+            />
+            <ProfitMetricTile
+              color="orange"
+              icon={LuChartNoAxesColumnIncreasing}
+              label="실투자금/회수기간"
+              value={formatKrw(netInvestment.cashNeededKrw)}
+              note={`약 ${formatPaybackYears(netInvestment.paybackYears)} 추정`}
+            />
+          </div>
+
+          <section className="profitReviewPointPanel" aria-label="금융 설치 검토 포인트">
+            <h3>금융·설치 검토 포인트</h3>
+            <div>
+              <article>
+                <span className="profitPointIcon is-green" aria-hidden="true">
+                  <LuCoins />
+                </span>
+                <strong>예상 연간 절감·수익</strong>
+                <p>
+                  연간 발전량 {formatKwh(generation.annualGenerationKwh)} 기준으로 전기요금 절감 및 판매 수익을
+                  합산하면 연간 약 <b>{formatKrw(payback.annualSavingKrw)}</b>의 효과가 예상됩니다.
+                </p>
+              </article>
+              <article>
+                <span className="profitPointIcon is-purple" aria-hidden="true">
+                  <LuCircleCheck />
+                </span>
+                <strong>보조금 영향</strong>
+                <p>
+                  {subsidyProgramName} 적용 시 약 <b>{formatKrw(netInvestment.subsidyEstimateKrw)}</b>의 보조금 혜택을
+                  검토할 수 있습니다.
+                </p>
+              </article>
+              <article>
+                <span className="profitPointIcon is-cyan" aria-hidden="true">
+                  <LuBuilding2 />
+                </span>
+                <strong>금융·대출 시나리오</strong>
+                <p>
+                  금융기관 대출 지원 시 약 <b>{formatKrw(loanScenario.estimatedLoanLimitKrw)}</b>까지 지원 가능하며,
+                  최종 실투자금은 약 <b>{formatKrw(netInvestment.cashNeededKrw)}</b>로 추정됩니다.
+                </p>
+              </article>
+            </div>
+          </section>
+
+          <div className="profitDisclaimerBox">
+            <strong>확인 필요</strong>
+            <ul>
+              {report.riskDisclaimers.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        </>
+      )}
+
+      {activePage === 3 && (
+        <>
+          <div className="profitReportHeader is-reference">
+            <div>
+              <span>보조금 근거 및 참고 정보</span>
+              <h2>보조금 근거 및 참고 정보</h2>
+              <p>보조금 판단의 근거 문서와 참고 정보를 확인하고, 다음 단계를 진행하세요.</p>
+            </div>
+          </div>
+
+          <SubsidyRagEvidence report={report} />
+
+          <details className="agentPayloadPreview">
+            <summary>개발자 JSON · profitReport</summary>
+            <pre>{JSON.stringify(report, null, 2)}</pre>
+          </details>
+
+          <section className="profitNextStepPanel" aria-label="다음 단계">
+            <div>
+              <span className="profitPointIcon is-orange" aria-hidden="true">
+                <LuPhone />
+              </span>
+              <div>
+                <strong>다음 단계</strong>
+                <p>{report.cta.primaryMessage}</p>
+                <ul>
+                  <li>예상 보조금 가능성 확인</li>
+                  <li>자부담 및 세부 설치 비용 안내</li>
+                  <li>신청 절차 및 서류 준비 안내</li>
+                </ul>
+              </div>
+            </div>
+            <button className="consultApplyButton profitReportCta" type="button" onClick={actions.onConsultationApply}>
+              <LuPhone aria-hidden="true" />
+              상담 신청하기
+            </button>
+          </section>
+        </>
+      )}
     </section>
+  );
+}
+
+function ProfitMetricTile({
+  color,
+  icon: Icon,
+  label,
+  value,
+  note,
+}: {
+  color: 'blue' | 'green' | 'purple' | 'cyan' | 'orange';
+  icon: IconType;
+  label: string;
+  value: string;
+  note: string;
+}) {
+  return (
+    <article className={`profitMetricTile is-${color}`}>
+      <span className="profitMetricIcon" aria-hidden="true">
+        <Icon />
+      </span>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+        <p>{note}</p>
+      </div>
+    </article>
   );
 }
 
@@ -599,7 +785,7 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
 
         <section className={`simulationResultLayout ${isDetailView ? '' : 'isSingleColumn'}`}>
           <div className="simulationResultContent">
-            <AddressSummary result={result} />
+            {!isProfitView && <AddressSummary result={result} />}
 
             {isDetailView && (
               <>
@@ -645,6 +831,7 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
 
             {isProfitView && (
               <ProfitReportSection
+                result={result}
                 profitReport={profitReport}
                 status={profitReportStatus}
                 message={profitReportMessage}
