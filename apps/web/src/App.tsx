@@ -19,7 +19,7 @@ import {
   saveSolarMvpSubmission,
 } from './lib/solarMvpSupabase';
 import type { InstallReview, PolicyProgram, SaveStatus, SolarRequestFormValues, SolarSimulationResult } from './lib/solarTypes';
-import { isSupabaseConfigured, supabase } from './lib/supabase';
+import { isSupabaseConfigured, supabase, supabaseConfigMessage } from './lib/supabase';
 import { useSupabaseSession } from './lib/useSupabaseSession';
 import AdminConsultationsPage from './pages/AdminConsultationsPage';
 import ConsultationCompletePage from './pages/ConsultationCompletePage';
@@ -274,7 +274,12 @@ function HomePage() {
           </div>
 
           <div className="mvpWorkflowGrid">
-            <AuthPanel supabase={supabase} session={session} isConfigured={isSupabaseConfigured} />
+            <AuthPanel
+              supabase={supabase}
+              session={session}
+              isConfigured={isSupabaseConfigured}
+              setupMessage={supabaseConfigMessage}
+            />
             <RequestForm onSubmit={handleSolarRequestSubmit} isSaving={isSaving} />
             <SimulationResultCard result={simulationResult} saveStatus={saveStatus} />
             <NotificationStatusPanel values={lastRequestValues} saveStatus={saveStatus} savedRecordIds={savedRecordIds} />

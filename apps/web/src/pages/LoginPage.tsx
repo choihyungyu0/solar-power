@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { LuShieldCheck } from 'react-icons/lu';
 import SolarMateHeader from '../components/SolarMateHeader';
 import { clearDemoAuth, setDemoAuth } from '../lib/demoAuth';
-import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { isSupabaseConfigured, supabase, supabaseConfigMessage } from '../lib/supabase';
 import { useSupabaseSession } from '../lib/useSupabaseSession';
 import './LoginPage.css';
 
@@ -109,7 +109,7 @@ export default function LoginPage() {
     event.preventDefault();
 
     if (!supabase || !isSupabaseConfigured) {
-      setMessage('VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY 설정 후 Supabase Auth를 사용할 수 있습니다.');
+      setMessage(supabaseConfigMessage);
       return;
     }
 
@@ -159,7 +159,7 @@ export default function LoginPage() {
 
   const handleFindAccountClick = async () => {
     if (!supabase || !isSupabaseConfigured) {
-      setMessage('Supabase 환경변수 설정 후 비밀번호 재설정 메일을 요청할 수 있습니다.');
+      setMessage(supabaseConfigMessage);
       return;
     }
 
@@ -188,7 +188,7 @@ export default function LoginPage() {
           <h1 id="login-title">{session?.user ? '로그인 상태' : mode === 'signup' ? '회원가입' : '로그인'}</h1>
           <p>Supabase 이메일/비밀번호 계정으로 요청서와 시뮬레이션 결과를 사용자별로 저장합니다.</p>
           {!isSupabaseConfigured && (
-            <p className="login-demo-help">apps/web/.env.local에 VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY를 설정해 주세요.</p>
+            <p className="login-demo-help">{supabaseConfigMessage}</p>
           )}
 
           {session?.user ? (

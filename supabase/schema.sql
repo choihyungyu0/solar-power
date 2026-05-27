@@ -106,6 +106,93 @@ create table if not exists public.subsidy_programs (
   unique (title, region)
 );
 
+-- Compatibility columns for projects that already ran the subsidy RAG/admin schema.
+-- Older schemas used program_name/region_sido/source_title and did not have the
+-- landing-page policy card columns used by apps/web.
+alter table public.subsidy_programs
+  add column if not exists title text,
+  add column if not exists region text,
+  add column if not exists target text,
+  add column if not exists support_type text,
+  add column if not exists amount_text text,
+  add column if not exists source_name text,
+  add column if not exists source_url text,
+  add column if not exists status text default '확인 필요',
+  add column if not exists last_checked_at date,
+  add column if not exists note text,
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists program_name text,
+  add column if not exists region_sido text,
+  add column if not exists region_sigungu text,
+  add column if not exists target_building_type text,
+  add column if not exists subsidy_amount_krw bigint,
+  add column if not exists subsidy_rate numeric,
+  add column if not exists max_subsidy_krw bigint,
+  add column if not exists stacking_allowed boolean not null default false,
+  add column if not exists stacking_note text,
+  add column if not exists eligibility_note text,
+  add column if not exists source_title text,
+  add column if not exists source_year integer,
+  add column if not exists raw_payload jsonb;
+
+do $$
+declare
+  status_constraint_name text;
+begin
+  for status_constraint_name in
+    select conname
+    from pg_constraint
+    where conrelid = 'public.subsidy_programs'::regclass
+      and contype = 'c'
+      and pg_get_constraintdef(oid) ilike '%status%'
+  loop
+    execute format('alter table public.subsidy_programs drop constraint if exists %I', status_constraint_name);
+  end loop;
+end $$;
+
+update public.subsidy_programs
+set
+  title = coalesce(title, program_name, source_title, '정책 후보 ' || id::text),
+  program_name = coalesce(program_name, title, source_title, '정책 후보 ' || id::text),
+  region = coalesce(region, region_sigungu, region_sido, '지역 확인 필요'),
+  region_sido = coalesce(region_sido, region, '지역 확인 필요'),
+  target = coalesce(target, target_building_type, '대상 확인 필요'),
+  target_building_type = coalesce(target_building_type, target, '대상 확인 필요'),
+  amount_text = coalesce(
+    amount_text,
+    case
+      when max_subsidy_krw is not null then '최대 ' || max_subsidy_krw::text || '원'
+      when subsidy_amount_krw is not null then subsidy_amount_krw::text || '원'
+      when subsidy_rate is not null then subsidy_rate::text || '%'
+      else '공고 확인 필요'
+    end
+  ),
+  source_name = coalesce(source_name, source_title, '공고 확인 필요'),
+  source_url = coalesce(source_url, ''),
+  source_title = coalesce(source_title, source_name, title, program_name, '공고 확인 필요'),
+  source_year = coalesce(source_year, extract(year from current_date)::integer),
+  raw_payload = coalesce(raw_payload, jsonb_build_object('source', 'schema_compat')),
+  eligibility_note = coalesce(eligibility_note, note, '실제 공고 확인 필요'),
+  stacking_note = coalesce(stacking_note, note, '중복 지원 여부 확인 필요'),
+  status = coalesce(status, '확인 필요'),
+  note = coalesce(note, eligibility_note, stacking_note, '실제 공고 확인이 필요한 후보입니다.')
+where title is null
+  or program_name is null
+  or region is null
+  or region_sido is null
+  or source_url is null
+  or target is null
+  or target_building_type is null
+  or amount_text is null
+  or source_name is null
+  or source_title is null
+  or source_year is null
+  or raw_payload is null
+  or eligibility_note is null
+  or stacking_note is null
+  or status is null
+  or note is null;
+
 -- 6. Subsidy RAG source documents and searchable pgvector chunks.
 -- These tables are written/read by the production backend with a service-role key.
 create table if not exists public.subsidy_documents (
@@ -369,8 +456,51 @@ using (true);
 
 -- Demo seed data. These rows are public candidates, not live subsidy guarantees.
 insert into public.subsidy_programs
-  (title, region, target, support_type, amount_text, source_name, source_url, status, last_checked_at, note)
-values
+  (
+    title,
+    program_name,
+    region,
+    region_sido,
+    region_sigungu,
+    target,
+    target_building_type,
+    support_type,
+    amount_text,
+    source_name,
+    source_title,
+    source_url,
+    source_year,
+    raw_payload,
+    stacking_allowed,
+    stacking_note,
+    eligibility_note,
+    status,
+    last_checked_at,
+    note
+  )
+select
+  seed.title,
+  seed.title,
+  seed.region,
+  split_part(seed.region, '/', 1),
+  seed.region,
+  seed.target,
+  seed.target,
+  seed.support_type,
+  seed.amount_text,
+  seed.source_name,
+  seed.source_name,
+  coalesce(seed.source_url, ''),
+  extract(year from current_date)::integer,
+  jsonb_build_object('source', 'mvp_seed', 'title', seed.title, 'region', seed.region),
+  false,
+  '중복 지원 여부는 실제 공고 확인 필요',
+  seed.note,
+  seed.status,
+  seed.last_checked_at,
+  seed.note
+from (
+  values
   (
     '경기도 공동주택 태양광 지원 후보',
     '경기도',
@@ -407,16 +537,13 @@ values
     current_date,
     '정책 참여 확대와 예산 소진 개선 관점의 후보입니다. 실제 사업화는 지자체 협의가 필요합니다.'
   )
-on conflict (title, region) do update
-set
-  target = excluded.target,
-  support_type = excluded.support_type,
-  amount_text = excluded.amount_text,
-  source_name = excluded.source_name,
-  source_url = excluded.source_url,
-  status = excluded.status,
-  last_checked_at = excluded.last_checked_at,
-  note = excluded.note;
+) as seed(title, region, target, support_type, amount_text, source_name, source_url, status, last_checked_at, note)
+where not exists (
+  select 1
+  from public.subsidy_programs existing
+  where existing.title = seed.title
+    and existing.region = seed.region
+);
 
 insert into public.install_reviews (apartment_name, region, content, saving_text, rating, is_demo)
 select seed.apartment_name, seed.region, seed.content, seed.saving_text, seed.rating, seed.is_demo

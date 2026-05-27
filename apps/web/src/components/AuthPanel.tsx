@@ -7,6 +7,7 @@ type AuthPanelProps = {
   supabase: SupabaseClient | null;
   session: Session | null;
   isConfigured: boolean;
+  setupMessage: string;
 };
 
 function getFriendlyAuthError(message: string) {
@@ -21,7 +22,7 @@ function getFriendlyAuthError(message: string) {
   return message;
 }
 
-function AuthPanel({ supabase, session, isConfigured }: AuthPanelProps) {
+function AuthPanel({ supabase, session, isConfigured, setupMessage }: AuthPanelProps) {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -32,7 +33,7 @@ function AuthPanel({ supabase, session, isConfigured }: AuthPanelProps) {
     event.preventDefault();
 
     if (!supabase || !isConfigured) {
-      setMessage('Supabase 환경변수 설정 후 로그인/회원가입을 사용할 수 있습니다.');
+      setMessage(setupMessage);
       return;
     }
 
@@ -88,7 +89,7 @@ function AuthPanel({ supabase, session, isConfigured }: AuthPanelProps) {
       <span className="panelKicker">Supabase Auth</span>
       <h2>계정 연결</h2>
       {!isConfigured && (
-        <p className="setupNotice">VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY를 설정하면 저장 기능이 켜집니다.</p>
+        <p className="setupNotice">{setupMessage}</p>
       )}
       <div className="segmentedControl" role="tablist" aria-label="인증 모드">
         <button className={mode === 'login' ? 'isActive' : ''} type="button" onClick={() => setMode('login')}>

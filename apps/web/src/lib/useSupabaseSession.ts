@@ -18,9 +18,14 @@ export function useSupabaseSession() {
 
     supabase.auth
       .getSession()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
         if (isMounted) {
-          setSession(data.session);
+          setSession(error ? null : data.session);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setSession(null);
         }
       })
       .finally(() => {

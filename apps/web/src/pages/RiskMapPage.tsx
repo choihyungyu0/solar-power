@@ -3009,17 +3009,57 @@ function RiskMapPage() {
         fallbackReason === 'climate-backend-unavailable';
       const fallbackMessage = response.disabled
         ? '백엔드 서버 연결은 성공했습니다. climate.gg 파이프라인은 다음 단계에서 연결됩니다.'
-        : response.message || 'climate.gg 응답이 지연되어 기본 패널 배치를 표시합니다.';
+        : isNetworkFetchFailure
+          ? 'climate.gg 백엔드에 연결할 수 없어 건물 footprint 기반 자체 배치와 프론트엔드 데모 산식으로 표시합니다.'
+          : response.message || 'climate.gg 응답이 지연되어 기본 패널 배치를 표시합니다.';
+      const fallbackPvInput: PvAnalysisInput = {
+        latitude: selectedCoordinate[1],
+        longitude: selectedCoordinate[0],
+        shading_index_average: PV_DEFAULT_SHADING_INDEX_AVERAGE,
+        solar_panel_angle: livePanelAngle,
+        solar_panel_info: {
+          panel_capacity: livePanelCapacityW,
+          panel_count: selectedBuilding.estimatedPanelCount > 0 ? selectedBuilding.estimatedPanelCount : PV_DEFAULT_PANEL_COUNT,
+          panel_type: livePanelType,
+        },
+      };
+      const fallbackPvResponse: PvAnalysisProxyResponse = {
+        ok: false,
+        fallback: true,
+        source: 'frontend-local-formula',
+        message: '백엔드 응답 없이 프론트엔드 데모 산식으로 발전량을 표시합니다. 실제 공고와 현장조사 확인이 필요합니다.',
+        selectedBuildingId: responseBuildingId,
+        selectedAnalysisSessionId: responseSessionId,
+        roofSource: response.roofSource ?? 'vworld-building-footprint-fallback',
+        selectedFeatureBuildingId: response.selectedFeatureBuildingId ?? null,
+        diagnostics: {
+          ...response.diagnostics,
+          ...backendIdentityDiagnostics,
+          pvAnalysisSource: 'frontend-local-formula',
+          pvAnalysisStatus: 'local-fallback',
+          usedVercelPvAnalysis: false,
+          backendBaseUrl: configuredClimateBackendBaseUrl || liveBackendBaseUrl,
+          panelCount: fallbackPvInput.solar_panel_info.panel_count,
+          installKw: roundDecimal(
+            (fallbackPvInput.solar_panel_info.panel_capacity * fallbackPvInput.solar_panel_info.panel_count) / 1000,
+            1,
+          ),
+          shadingAverage: fallbackPvInput.shading_index_average,
+          roofAreaM2: response.roofAreaM2 ?? response.diagnostics.roofAreaM2 ?? selectedBuilding.estimatedRoofAreaM2,
+        },
+        input: createSafePvInputSummary(fallbackPvInput),
+        result: createFrontendLocalPvFormulaResult(fallbackPvInput),
+      };
 
       setLiveShadingStatus(
         response.analysisStage === 'shading-timeout' || response.diagnostics.timedOutStep ? 'timeout' : 'fallback',
       );
-      setLiveClimateStatus(isNetworkFetchFailure ? 'error' : 'idle');
+      setLiveClimateStatus('idle');
       setLiveClimateStep(
         response.disabled
           ? '백엔드 서버 연결 성공 · climate.gg 파이프라인 대기'
           : isNetworkFetchFailure
-            ? '백엔드 서버 요청 실패'
+            ? '백엔드 연결 실패 · 자체 배치 표시'
             : '기본 배치 표시 중',
       );
       setLiveClimateError(fallbackMessage);
@@ -3028,8 +3068,9 @@ function RiskMapPage() {
         ...backendIdentityDiagnostics,
       });
       setLiveBackendRoofPolygon4326(response.roofPolygon4326 ?? null);
-      setPvAnalysisStatus('idle');
-      setPvAnalysisMessage(fallbackMessage);
+      setPvAnalysisResponse(fallbackPvResponse);
+      setPvAnalysisStatus('local-fallback');
+      setPvAnalysisMessage(fallbackPvResponse.message);
       setAnalysisStatus(fallbackMessage);
       setIsSolarPanelLayerVisible(true);
       return;
@@ -3296,6 +3337,7 @@ function RiskMapPage() {
     selectedBuilding.estimatedCapacityKw,
     selectedBuilding.estimatedPanelCount,
     selectedBuilding.estimatedPaybackYears,
+    selectedBuilding.estimatedRoofAreaM2,
     selectedBuildingFeature,
     selectedBuildingId,
     selectedBuildingFootprint,
