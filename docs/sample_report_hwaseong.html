@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>AI 태양광 설치 분석 보고서 — 동탄 현대하이페리온</title>
+<style>
+  :root { --ink:#1a202c; --sub:#718096; --line:#e2e8f0; --bg:#f7fafc; --brand:#1f6feb; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font-family:'Pretendard','Apple SD Gothic Neo','Malgun Gothic',sans-serif; line-height:1.6; }
+  .page { max-width:840px; margin:0 auto; padding:32px 24px 64px; }
+  .hero { background:linear-gradient(135deg,#0b2e63,#1f6feb); color:#fff; border-radius:18px; padding:28px 30px; }
+  .hero .tag { font-size:13px; opacity:.85; letter-spacing:.04em; }
+  .hero h1 { margin:6px 0 2px; font-size:24px; }
+  .hero .addr { font-size:14px; opacity:.9; }
+  .grade-chip { display:inline-flex; align-items:baseline; gap:8px; margin-top:14px;
+                background:rgba(255,255,255,.15); border-radius:999px; padding:8px 16px; }
+  .grade-chip b { font-size:22px; }
+  section { background:#fff; border:1px solid var(--line); border-radius:16px; padding:22px 24px; margin-top:18px; }
+  section h2 { font-size:17px; margin:0 0 4px; }
+  section .lead { color:var(--sub); font-size:13px; margin:0 0 16px; }
+  .grid2 { display:grid; grid-template-columns:140px 1fr; gap:22px; align-items:center; }
+  .bar-row { display:grid; grid-template-columns:96px 1fr 64px; gap:10px; align-items:center; margin:8px 0; font-size:13px; }
+  .bar-track { background:#eceff3; border-radius:6px; height:10px; overflow:hidden; }
+  .bar-fill { display:block; height:100%; background:var(--brand); border-radius:6px; }
+  .bar-value { text-align:right; color:var(--sub); } .bar-value small { color:#a0aec0; }
+  .kpis { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .kpi { background:var(--bg); border-radius:12px; padding:14px 16px; }
+  .kpi .k { font-size:12px; color:var(--sub); } .kpi .v { font-size:20px; font-weight:700; margin-top:4px; }
+  .mbars { display:flex; align-items:flex-end; gap:6px; height:150px; padding-top:8px; }
+  .mbar { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; }
+  .mbar-fill { width:60%; background:linear-gradient(180deg,#4a9eff,#1f6feb); border-radius:4px 4px 0 0; }
+  .mbar-x { font-size:10px; color:var(--sub); margin-top:4px; }
+  .wf-row { display:grid; grid-template-columns:160px 1fr 200px; gap:10px; align-items:center; margin:9px 0; font-size:13px; }
+  .wf-track { background:#f0f2f5; border-radius:6px; height:14px; overflow:hidden; }
+  .wf-fill { display:block; height:100%; border-radius:6px; }
+  .wf-value { text-align:right; font-variant-numeric:tabular-nums; }
+  .highlight { display:flex; gap:16px; flex-wrap:wrap; margin-top:16px; }
+  .highlight .box { flex:1; min-width:180px; background:#fff7ed; border:1px solid #fed7aa; border-radius:12px; padding:16px; }
+  .highlight .box.blue { background:#eff6ff; border-color:#bfdbfe; }
+  .highlight .box .k { font-size:12px; color:var(--sub); } .highlight .box .v { font-size:22px; font-weight:800; color:#c2410c; }
+  .highlight .box.blue .v { color:#1d4ed8; }
+  ul { margin:6px 0 0; padding-left:18px; } li { font-size:13px; margin:3px 0; }
+  .warn { background:#fffaf0; border:1px solid #feebc8; border-radius:10px; padding:12px 16px; margin-top:14px; }
+  .warn h4 { margin:0 0 4px; font-size:13px; color:#b7791f; }
+  .cta { background:linear-gradient(135deg,#1f6feb,#0b2e63); color:#fff; text-align:center; border-radius:16px; padding:26px; margin-top:18px; }
+  .cta p { margin:0 0 14px; font-size:14px; opacity:.95; }
+  .cta a { display:inline-block; background:#fff; color:#0b2e63; font-weight:700; text-decoration:none;
+            padding:12px 28px; border-radius:999px; }
+  .foot { color:#a0aec0; font-size:11px; margin-top:22px; }
+  .foot ul { padding-left:16px; }
+  .badge { display:inline-block; font-size:11px; color:var(--sub); border:1px solid var(--line);
+            border-radius:6px; padding:2px 8px; margin-left:6px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="hero">
+    <div class="tag">AI 태양광 설치 종합 분석 보고서</div>
+    <h1>동탄 현대하이페리온</h1>
+    <div class="addr">경기도 화성시 동탄반석로 ... · 용도 공동주택(아파트) · 화성시</div>
+    <div class="grade-chip" style="border:1px solid #38a169">
+      <span>AI 적합도</span><b style="color:#fff">A등급</b>
+      <span>설치 우선 검토 · 85점</span>
+    </div>
+  </div>
+
+  <section>
+    <h2>1. AI 설치 적합도 분석</h2>
+    <p class="lead">음영·면적·발전 잠재력·경제성 4개 지표를 종합한 설명 가능한 AI 점수화 결과입니다. (군집 유형: 설치 우선형)</p>
+    <div class="grid2">
+      <div style="text-align:center">
+<svg viewBox="0 0 140 140" width="140" height="140" role="img" aria-label="적합도 점수 85점">
+  <circle cx="70" cy="70" r="52" fill="none" stroke="#eceff3" stroke-width="14"/>
+  <circle cx="70" cy="70" r="52" fill="none" stroke="#38a169" stroke-width="14"
+          stroke-linecap="round" stroke-dasharray="277.7 326.7"
+          transform="rotate(-90 70 70)"/>
+  <text x="70" y="64" text-anchor="middle" font-size="30" font-weight="700" fill="#1a202c">85</text>
+  <text x="70" y="86" text-anchor="middle" font-size="13" fill="#718096">/ 100점</text>
+</svg></div>
+      <div>
+    <div class="bar-row">
+      <span class="bar-label">음영 품질</span>
+      <span class="bar-track"><span class="bar-fill" style="width:75%"></span></span>
+      <span class="bar-value">26.2<small>/35</small></span>
+    </div>
+    <div class="bar-row">
+      <span class="bar-label">사용 가능 면적</span>
+      <span class="bar-track"><span class="bar-fill" style="width:100%"></span></span>
+      <span class="bar-value">20.0<small>/20</small></span>
+    </div>
+    <div class="bar-row">
+      <span class="bar-label">발전 잠재력</span>
+      <span class="bar-track"><span class="bar-fill" style="width:84%"></span></span>
+      <span class="bar-value">16.8<small>/20</small></span>
+    </div>
+    <div class="bar-row">
+      <span class="bar-label">경제성</span>
+      <span class="bar-track"><span class="bar-fill" style="width:91%"></span></span>
+      <span class="bar-value">13.6<small>/15</small></span>
+    </div></div>
+    </div>
+    <ul><li>음영이 낮은 녹색 셀 비중이 높아 배치 품질이 양호한 것으로 추정됩니다.</li><li>추정 사용 가능 면적이 충분해 공동주택 규모 설치 검토에 유리합니다.</li><li>예상 연간 발전량이 일정 수준 이상으로 산정되었습니다.</li><li>예상 단순 회수기간이 비교적 합리적인 범위로 추정됩니다.</li></ul>
+    
+  </section>
+
+  <section>
+    <h2>2. 예상 발전량 · 절감 수익</h2>
+    <p class="lead">시뮬레이션 기반 대리 회귀 모델의 예상값입니다. (예측 신뢰도: 높음)</p>
+    <div class="kpis">
+      <div class="kpi"><div class="k">연간 예상 발전량</div><div class="v">24,131 kWh</div></div>
+      <div class="kpi"><div class="k">월 평균 발전량</div><div class="v">2,011 kWh</div></div>
+      <div class="kpi"><div class="k">연간 예상 절감액</div><div class="v">361만원</div></div>
+    </div>
+    <div class="mbars">
+      <div class="mbar" title="1월 1,737 kWh">
+        <span class="mbar-fill" style="height:81px"></span>
+        <span class="mbar-x">1월</span>
+      </div>
+      <div class="mbar" title="2월 1,906 kWh">
+        <span class="mbar-fill" style="height:89px"></span>
+        <span class="mbar-x">2월</span>
+      </div>
+      <div class="mbar" title="3월 2,220 kWh">
+        <span class="mbar-fill" style="height:103px"></span>
+        <span class="mbar-x">3월</span>
+      </div>
+      <div class="mbar" title="4월 2,437 kWh">
+        <span class="mbar-fill" style="height:113px"></span>
+        <span class="mbar-x">4월</span>
+      </div>
+      <div class="mbar" title="5월 2,582 kWh">
+        <span class="mbar-fill" style="height:120px"></span>
+        <span class="mbar-x">5월</span>
+      </div>
+      <div class="mbar" title="6월 2,510 kWh">
+        <span class="mbar-fill" style="height:117px"></span>
+        <span class="mbar-x">6월</span>
+      </div>
+      <div class="mbar" title="7월 2,341 kWh">
+        <span class="mbar-fill" style="height:109px"></span>
+        <span class="mbar-x">7월</span>
+      </div>
+      <div class="mbar" title="8월 2,317 kWh">
+        <span class="mbar-fill" style="height:108px"></span>
+        <span class="mbar-x">8월</span>
+      </div>
+      <div class="mbar" title="9월 2,099 kWh">
+        <span class="mbar-fill" style="height:98px"></span>
+        <span class="mbar-x">9월</span>
+      </div>
+      <div class="mbar" title="10월 1,762 kWh">
+        <span class="mbar-fill" style="height:82px"></span>
+        <span class="mbar-x">10월</span>
+      </div>
+      <div class="mbar" title="11월 1,182 kWh">
+        <span class="mbar-fill" style="height:55px"></span>
+        <span class="mbar-x">11월</span>
+      </div>
+      <div class="mbar" title="12월 1,038 kWh">
+        <span class="mbar-fill" style="height:48px"></span>
+        <span class="mbar-x">12월</span>
+      </div></div>
+  </section>
+
+  <section>
+    <h2>3. 설치비 · 보조금 · 대출 구조</h2>
+    <p class="lead">한국에너지공단 신재생에너지 보급사업(공동주택) 기준 추정 보조금과 대출 가정을 반영한 자금 구조입니다.</p>
+    
+    <div class="wf-row">
+      <span class="wf-label">총 설치비(추정)</span>
+      <span class="wf-track"><span class="wf-fill" style="width:100%;background:#4a5568"></span></span>
+      <span class="wf-value">8,136만원</span>
+    </div>
+    <div class="wf-row">
+      <span class="wf-label">− 보조금</span>
+      <span class="wf-track"><span class="wf-fill" style="width:17%;background:#1f9d55"></span></span>
+      <span class="wf-value">1,398만원</span>
+    </div>
+    <div class="wf-row">
+      <span class="wf-label">자부담</span>
+      <span class="wf-track"><span class="wf-fill" style="width:83%;background:#3182ce"></span></span>
+      <span class="wf-value">6,738만원</span>
+    </div>
+    <div class="wf-row">
+      <span class="wf-label">− 대출(수익 담보, 목업)</span>
+      <span class="wf-track"><span class="wf-fill" style="width:66%;background:#805ad5"></span></span>
+      <span class="wf-value">5,390만원</span>
+    </div>
+    <div class="wf-row">
+      <span class="wf-label">실투자금</span>
+      <span class="wf-track"><span class="wf-fill" style="width:17%;background:#dd6b20"></span></span>
+      <span class="wf-value">1,347만원 · 초기 필요 자금</span>
+    </div>
+    <div class="highlight">
+      <div class="box blue"><div class="k">예상 보조금</div><div class="v">1,398만원</div></div>
+      <div class="box blue"><div class="k">대출 한도(수익 담보·5년)</div><div class="v">5,390만원</div></div>
+      <div class="box"><div class="k">실제 필요한 초기 투자금</div><div class="v">1,347만원</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>4. 투자 회수 분석</h2>
+    <p class="lead">연간 예상 절감액 기준 단순 회수기간입니다. (대출 이자 미반영 가정)</p>
+    <div class="kpis">
+      <div class="kpi"><div class="k">보조금·대출 적용 전</div><div class="v">22.5년</div></div>
+      <div class="kpi"><div class="k">실투자금 기준 회수기간</div><div class="v" style="color:#dd6b20">3.7년</div></div>
+      <div class="kpi"><div class="k">설치 용량(추정)</div><div class="v">67.8 kW</div></div>
+    </div>
+  </section>
+
+  <div class="cta">
+    <p>정확한 설치 규모·자부담·보조금 한도는 현장조사와 최신 공고 확인 후 상담에서 확정됩니다.</p>
+    <a href="#consult">무료 상담 신청하기</a>
+  </div>
+
+  <div class="foot">
+    <strong>안내 및 면책</strong>
+    <ul><li>본 보고서의 발전량·수익은 시뮬레이션 기반 대리 회귀 모델의 예상·추정값이며 실측을 보증하지 않습니다.</li><li>한국에너지공단 신재생에너지 보급사업(공동주택) 기준 추정 보조금입니다(저탄소 모듈 kW당 466,000원, 1개 동 최대 30kW). 설치 용량 67.8kW 중 상한 30kW까지만 지원에 반영했습니다. 상한액은 참여기업·당해년도 정부 보조금에 따라 유동적이며, 실제 지원 규모는 공고 확인이 필요합니다.</li><li>대출 조건은 목업 가정값으로, 실제 정책자금 상품·금리·심사 결과에 따라 달라집니다.</li><li>실제 발전량·경제성은 현장 장애물, 구조안전성, 계통연계 조건, 관리주체 협의에 따라 변동될 수 있습니다.</li></ul>
+    <div>보고서 버전 solarmate-report-agent-v1 · 생성 2026-05-27T13:57:34Z</div>
+  </div>
+
+</div>
+</body>
+</html>

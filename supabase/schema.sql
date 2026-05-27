@@ -259,6 +259,9 @@ create index if not exists subsidy_chunks_region_idx
 create index if not exists subsidy_chunks_active_idx
   on public.subsidy_chunks(is_active);
 
+-- 6b. (이동됨) climate.gg API 응답 캐시 테이블은 supabase/reference_bundle_cache.sql 로 분리.
+--      해당 캐시는 services/climate_proxy (참고 구현) 채택 시에만 필요.
+
 -- 7. Public demo/review content.
 create table if not exists public.install_reviews (
   id uuid primary key default gen_random_uuid(),

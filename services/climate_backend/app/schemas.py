@@ -93,3 +93,12 @@ class AdminConsultationStatusUpdateRequest(BaseModel):
         "proposal_sent",
         "closed",
     ]
+
+
+class SolarReportRequest(BaseModel):
+    """레포트 에이전트 입력. climate-rooftop-analysis 의 aiSimulationResult 를 그대로 전달."""
+
+    aiSimulationResult: dict[str, Any]
+    sigungu: Optional[str] = None
+    loanRatio: float = 0.80
+    loanTermYears: int = 5

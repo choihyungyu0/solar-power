@@ -1,0 +1,140 @@
+{
+  "meta": {
+    "reportVersion": "solarmate-report-agent-v1",
+    "generatedAt": "2026-05-27T13:57:34.926265+00:00",
+    "tone": "neutral-analytical",
+    "sourceModelVersion": "solarmate-ml-backed-simulation-ai-v1"
+  },
+  "building": {
+    "name": "동탄 현대하이페리온",
+    "roadAddress": "경기도 화성시 동탄반석로 ...",
+    "jibunAddress": "경기도 화성시 반송동 ...",
+    "usage": "공동주택(아파트)",
+    "sigungu": "화성시",
+    "housingType": "apartment"
+  },
+  "suitability": {
+    "score": 85,
+    "grade": "A",
+    "label": "설치 우선 검토",
+    "featureScores": {
+      "shadingQuality": 26.2,
+      "usableArea": 20.0,
+      "generationPotential": 16.8,
+      "economicValue": 13.6,
+      "riskPenalty": 0,
+      "positiveRawScore": 76.5
+    },
+    "cluster": "설치 우선형",
+    "reasons": [
+      "음영이 낮은 녹색 셀 비중이 높아 배치 품질이 양호한 것으로 추정됩니다.",
+      "추정 사용 가능 면적이 충분해 공동주택 규모 설치 검토에 유리합니다.",
+      "예상 연간 발전량이 일정 수준 이상으로 산정되었습니다.",
+      "예상 단순 회수기간이 비교적 합리적인 범위로 추정됩니다.",
+      "권장 설치용량이 공동주택 공용부하 대응에 의미 있는 규모로 추정됩니다."
+    ],
+    "warnings": []
+  },
+  "generation": {
+    "annualKwh": 24131,
+    "monthlyKwh": 2011,
+    "confidence": 0.82,
+    "confidenceLabel": "높음",
+    "series": [
+      {
+        "month": "1월",
+        "kwh": 1737
+      },
+      {
+        "month": "2월",
+        "kwh": 1906
+      },
+      {
+        "month": "3월",
+        "kwh": 2220
+      },
+      {
+        "month": "4월",
+        "kwh": 2437
+      },
+      {
+        "month": "5월",
+        "kwh": 2582
+      },
+      {
+        "month": "6월",
+        "kwh": 2510
+      },
+      {
+        "month": "7월",
+        "kwh": 2341
+      },
+      {
+        "month": "8월",
+        "kwh": 2317
+      },
+      {
+        "month": "9월",
+        "kwh": 2099
+      },
+      {
+        "month": "10월",
+        "kwh": 1762
+      },
+      {
+        "month": "11월",
+        "kwh": 1182
+      },
+      {
+        "month": "12월",
+        "kwh": 1038
+      }
+    ]
+  },
+  "economics": {
+    "installCapacityKw": 67.8,
+    "installCostKrw": 81360000,
+    "annualSavingKrw": 3619650,
+    "subsidy": {
+      "matched": true,
+      "regime": "apartment",
+      "housingType": "apartment",
+      "program": "한국에너지공단 신재생에너지 보급사업(공동주택)",
+      "sigungu": null,
+      "subsidyKrw": 13980000,
+      "perKwKrw": 466000,
+      "eligibleCapacityKw": 30.0,
+      "maxCapacityKwPerBuilding": 30,
+      "moduleCondition": "저탄소 모듈",
+      "capacityCapped": true,
+      "eligibility": [
+        "아파트 1개 동 당 최대 30kW까지 지원(저탄소 모듈)",
+        "일반 아파트는 경기 시군 사업 대상이 아니며 한국에너지공단 공동주택 보급사업으로 신청",
+        "아파트 거주 개인이 단독으로 설치 희망 시 단독주택 지원으로 신청 가능"
+      ],
+      "disclaimer": "한국에너지공단 신재생에너지 보급사업(공동주택) 기준 추정 보조금입니다(저탄소 모듈 kW당 466,000원, 1개 동 최대 30kW). 설치 용량 67.8kW 중 상한 30kW까지만 지원에 반영했습니다. 상한액은 참여기업·당해년도 정부 보조금에 따라 유동적이며, 실제 지원 규모는 공고 확인이 필요합니다."
+    },
+    "subsidyKrw": 13980000,
+    "selfPaymentAfterSubsidyKrw": 67380000,
+    "loan": {
+      "limitKrw": 53904000,
+      "ratio": 0.8,
+      "termYears": 5,
+      "basis": "예상 수익 담보(목업 가정)",
+      "disclaimer": "자부담액의 최대 80%를 5년 만기 정책자금으로 조달한다는 가정입니다. 이자·심사 조건 미반영, 실제 상품·한도는 협의 후 확정됩니다."
+    },
+    "netInvestmentKrw": 13476000,
+    "paybackYearsRaw": 22.5,
+    "paybackYearsNet": 3.7
+  },
+  "cta": {
+    "headline": "정확한 설치 규모·자부담·보조금 한도는 현장조사와 최신 공고 확인 후 상담에서 확정됩니다.",
+    "buttonText": "무료 상담 신청하기"
+  },
+  "disclaimers": [
+    "본 보고서의 발전량·수익은 시뮬레이션 기반 대리 회귀 모델의 예상·추정값이며 실측을 보증하지 않습니다.",
+    "한국에너지공단 신재생에너지 보급사업(공동주택) 기준 추정 보조금입니다(저탄소 모듈 kW당 466,000원, 1개 동 최대 30kW). 설치 용량 67.8kW 중 상한 30kW까지만 지원에 반영했습니다. 상한액은 참여기업·당해년도 정부 보조금에 따라 유동적이며, 실제 지원 규모는 공고 확인이 필요합니다.",
+    "대출 조건은 목업 가정값으로, 실제 정책자금 상품·금리·심사 결과에 따라 달라집니다.",
+    "실제 발전량·경제성은 현장 장애물, 구조안전성, 계통연계 조건, 관리주체 협의에 따라 변동될 수 있습니다."
+  ]
+}
