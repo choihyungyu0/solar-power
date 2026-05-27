@@ -224,6 +224,27 @@ set
   note = '아파트는 경기태양광지원사업 대상이 아니므로 한국에너지공단 공동주택 기준으로 표시합니다. 실제 지원 대상, 예산, 접수 가능 여부는 해당 연도 공고 확인이 필요합니다.'
 where title = '경기도 공동주택 태양광 지원 후보';
 
+update public.subsidy_programs
+set
+  title = '개인 단독 설치 시 단독주택 지원 검토',
+  program_name = '개인 단독 설치 시 단독주택 지원 검토',
+  region = '전국',
+  region_sido = '전국',
+  region_sigungu = '전국',
+  target = '아파트 거주 개인이 단독 설치를 희망하는 경우',
+  target_building_type = '아파트 거주 개인이 단독 설치를 희망하는 경우',
+  support_type = '단독주택 기준 지원 가능성 검토',
+  amount_text = '단독주택 3kW 기준 공고 확인 필요',
+  source_name = '경기도/시군 및 한국에너지공단 공고',
+  source_title = '경기도/시군 및 한국에너지공단 공고',
+  source_url = '',
+  stacking_allowed = false,
+  stacking_note = '제도 간 중복 지원 여부는 실제 공고 확인 필요',
+  eligibility_note = '공동주택 공용부 설치와 별개로 개인 단독 설치 희망 시 검토하는 후보입니다.',
+  status = '확인 필요',
+  note = '공동주택 공용부 설치와 별개로 개인 단독 설치 희망 시 검토하는 후보입니다. 수혜가 보장되지 않으며 실제 공고 조건 확인이 필요합니다.'
+where title = '한국에너지공단 주택·건물 지원사업 후보';
+
 -- 6. Subsidy RAG source documents and searchable pgvector chunks.
 -- These tables are written/read by the production backend with a service-role key.
 create table if not exists public.subsidy_documents (
