@@ -1825,7 +1825,9 @@ function RiskMapPage() {
         ['단순 회수기간 추정', simplePaybackText],
       ]
     : [];
-  const shouldShowCompletedAnalysisActions = activeTab === 'solar' && hasPvAnalysisCompleted;
+  const hasCompletedClimateAnalysis =
+    !isClimateLiveBackendEnabled || (hasLiveClimatePanelLayout && Boolean(activeAiSimulationResult));
+  const shouldShowCompletedAnalysisActions = activeTab === 'solar' && hasPvAnalysisCompleted && hasCompletedClimateAnalysis;
   const panelSpacingText = `행 ${formatMeters(DEFAULT_SOLAR_PANEL_LAYOUT_OPTIONS.rowGapM)} · 열 ${formatMeters(
     DEFAULT_SOLAR_PANEL_LAYOUT_OPTIONS.colGapM,
   )}`;
