@@ -207,11 +207,11 @@ export function SolarAdoptionStep3Page() {
         </div>
         <div>
           <span>지원 후보</span>
-          <strong>최대 보조금 13,000,000원</strong>
+          <strong>최대 보조금 13,980,000원</strong>
         </div>
         <div>
           <span>예상 자부담</span>
-          <strong>실 자부담금 14,000,000원</strong>
+          <strong>실 자부담금 13,020,000원</strong>
         </div>
         <div>
           <span>정책 금융</span>
@@ -222,8 +222,8 @@ export function SolarAdoptionStep3Page() {
       <div className="solar-flow-loan-note">
         <LuCoins aria-hidden="true" />
         <p>
-          월 6만원으로 (36개월 납입)
-          <small>데모 산식 안내이며 실제 금융 조건은 확인 필요합니다.</small>
+          월 9만원대로 (36개월 납입)
+          <small>한국에너지공단 공동주택 기준 데모 안내이며 실제 보조금·금융 조건은 확인 필요합니다.</small>
         </p>
       </div>
 

@@ -355,7 +355,7 @@ function ProfitReportSection({
         <article>
           <span>설치 비용/보조금</span>
           <strong>{formatKrw(fourMetrics.costAndSelfPayment.estimatedInstallCostKrw)}</strong>
-          <p>경기 주택태양광 지원사업 단일 기준</p>
+          <p>{fourMetrics.subsidyAndSuitability.subsidyProgramName} 기준</p>
         </article>
         <article>
           <span>대출 지원 시나리오</span>
@@ -420,7 +420,7 @@ function SubsidyRagEvidence({ report }: { report: NonNullable<StoredProfitReport
         {matches.slice(0, 3).map((match, index) => (
           <li key={`${match.sourceTitle ?? 'source'}-${index}`}>
             <div>
-              <strong>{match.programName || '경기 주택태양광 지원사업'}</strong>
+              <strong>{match.programName || String(report.subsidyMatrix.programName || '보조금 공고 확인 필요')}</strong>
               <span>
                 {[match.regionSido, match.regionSigungu].filter(Boolean).join(' ')}
                 {match.sourceYear ? ` · ${match.sourceYear}` : ''}

@@ -22,7 +22,7 @@
 2. 태양광 설치 탭에서 AI 분석을 실행한다.
 3. `analysisResultId`가 생성되고 `dbSaveStatus.analysisResultOk`, `dbSaveStatus.trainingSampleOk`가 true인지 확인한다.
 4. `AI 수익 리포트 보기` 또는 `/simulation/result`의 `수익 리포트 생성하기`를 실행한다.
-5. `reportNarrativeSource`가 `llm-structured-output`이면 OpenAI LLM이 문장 생성에 성공한 상태다. 실패하거나 비활성화되면 `deterministic-template` 문장으로 fallback된다.
+5. `reportNarrativeSource`가 `deterministic-template`인지 확인한다. 현재 운영 리포트 문장은 LLM API 비용을 쓰지 않는 템플릿 경로가 기준이다.
 6. `AI 태양광 도입 종합 보고서`에서 LLM/템플릿 narrative, 5개 카드, `보조금 RAG 근거`, 주의사항을 확인한다.
 7. `PDF로 저장` 버튼으로 브라우저 인쇄 미리보기를 연다.
 8. 인쇄 미리보기에서 리포트 제목, narrative 문장, 5개 수익 카드, 주의사항, 상담 CTA가 보이는지 확인한다.
@@ -48,7 +48,7 @@
 
 `profit_reports.report_json`에는 다음 LLM narrative 상태 필드가 저장된다.
 
-- `reportNarrativeSource`: `llm-structured-output` 또는 `deterministic-template`
+- `reportNarrativeSource`: `deterministic-template`
 - `llmEnabled`: Render 환경변수 기준 LLM 사용 여부
 - `reportNarrative.headline`, `summary`, `salesMessage`
 - `subsidyRagContext`: 검색 query와 보조금 근거 chunk
@@ -82,7 +82,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\test-production-profit-report
 - Supabase 저장 실패: 분석 결과 자체는 가능한 범위에서 반환하고 `dbSaveStatus`에 실패 상태를 남긴다.
 - 상담 저장 실패: 프론트엔드는 sessionStorage에 임시 저장하고 `서버 저장에 실패하여 임시 저장되었습니다. 네트워크 상태를 확인해주세요.`를 보여준다.
 - 수익 리포트 생성 실패: deterministic report 생성 실패 메시지를 표시하고 상담 흐름은 기존 분석 payload로 진행할 수 있다.
-- OpenAI LLM 비활성 또는 호출 실패: `/api/ai-profit-report`는 `ok:true`를 유지하고 `reportNarrativeSource='deterministic-template'` 문장을 사용한다.
+- 리포트 문장 생성: `/api/ai-profit-report`는 결정론 템플릿을 사용하고 `reportNarrativeSource='deterministic-template'`를 반환한다.
 - 관리자 키 오류: `{ ok:false, message:"관리자 권한이 필요합니다." }`만 반환하고 키 값은 노출하지 않는다.
 - 기후 분석 입력이 너무 크면 좌표 수, 지붕 면적, 셀 스캔 수 제한으로 중단하고 안전한 검증 오류 메시지를 반환한다.
 
@@ -103,7 +103,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\test-production-profit-report
 
 ## 알려진 한계
 
-- 보조금은 `경기 주택태양광 지원사업` 단일 기준 추정이며, 실제 지원 여부는 공고와 예산 잔여 여부 확인이 필요하다.
+- 보조금은 건물 유형별로 분기한다. 아파트/공동주택은 한국에너지공단 공동주택 기준, 단독주택은 경기 시군 3kW 기준 추정이며 실제 지원 여부는 공고와 예산 잔여 여부 확인이 필요하다.
 - 대출 시나리오는 예상이며, 실제 승인과 조건은 금융기관 심사가 필요하다.
 - 장애물, 구조안전성, 방수 상태는 AI가 확정하지 않는다. 현장 확인 항목으로만 표시한다.
 - VWorld/기후 API 외부 의존성이 실패하면 일부 분석은 fallback 또는 오류 안내로 전환될 수 있다.

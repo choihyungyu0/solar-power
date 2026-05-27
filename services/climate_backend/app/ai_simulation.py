@@ -9,6 +9,7 @@ from .ml_simulation_model import (
     predict_generation,
     predict_payback,
 )
+from .subsidy_table import classify_housing_type, estimate_subsidy, normalize_sigungu
 
 
 GRADE_LABELS = {
@@ -33,9 +34,9 @@ MONTHLY_GENERATION_WEIGHTS = [
     0.049,
     0.043,
 ]
-SUBSIDY_PROGRAM_NAME = "경기 주택태양광 지원사업"
-SUBSIDY_POLICY_MODE = "gyeonggi_home_solar_only"
-SUBSIDY_STACKING_REASON = "경기 주택태양광 지원사업 기준 단일 보조금 산정"
+DEFAULT_SUBSIDY_PROGRAM_NAME = "보조금 공고 확인 필요"
+DEFAULT_SUBSIDY_POLICY_MODE = "housing_type_based_policy"
+DEFAULT_SUBSIDY_STACKING_REASON = "주택 유형별 적용 제도를 분기하며 중복 합산하지 않음"
 FIELD_CHECK_REQUIRED = [
     "옥상 장애물",
     "구조안전성",
@@ -75,6 +76,66 @@ def _money(value: Any):
 
 def _monthly_generation_series(annual_generation_kwh: float):
     return [round(annual_generation_kwh * weight) for weight in MONTHLY_GENERATION_WEIGHTS]
+
+
+def _resolve_sigungu(input: dict[str, Any]):
+    for key in ("sigungu", "regionSigungu", "roadAddress", "jibunAddress", "address"):
+        value = input.get(key)
+
+        if isinstance(value, str) and value.strip():
+            normalized = normalize_sigungu(value)
+
+            if normalized:
+                return normalized
+
+    return None
+
+
+def _build_subsidy_context(input: dict[str, Any]):
+    building_usage = input.get("buildingUsage") or input.get("usage") or ""
+    housing_type = input.get("housingType") or classify_housing_type(str(building_usage))
+    install_cost_krw = _as_float(input.get("estimatedInstallCostKrw"))
+    install_capacity_kw = _as_float(input.get("installCapacityKw"))
+    sigungu = _resolve_sigungu(input)
+    subsidy = estimate_subsidy(
+        install_cost_krw,
+        sigungu,
+        housing_type=housing_type,
+        capacity_kw=install_capacity_kw,
+    )
+    subsidy_krw = round(_as_float(subsidy.get("subsidyKrw")))
+    regime = subsidy.get("regime") or housing_type
+    program_name = subsidy.get("program") or input.get("subsidyProgramName") or DEFAULT_SUBSIDY_PROGRAM_NAME
+
+    if regime == "apartment":
+        policy_mode = "knrec_apartment_low_carbon_module"
+        stacking_reason = "아파트는 경기태양광지원사업 대상이 아니며 한국에너지공단 공동주택 기준으로 산정합니다."
+    elif regime == "detached":
+        policy_mode = "gyeonggi_detached_home_3kw"
+        stacking_reason = "단독주택은 경기 주택태양광 3kW 표준 보조금 절대액 기준으로 산정합니다."
+    else:
+        policy_mode = DEFAULT_SUBSIDY_POLICY_MODE
+        stacking_reason = DEFAULT_SUBSIDY_STACKING_REASON
+
+    self_payment_estimate_krw = max(0, round(install_cost_krw - subsidy_krw))
+    policy_loan_limit_krw = round(_as_float(input.get("policyLoanLimitKrw")))
+
+    if policy_loan_limit_krw <= 0:
+        policy_loan_limit_krw = round(self_payment_estimate_krw * 0.75)
+
+    return {
+        "housingType": housing_type,
+        "subsidyDetail": subsidy,
+        "subsidyEstimateKrw": subsidy_krw,
+        "selfPaymentEstimateKrw": self_payment_estimate_krw,
+        "policyLoanLimitKrw": policy_loan_limit_krw,
+        "subsidyProgramName": program_name,
+        "subsidyPolicyMode": policy_mode,
+        "subsidyStackingAllowed": False,
+        "subsidyStackingReason": stacking_reason,
+        "subsidyNotice": subsidy.get("disclaimer")
+        or "예상·추정 값이며 실제 공고와 예산 잔여 여부 확인이 필요합니다.",
+    }
 
 
 def _usable_ratio(input: dict[str, Any]):
@@ -294,6 +355,7 @@ def build_generation_prediction(input):
     ml_prediction = predict_generation(input)
     annual_generation_kwh = round(_as_float(ml_prediction.get("annualGenerationKwh")))
     monthly_generation_kwh = _as_float(ml_prediction.get("monthlyGenerationKwh"))
+    calibration = ml_prediction.get("calibration") if isinstance(ml_prediction.get("calibration"), dict) else None
 
     if monthly_generation_kwh <= 0 and annual_generation_kwh > 0:
         monthly_generation_kwh = round(annual_generation_kwh / 12)
@@ -330,6 +392,17 @@ def build_generation_prediction(input):
 
     feature_importance = get_feature_importance().get("generation", [])
 
+    assumptions = [
+        "시뮬레이션 기반 대리 회귀 모델로 경기 기후 플랫폼 음영 셀과 패널 배치 결과를 기반으로 한 예상값입니다.",
+        "패널 출력, 설치각, 음영 평균, 선택 셀 수를 반영한 설명 가능한 AI 점수화 보조 모델입니다.",
+        "실측 발전량 학습 모델이 아니며 실측 데이터 누적 시 고도화 가능하도록 설계했습니다.",
+        "옥상 장애물, 구조안전성, 방수 상태는 AI가 확정하지 않으며 현장 확인 항목입니다.",
+        "실제 발전량은 현장 확인, 계통연계 조건, 유지관리 상태에 따라 달라질 수 있습니다.",
+    ]
+
+    if calibration:
+        assumptions.insert(0, calibration.get("reason") or "발전량 예측값에 보수적 보정을 적용했습니다.")
+
     return {
         "modelType": ml_prediction.get("modelType") or "fallback-formula-v1",
         "modelStatus": ml_prediction.get("modelStatus") or "fallback-no-model-file",
@@ -340,13 +413,8 @@ def build_generation_prediction(input):
         "featureImportance": feature_importance[:6],
         "isMeasuredGenerationModel": False,
         "trainingDataSource": ml_prediction.get("trainingDataSource") or "simulation-derived-seed-data",
-        "assumptions": [
-            "시뮬레이션 기반 대리 회귀 모델로 경기 기후 플랫폼 음영 셀과 패널 배치 결과를 기반으로 한 예상값입니다.",
-            "패널 출력, 설치각, 음영 평균, 선택 셀 수를 반영한 설명 가능한 AI 점수화 보조 모델입니다.",
-            "실측 발전량 학습 모델이 아니며 실측 데이터 누적 시 고도화 가능하도록 설계했습니다.",
-            "옥상 장애물, 구조안전성, 방수 상태는 AI가 확정하지 않으며 현장 확인 항목입니다.",
-            "실제 발전량은 현장 확인, 계통연계 조건, 유지관리 상태에 따라 달라질 수 있습니다.",
-        ],
+        "calibration": calibration,
+        "assumptions": assumptions,
     }
 
 
@@ -383,10 +451,8 @@ def build_agent_payload(input):
     score_result = input.get("buildingSuitability") if isinstance(input.get("buildingSuitability"), dict) else None
     score_result = score_result or (input.get("suitability") if isinstance(input.get("suitability"), dict) else None)
     score = score_result or calculate_suitability_score(input)
-    self_payment_estimate_krw = max(
-        0,
-        round(_as_float(input.get("estimatedInstallCostKrw")) - _as_float(input.get("subsidyEstimateKrw"))),
-    )
+    subsidy_context = _build_subsidy_context(input)
+    self_payment_estimate_krw = subsidy_context["selfPaymentEstimateKrw"]
     location = {
         "roadAddress": input.get("roadAddress") or "",
         "jibunAddress": input.get("jibunAddress") or "",
@@ -398,7 +464,7 @@ def build_agent_payload(input):
     annual_generation_kwh = round(_as_float(input.get("annualGenerationKwh")))
     monthly_generation_kwh = _monthly_generation_series(annual_generation_kwh)
     estimated_install_cost_krw = round(_as_float(input.get("estimatedInstallCostKrw")))
-    subsidy_estimate_krw = round(_as_float(input.get("subsidyEstimateKrw")))
+    subsidy_estimate_krw = subsidy_context["subsidyEstimateKrw"]
     annual_saving_krw = round(_as_float(input.get("annualSavingKrw")))
     warnings = score.get("warnings", [])
     reasons = score.get("reasons", [])
@@ -412,10 +478,10 @@ def build_agent_payload(input):
         "selfPaymentEstimateKrw": self_payment_estimate_krw,
         "annualSavingKrw": annual_saving_krw,
         "paybackYears": _round(payback_years, 1),
-        "subsidyProgramName": SUBSIDY_PROGRAM_NAME,
-        "subsidyPolicyMode": SUBSIDY_POLICY_MODE,
-        "subsidyStackingAllowed": False,
-        "subsidyStackingReason": SUBSIDY_STACKING_REASON,
+        "subsidyProgramName": subsidy_context["subsidyProgramName"],
+        "subsidyPolicyMode": subsidy_context["subsidyPolicyMode"],
+        "subsidyStackingAllowed": subsidy_context["subsidyStackingAllowed"],
+        "subsidyStackingReason": subsidy_context["subsidyStackingReason"],
         "installationSuitabilityScore": score["score"],
         "installationSuitabilityGrade": score["grade"],
         "installationSuitabilityLabel": score["label"],
@@ -430,7 +496,7 @@ def build_agent_payload(input):
             f"예상 자부담 {self_payment_estimate_krw:,}원, "
             f"예상 회수기간 {_round(payback_years, 1)}년 기준으로 "
             f"AI 설치 적합도 {score['grade']}등급입니다. "
-            f"보조금은 {SUBSIDY_PROGRAM_NAME} 단일 기준으로 산정했으며 "
+            f"보조금은 {subsidy_context['subsidyProgramName']} 기준으로 산정했으며 "
             f"실제 지원 여부는 공고와 예산 잔여 여부 확인이 필요합니다."
         ),
         "reportInputMetrics": report_input_metrics,
@@ -440,7 +506,7 @@ def build_agent_payload(input):
             "최근 12개월 공용부 전기요금 고지서 또는 사용량 자료가 있나요?",
             "옥상 장애물, 방수 상태, 피난 동선 등 현장 확인 항목을 확인할 수 있나요?",
             "입주자대표회의 또는 관리주체의 사전 검토 일정이 있나요?",
-            "경기 주택태양광 지원사업 공고 확인과 신청 상담을 진행해도 괜찮나요?",
+            f"{subsidy_context['subsidyProgramName']} 공고 확인과 신청 상담을 진행해도 괜찮나요?",
         ],
         "requiredDocuments": [
             "건축물대장 또는 건물 기본 정보",
@@ -448,10 +514,11 @@ def build_agent_payload(input):
             "옥상 평면도 또는 현장 사진",
             "관리주체 또는 입주자대표회의 검토 자료",
         ],
-        "nextStep": "현장 확인 항목과 경기 주택태양광 지원사업 최신 공고 및 예산 잔여 여부를 확인한 뒤 설치 규모와 자부담 범위를 재검토하는 것을 권장합니다.",
+        "nextStep": f"현장 확인 항목과 {subsidy_context['subsidyProgramName']} 최신 공고 및 예산 잔여 여부를 확인한 뒤 설치 규모와 자부담 범위를 재검토하는 것을 권장합니다.",
         "subsidyRagInput": {
             "location": location,
             "buildingUsage": input.get("buildingUsage") or "확인 필요",
+            "housingType": subsidy_context["housingType"],
             "installCapacityKw": _round(install_capacity_kw, 1),
             "estimatedInstallCostKrw": estimated_install_cost_krw,
             "subsidyEstimateKrw": subsidy_estimate_krw,
@@ -459,10 +526,11 @@ def build_agent_payload(input):
             "paybackYears": _round(payback_years, 1),
             "suitabilityGrade": score["grade"],
             "suitabilityCluster": cluster_name,
-            "subsidyProgramName": SUBSIDY_PROGRAM_NAME,
-            "subsidyPolicyMode": SUBSIDY_POLICY_MODE,
-            "subsidyStackingAllowed": False,
-            "subsidyStackingReason": SUBSIDY_STACKING_REASON,
+            "subsidyProgramName": subsidy_context["subsidyProgramName"],
+            "subsidyPolicyMode": subsidy_context["subsidyPolicyMode"],
+            "subsidyStackingAllowed": subsidy_context["subsidyStackingAllowed"],
+            "subsidyStackingReason": subsidy_context["subsidyStackingReason"],
+            "subsidyDetail": subsidy_context["subsidyDetail"],
             "modelDisclosure": "시뮬레이션 기반 대리 회귀 모델이며 실측 데이터 누적 시 고도화 가능",
         },
         "counselingHints": {
@@ -470,7 +538,7 @@ def build_agent_payload(input):
             "warnings": [
                 *warnings,
                 "옥상 장애물, 구조안전성, 방수 상태는 AI 확정 항목이 아니며 현장 확인이 필요합니다.",
-                "보조금은 경기 주택태양광 지원사업 단일 기준 추정이며 실제 지원 여부는 공고와 예산 잔여 여부 확인이 필요합니다.",
+                f"보조금은 {subsidy_context['subsidyProgramName']} 기준 추정이며 실제 지원 여부는 공고와 예산 잔여 여부 확인이 필요합니다.",
             ],
         },
     }
@@ -531,27 +599,41 @@ def _build_shading_snapshot(input: dict[str, Any]):
 
 def _build_economics_snapshot(input: dict[str, Any], payback_prediction: dict[str, Any]):
     estimated_install_cost_krw = _money(input.get("estimatedInstallCostKrw"))
-    subsidy_estimate_krw = _money(input.get("subsidyEstimateKrw"))
-    self_payment_estimate_krw = max(0, estimated_install_cost_krw - subsidy_estimate_krw)
+    subsidy_context = _build_subsidy_context(input)
+    subsidy_estimate_krw = subsidy_context["subsidyEstimateKrw"]
+    self_payment_estimate_krw = subsidy_context["selfPaymentEstimateKrw"]
 
     return {
         "estimatedInstallCostKrw": estimated_install_cost_krw,
         "subsidyEstimateKrw": subsidy_estimate_krw,
         "estimatedSelfPaymentKrw": self_payment_estimate_krw,
-        "policyLoanLimitKrw": _money(input.get("policyLoanLimitKrw")),
+        "policyLoanLimitKrw": subsidy_context["policyLoanLimitKrw"],
         "annualSavingKrw": _money(input.get("annualSavingKrw")),
         "paybackYears": _round(_as_float(payback_prediction.get("paybackYears")), 1),
-        "subsidyProgramName": SUBSIDY_PROGRAM_NAME,
-        "subsidyPolicyMode": SUBSIDY_POLICY_MODE,
-        "subsidyStackingAllowed": False,
-        "subsidyStackingReason": SUBSIDY_STACKING_REASON,
+        "subsidyProgramName": subsidy_context["subsidyProgramName"],
+        "subsidyPolicyMode": subsidy_context["subsidyPolicyMode"],
+        "subsidyStackingAllowed": subsidy_context["subsidyStackingAllowed"],
+        "subsidyStackingReason": subsidy_context["subsidyStackingReason"],
+        "subsidyDetail": subsidy_context["subsidyDetail"],
         "paybackModelType": payback_prediction.get("modelType"),
         "paybackModelStatus": payback_prediction.get("modelStatus"),
-        "notice": "예상·추정 값이며 경기 주택태양광 지원사업 실제 공고 및 예산 잔여 여부 확인 필요",
+        "notice": subsidy_context["subsidyNotice"],
     }
 
 
 def build_ai_simulation_result(input):
+    subsidy_context = _build_subsidy_context(input)
+    subsidy_adjusted_input = {
+        **input,
+        "housingType": subsidy_context["housingType"],
+        "subsidyEstimateKrw": subsidy_context["subsidyEstimateKrw"],
+        "policyLoanLimitKrw": subsidy_context["policyLoanLimitKrw"],
+        "subsidyProgramName": subsidy_context["subsidyProgramName"],
+        "subsidyPolicyMode": subsidy_context["subsidyPolicyMode"],
+        "subsidyStackingAllowed": subsidy_context["subsidyStackingAllowed"],
+        "subsidyStackingReason": subsidy_context["subsidyStackingReason"],
+        "subsidyDetail": subsidy_context["subsidyDetail"],
+    }
     generation_prediction = build_generation_prediction(input)
     annual_generation_kwh = _as_float(generation_prediction.get("annualGenerationKwh"))
     base_generation_kwh = _as_float(input.get("annualGenerationKwh"))
@@ -560,13 +642,13 @@ def build_ai_simulation_result(input):
     annual_saving_krw = round(annual_generation_kwh * saving_per_kwh) if annual_generation_kwh > 0 else round(base_annual_saving_krw)
     payback_prediction = predict_payback(
         {
-            **input,
+            **subsidy_adjusted_input,
             "annualGenerationKwh": annual_generation_kwh,
             "annualSavingKrw": annual_saving_krw,
         }
     )
     score_input = {
-        **input,
+        **subsidy_adjusted_input,
         "annualGenerationKwh": annual_generation_kwh,
         "monthlyGenerationKwh": generation_prediction.get("monthlyGenerationKwh"),
         "annualSavingKrw": annual_saving_krw,

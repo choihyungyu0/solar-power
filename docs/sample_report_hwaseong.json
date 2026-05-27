@@ -1,7 +1,7 @@
 {
   "meta": {
     "reportVersion": "solarmate-report-agent-v1",
-    "generatedAt": "2026-05-27T13:57:34.926265+00:00",
+    "generatedAt": "2026-05-27T15:47:39.894005+00:00",
     "tone": "neutral-analytical",
     "sourceModelVersion": "solarmate-ml-backed-simulation-ai-v1"
   },
@@ -14,87 +14,87 @@
     "housingType": "apartment"
   },
   "suitability": {
-    "score": 85,
-    "grade": "A",
-    "label": "설치 우선 검토",
+    "score": 90,
+    "grade": "S",
+    "label": "최우선 설치 후보",
     "featureScores": {
       "shadingQuality": 26.2,
       "usableArea": 20.0,
-      "generationPotential": 16.8,
-      "economicValue": 13.6,
+      "generationPotential": 20.0,
+      "economicValue": 14.8,
       "riskPenalty": 0,
-      "positiveRawScore": 76.5
+      "positiveRawScore": 81.0
     },
     "cluster": "설치 우선형",
     "reasons": [
       "음영이 낮은 녹색 셀 비중이 높아 배치 품질이 양호한 것으로 추정됩니다.",
       "추정 사용 가능 면적이 충분해 공동주택 규모 설치 검토에 유리합니다.",
-      "예상 연간 발전량이 일정 수준 이상으로 산정되었습니다.",
+      "예상 연간 발전량이 높아 공용 전기요금 절감 효과가 기대됩니다.",
       "예상 단순 회수기간이 비교적 합리적인 범위로 추정됩니다.",
       "권장 설치용량이 공동주택 공용부하 대응에 의미 있는 규모로 추정됩니다."
     ],
     "warnings": []
   },
   "generation": {
-    "annualKwh": 24131,
-    "monthlyKwh": 2011,
+    "annualKwh": 88200,
+    "monthlyKwh": 7350,
     "confidence": 0.82,
     "confidenceLabel": "높음",
     "series": [
       {
         "month": "1월",
-        "kwh": 1737
+        "kwh": 6350
       },
       {
         "month": "2월",
-        "kwh": 1906
+        "kwh": 6968
       },
       {
         "month": "3월",
-        "kwh": 2220
+        "kwh": 8114
       },
       {
         "month": "4월",
-        "kwh": 2437
+        "kwh": 8908
       },
       {
         "month": "5월",
-        "kwh": 2582
+        "kwh": 9437
       },
       {
         "month": "6월",
-        "kwh": 2510
+        "kwh": 9173
       },
       {
         "month": "7월",
-        "kwh": 2341
+        "kwh": 8555
       },
       {
         "month": "8월",
-        "kwh": 2317
+        "kwh": 8467
       },
       {
         "month": "9월",
-        "kwh": 2099
+        "kwh": 7673
       },
       {
         "month": "10월",
-        "kwh": 1762
+        "kwh": 6439
       },
       {
         "month": "11월",
-        "kwh": 1182
+        "kwh": 4322
       },
       {
         "month": "12월",
-        "kwh": 1038
+        "kwh": 3793
       }
     ]
   },
   "economics": {
     "installCapacityKw": 67.8,
     "installCostKrw": 81360000,
-    "annualSavingKrw": 3619650,
+    "annualSavingKrw": 13230000,
     "subsidy": {
       "matched": true,
       "regime": "apartment",
@@ -124,8 +124,8 @@
       "disclaimer": "자부담액의 최대 80%를 5년 만기 정책자금으로 조달한다는 가정입니다. 이자·심사 조건 미반영, 실제 상품·한도는 협의 후 확정됩니다."
     },
     "netInvestmentKrw": 13476000,
-    "paybackYearsRaw": 22.5,
-    "paybackYearsNet": 3.7
+    "paybackYearsRaw": 6.1,
+    "paybackYearsNet": 1.0
   },
   "cta": {
     "headline": "정확한 설치 규모·자부담·보조금 한도는 현장조사와 최신 공고 확인 후 상담에서 확정됩니다.",

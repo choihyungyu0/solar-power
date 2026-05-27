@@ -18,7 +18,7 @@ Vercel frontend -> Render FastAPI backend -> Supabase PostgreSQL
 - `consultation_requests`: 상담 신청 정보와 연결된 `analysis_result_id`, 상담 agent payload 저장
 - `simulation_training_samples`: Render 분석 결과에서 생성한 시뮬레이션 기반 학습 샘플 저장
 - `profit_reports`: AI 수익·보조금·금융 리포트 결과 저장
-- `subsidy_programs`: 경기 주택태양광 지원사업 기준 보조금 matrix 저장
+- `subsidy_programs`: 주택 유형별 보조금 matrix 저장(아파트/공동주택은 한국에너지공단 공동주택 기준, 단독주택은 경기 시군 3kW 기준)
 - `loan_scenarios`: 리포트 생성 시 사용한 대출 지원 시나리오 저장
 - `ai_model_versions`: AI 모델 버전과 메타데이터 관리용 테이블
 
@@ -175,13 +175,13 @@ ENABLE_SUPABASE_WRITE=true
 `analysis_results.agent_payload`와 `consultation_requests.agent_payload`에는 동일한 상담용 payload 구조가 저장된다.
 상담 LLM/RAG는 `agentPayload.reportInputMetrics`를 우선 사용한다.
 
-보조금 기준은 `경기 주택태양광 지원사업` 단일 기준이다.
-국가 보조금과 경기도 보조금을 중복 합산하지 않는다.
+보조금 기준은 건물 유형에 따라 분기한다. 아파트/공동주택은 한국에너지공단 공동주택 기준, 단독주택은 경기 시군 3kW 기준을 사용한다.
+서로 다른 보조금 제도를 중복 합산하지 않는다.
 
 ```json
 {
-  "subsidyProgramName": "경기 주택태양광 지원사업",
-  "subsidyPolicyMode": "gyeonggi_home_solar_only",
+  "subsidyProgramName": "한국에너지공단 신재생에너지 보급사업(공동주택)",
+  "subsidyPolicyMode": "knrec_apartment_low_carbon_module",
   "subsidyStackingAllowed": false
 }
 ```
@@ -229,7 +229,7 @@ AI가 구조안전성이나 장애물 여부를 확정했다고 표현하지 않
 }
 ```
 
-보조금은 `경기 주택태양광 지원사업` 단일 기준이며 `subsidyStackingAllowed=false`다.
+보조금은 건물 유형별 기준이며 `subsidyStackingAllowed=false`다.
 대출은 예상 시나리오이며 실제 승인은 금융기관 심사가 필요하다.
 
 ## 테스트 데이터 표시 컬럼 SQL

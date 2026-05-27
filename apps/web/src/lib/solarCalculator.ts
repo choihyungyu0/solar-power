@@ -6,8 +6,8 @@ const ROOF_UTILIZATION_RATIO = 0.42;
 const YEARLY_GENERATION_KWH_PER_KW = 1220;
 const COMMON_ELECTRIC_VALUE_KRW_PER_KWH = 165;
 const INSTALL_COST_KRW_PER_KW = 1350000;
-const MAX_SUBSIDY_RATIO = 0.42;
-const MAX_SUBSIDY_KRW = 120000000;
+const APARTMENT_SUBSIDY_KRW_PER_KW = 466000;
+const APARTMENT_SUBSIDY_MAX_CAPACITY_KW = 30;
 const POLICY_LOAN_RATIO = 0.6;
 const POLICY_LOAN_LIMIT_KRW = 150000000;
 
@@ -55,7 +55,11 @@ export function calculateSolarSimulation(values: SolarRequestFormValues): SolarS
   const generationValue = Math.round(expectedYearlyGenerationKwh * COMMON_ELECTRIC_VALUE_KRW_PER_KWH);
   const expectedYearlySavingKrw = Math.min(generationValue, yearlyBillLimit);
   const estimatedInstallCostKrw = Math.round(recommendedCapacityKw * INSTALL_COST_KRW_PER_KW);
-  const estimatedSubsidyKrw = Math.min(Math.round(estimatedInstallCostKrw * MAX_SUBSIDY_RATIO), MAX_SUBSIDY_KRW);
+  const subsidyEligibleCapacityKw = Math.min(recommendedCapacityKw, APARTMENT_SUBSIDY_MAX_CAPACITY_KW);
+  const estimatedSubsidyKrw = Math.min(
+    Math.round(subsidyEligibleCapacityKw * APARTMENT_SUBSIDY_KRW_PER_KW),
+    estimatedInstallCostKrw,
+  );
   const estimatedSelfPaymentKrw = Math.max(0, estimatedInstallCostKrw - estimatedSubsidyKrw);
   const policyLoanLimitKrw = Math.min(Math.round(estimatedSelfPaymentKrw * POLICY_LOAN_RATIO), POLICY_LOAN_LIMIT_KRW);
   const paybackYears =
@@ -79,7 +83,7 @@ export function calculateSolarSimulation(values: SolarRequestFormValues): SolarS
     suitabilityGrade: getSuitabilityGrade(suitabilityScore),
     householdMonthlyBenefitKrw,
     demoFormulaNote:
-      '데모 산식 기반 추정입니다. 실제 설치 가능 여부, 구조 안전, 음영, 전기요금제, 공고 조건은 현장 조사와 실제 공고 확인이 필요합니다.',
+      '데모 산식 기반 추정입니다. 아파트 보조금은 한국에너지공단 공동주택 기준(저탄소 모듈, 1개 동 최대 30kW, kW당 466,000원)으로 보수 계산하며 실제 설치 가능 여부, 구조 안전, 음영, 전기요금제, 공고 조건은 현장 조사와 실제 공고 확인이 필요합니다.',
   };
 }
 
@@ -90,5 +94,6 @@ export const solarCalculatorAssumptions = {
   yearlyGenerationKwhPerKw: YEARLY_GENERATION_KWH_PER_KW,
   commonElectricValueKrwPerKwh: COMMON_ELECTRIC_VALUE_KRW_PER_KWH,
   installCostKrwPerKw: INSTALL_COST_KRW_PER_KW,
-  maxSubsidyRatio: MAX_SUBSIDY_RATIO,
+  apartmentSubsidyKrwPerKw: APARTMENT_SUBSIDY_KRW_PER_KW,
+  apartmentSubsidyMaxCapacityKw: APARTMENT_SUBSIDY_MAX_CAPACITY_KW,
 };

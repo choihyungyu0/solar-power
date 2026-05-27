@@ -6,9 +6,9 @@ from datetime import datetime, timezone
 from typing import Any
 
 
-SUBSIDY_PROGRAM_NAME = "경기 주택태양광 지원사업"
-SUBSIDY_POLICY_MODE = "gyeonggi_home_solar_only"
-SUBSIDY_STACKING_REASON = "경기 주택태양광 지원사업 기준 단일 보조금 산정"
+DEFAULT_SUBSIDY_PROGRAM_NAME = "보조금 공고 확인 필요"
+DEFAULT_SUBSIDY_POLICY_MODE = "housing_type_based_policy"
+DEFAULT_SUBSIDY_STACKING_REASON = "주택 유형별 적용 제도를 분기하며 중복 합산하지 않음"
 REPORT_TYPE = "solar_profit_report"
 SCHEMA_VERSION = "solarmate-profit-report-v1"
 DEFAULT_LOAN_YEARS = 5
@@ -82,7 +82,7 @@ def _get_path(value: dict[str, Any], *keys: str) -> Any:
 
 
 def _is_llm_profit_report_enabled() -> bool:
-    return os.getenv("ENABLE_LLM_PROFIT_REPORT", "").strip().lower() == "true"
+    return False
 
 
 def _get_openai_model_name() -> str:
@@ -142,19 +142,40 @@ def build_subsidy_matrix(
 ) -> dict[str, Any]:
     metrics = _get_report_input_metrics(agent_payload)
     policy = policy_data if isinstance(policy_data, dict) else {}
+    subsidy_rag_input = _get_path(agent_payload, "subsidyRagInput")
+    subsidy_rag_input = subsidy_rag_input if isinstance(subsidy_rag_input, dict) else {}
+    program_name = (
+        policy.get("program_name")
+        or policy.get("source_title")
+        or metrics.get("subsidyProgramName")
+        or subsidy_rag_input.get("subsidyProgramName")
+        or DEFAULT_SUBSIDY_PROGRAM_NAME
+    )
+    policy_mode = (
+        policy.get("policy_mode")
+        or metrics.get("subsidyPolicyMode")
+        or subsidy_rag_input.get("subsidyPolicyMode")
+        or DEFAULT_SUBSIDY_POLICY_MODE
+    )
+    stacking_note = (
+        policy.get("stacking_note")
+        or metrics.get("subsidyStackingReason")
+        or subsidy_rag_input.get("subsidyStackingReason")
+        or DEFAULT_SUBSIDY_STACKING_REASON
+    )
     subsidy_estimate_krw = _money(
         policy.get("subsidy_amount_krw")
         or policy.get("max_subsidy_krw")
         or metrics.get("subsidyEstimateKrw")
-        or _get_path(agent_payload, "subsidyRagInput", "subsidyEstimateKrw")
+        or subsidy_rag_input.get("subsidyEstimateKrw")
     )
     subsidy_rate = policy.get("subsidy_rate")
 
     return {
-        "programName": SUBSIDY_PROGRAM_NAME,
-        "policyMode": SUBSIDY_POLICY_MODE,
+        "programName": program_name,
+        "policyMode": policy_mode,
         "supportType": policy.get("support_type") or "주택태양광 설치 보조금",
-        "regionSido": policy.get("region_sido") or "경기도",
+        "regionSido": policy.get("region_sido") or ("전국" if "한국에너지공단" in str(program_name) else "경기도"),
         "regionSigungu": policy.get("region_sigungu") or "확인 필요",
         "targetBuildingType": policy.get("target_building_type") or "주택/공동주택 검토",
         "subsidyEstimateKrw": subsidy_estimate_krw,
@@ -162,9 +183,9 @@ def build_subsidy_matrix(
         "subsidyRate": _as_float(subsidy_rate) if subsidy_rate is not None else None,
         "maxSubsidyKrw": _money(policy.get("max_subsidy_krw")) or subsidy_estimate_krw,
         "stackingAllowed": False,
-        "stackingNote": policy.get("stacking_note") or SUBSIDY_STACKING_REASON,
+        "stackingNote": stacking_note,
         "eligibilityNote": policy.get("eligibility_note") or "실제 지원 여부는 최신 공고, 예산 잔여 여부, 대상 요건 확인이 필요합니다.",
-        "sourceTitle": policy.get("source_title") or "경기 주택태양광 지원사업 공고 확인 필요",
+        "sourceTitle": policy.get("source_title") or f"{program_name} 공고 확인 필요",
         "sourceUrl": policy.get("source_url"),
         "sourceYear": policy.get("source_year"),
         "status": "확인 필요",
@@ -251,6 +272,9 @@ def _build_building_summary(
 
 
 def _build_four_metrics(report_input_metrics: dict[str, Any]) -> dict[str, Any]:
+    program_name = report_input_metrics.get("subsidyProgramName") or DEFAULT_SUBSIDY_PROGRAM_NAME
+    policy_mode = report_input_metrics.get("subsidyPolicyMode") or DEFAULT_SUBSIDY_POLICY_MODE
+
     return {
         "expectedGeneration": {
             "annualGenerationKwh": _money(report_input_metrics.get("annualGenerationKwh")),
@@ -265,9 +289,9 @@ def _build_four_metrics(report_input_metrics: dict[str, Any]) -> dict[str, Any]:
             "paybackYears": _round(report_input_metrics.get("paybackYears")),
         },
         "subsidyAndSuitability": {
-            "subsidyProgramName": SUBSIDY_PROGRAM_NAME,
-            "subsidyPolicyMode": SUBSIDY_POLICY_MODE,
-            "subsidyStackingAllowed": False,
+            "subsidyProgramName": program_name,
+            "subsidyPolicyMode": policy_mode,
+            "subsidyStackingAllowed": report_input_metrics.get("subsidyStackingAllowed") is True,
             "installationSuitabilityScore": _as_int(report_input_metrics.get("installationSuitabilityScore")),
             "installationSuitabilityGrade": report_input_metrics.get("installationSuitabilityGrade") or "확인 필요",
             "installationSuitabilityLabel": report_input_metrics.get("installationSuitabilityLabel") or "검토 필요",
@@ -288,12 +312,13 @@ def _build_report_narrative(
     cash_needed = _format_krw(net_investment.get("cashNeededKrw"))
     payback = _format_years(net_investment.get("paybackYears"))
     loan_limit = _format_krw(loan_scenario.get("estimatedLoanLimitKrw"))
+    program_name = subsidy_matrix.get("programName") or report_input_metrics.get("subsidyProgramName") or DEFAULT_SUBSIDY_PROGRAM_NAME
 
     return {
         "headline": f"AI 기준 설치 적합도 {grade}등급, 수익성 검토 가치가 있는 태양광 후보지입니다.",
         "summary": (
             f"예상 연간 발전량은 {annual_generation}, 예상 연간 절감/수익 기준은 {annual_saving}입니다. "
-            f"{SUBSIDY_PROGRAM_NAME} 단일 기준 보조금 적용 후 예상 자부담은 {self_payment}이며, "
+            f"{program_name} 기준 보조금 적용 후 예상 자부담은 {self_payment}이며, "
             f"추정 회수기간은 {payback}입니다."
         ),
         "salesMessage": (
@@ -310,11 +335,13 @@ def _build_report_narrative(
 def _build_risk_disclaimers(agent_payload: dict[str, Any]) -> list[str]:
     field_checks = agent_payload.get("fieldCheckRequired")
     field_check_text = ", ".join(field_checks) if isinstance(field_checks, list) else "옥상 장애물, 구조안전성, 방수 상태"
+    metrics = _get_report_input_metrics(agent_payload)
+    program_name = metrics.get("subsidyProgramName") or _get_path(agent_payload, "subsidyRagInput", "subsidyProgramName") or DEFAULT_SUBSIDY_PROGRAM_NAME
 
     return [
         "본 리포트는 시뮬레이션 기반 예상·추정 결과이며 실제 발전량과 절감액을 보장하지 않습니다.",
-        f"{SUBSIDY_PROGRAM_NAME} 지원 여부와 금액은 최신 공고, 예산 잔여 여부, 대상 요건 확인이 필요합니다.",
-        "국가 보조금과 경기도 보조금은 중복 합산하지 않았습니다.",
+        f"{program_name} 지원 여부와 금액은 최신 공고, 예산 잔여 여부, 대상 요건 확인이 필요합니다.",
+        "보조금 제도는 유형별로 분기했으며 제도 간 중복 합산하지 않았습니다.",
         "대출 가능 금액과 조건은 추정 시나리오이며 실제 승인은 금융기관 심사가 필요합니다.",
         f"{field_check_text}는 AI 확정 항목이 아니며 현장조사와 관리주체 협의가 필요합니다.",
     ]
@@ -379,8 +406,8 @@ def _build_llm_sanitized_input(report_json: dict[str, Any]) -> dict[str, Any]:
             "paybackYearsText": _format_years(net.get("paybackYears")),
         },
         "subsidyPolicy": {
-            "programName": subsidy.get("programName") or SUBSIDY_PROGRAM_NAME,
-            "policyMode": subsidy.get("policyMode") or SUBSIDY_POLICY_MODE,
+            "programName": subsidy.get("programName") or DEFAULT_SUBSIDY_PROGRAM_NAME,
+            "policyMode": subsidy.get("policyMode") or DEFAULT_SUBSIDY_POLICY_MODE,
             "stackingAllowed": subsidy.get("stackingAllowed") is True,
             "eligibilityNote": subsidy.get("eligibilityNote"),
         },
@@ -551,7 +578,7 @@ def generate_llm_report_narrative(report_json: dict[str, Any]) -> dict[str, Any]
                         "보조금 설명은 subsidyRagContext의 retrieved chunk와 sourceReferences만 근거로 사용한다. "
                         "retrieved context가 없으면 보조금 근거는 확인 필요라고 말한다. "
                         "검색된 근거에 없는 보조금 사업을 만들지 않는다. "
-                        "국가 보조금과 경기도 보조금을 중복 합산하지 않는다. "
+                        "보조금 제도 간 중복 합산을 하지 않는다. "
                         "보조금, 대출 승인, 절감액, 구조안전성, 장애물 상태를 보장하거나 확정하지 않는다. "
                         "출력은 반드시 요청된 JSON schema만 따른다."
                     ),
@@ -628,7 +655,7 @@ def _build_source_references(subsidy_rag_context: dict[str, Any]) -> list[dict[s
 
         seen_keys.add(key)
         evidence_parts = [
-            str(match.get("programName") or SUBSIDY_PROGRAM_NAME),
+            str(match.get("programName") or DEFAULT_SUBSIDY_PROGRAM_NAME),
             str(match.get("regionSido") or ""),
             str(match.get("regionSigungu") or ""),
         ]
@@ -782,6 +809,7 @@ def build_profit_report_markdown(report_json: dict[str, Any]) -> str:
     )
     rag_matches = rag_context.get("matches") if isinstance(rag_context.get("matches"), list) else []
     references = report_json.get("sourceReferences") if isinstance(report_json.get("sourceReferences"), list) else []
+    subsidy_program_name = suitability.get("subsidyProgramName") or DEFAULT_SUBSIDY_PROGRAM_NAME
 
     lines = [
         "# AI 수익·보조금·금융 리포트",
@@ -798,7 +826,7 @@ def build_profit_report_markdown(report_json: dict[str, Any]) -> str:
         (
             "- 보조금 적용 가능성 / 설치 적합도: "
             f"{suitability.get('installationSuitabilityGrade') or '확인 필요'}등급, "
-            f"{SUBSIDY_PROGRAM_NAME} 단일 기준"
+            f"{subsidy_program_name} 기준"
         ),
         "",
         "## 금융 지원 시나리오",

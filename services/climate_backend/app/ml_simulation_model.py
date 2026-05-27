@@ -20,6 +20,7 @@ MODEL_METADATA_PATH = MODEL_DIR / "model_metadata.json"
 
 MODEL_VERSION = "solarmate-simulation-surrogate-rf-kmeans-v1"
 TRAINING_DATA_SOURCE = "simulation-derived-seed-data"
+MIN_ANNUAL_GENERATION_KWH_PER_KW = 900
 
 FEATURE_COLUMNS = [
     "roof_area_m2",
@@ -116,6 +117,25 @@ def _read_feature(features: dict[str, Any], column: str, fallback: float = 0):
     return fallback
 
 
+def _read_existing_generation(features: dict[str, Any]) -> float:
+    for key in ("annualGenerationKwh", "annual_generation_kwh", "annual_generation"):
+        value = _as_float(features.get(key), 0)
+
+        if value > 0:
+            return value
+
+    pv_output = features.get("pv_analysis_output")
+
+    if isinstance(pv_output, dict):
+        for key in ("annual_generation_kwh", "annual_generation"):
+            value = _as_float(pv_output.get(key), 0)
+
+            if value > 0:
+                return value
+
+    return 0
+
+
 def _feature_map(features: dict[str, Any]):
     values = {column: _read_feature(features, column) for column in FEATURE_COLUMNS}
 
@@ -198,14 +218,11 @@ def load_models():
         }
 
 
-def _estimate_generation_formula(features: dict[str, Any]):
+def _estimate_generation_formula(features: dict[str, Any], *, prefer_existing: bool = True):
     values = _feature_map(features)
-    existing_generation = _as_float(
-        features.get("annualGenerationKwh", features.get("annual_generation_kwh")),
-        0,
-    )
+    existing_generation = _read_existing_generation(features)
 
-    if existing_generation > 0:
+    if prefer_existing and existing_generation > 0:
         return existing_generation
 
     install_kw = values["install_capacity_kw"]
@@ -218,6 +235,25 @@ def _estimate_generation_formula(features: dict[str, Any]):
     angle_factor = _clamp(1 - abs(values["panel_angle_deg"] - 32) / 100, 0.78, 1.0)
 
     return max(0, install_kw * 365 * 3.65 * shading_factor * cell_mix_factor * angle_factor)
+
+
+def _generation_guardrail_floor(features: dict[str, Any], formula_generation_kwh: float):
+    values = _feature_map(features)
+    install_kw = values["install_capacity_kw"]
+
+    if install_kw <= 0:
+        return 0
+
+    physical_floor = install_kw * MIN_ANNUAL_GENERATION_KWH_PER_KW
+
+    if values["red_cell_ratio"] > 0.4 or (values["shading_average"] and values["shading_average"] < 1.5):
+        physical_floor *= 0.72
+    elif values["red_cell_ratio"] > 0.25 or (values["shading_average"] and values["shading_average"] < 2.2):
+        physical_floor *= 0.86
+
+    formula_floor = formula_generation_kwh * 0.82 if formula_generation_kwh > 0 else 0
+
+    return max(0, min(max(physical_floor, formula_floor), install_kw * 1320))
 
 
 def _estimate_payback_formula(features: dict[str, Any]):
@@ -271,12 +307,42 @@ def predict_generation(features: dict[str, Any]):
     state = load_models()
     model = state.get("generationModel")
     model_loaded = state["modelStatus"] == "loaded" and model is not None
+    existing_generation = _read_existing_generation(features)
+    formula_generation_kwh = _estimate_generation_formula(features, prefer_existing=False)
+    calibration: dict[str, Any] | None = None
 
-    if model_loaded:
-        annual_generation_kwh = max(0, float(model.predict([_feature_vector(features)])[0]))
+    if existing_generation > 0:
+        floor_generation_kwh = _generation_guardrail_floor(features, formula_generation_kwh)
+        annual_generation_kwh = max(existing_generation, floor_generation_kwh)
+        model_type = "external-or-upstream-generation-v1"
+        calibration = {
+            "source": "input_annual_generation",
+            "reason": "입력/외부 API 발전량이 있으면 seed-data ML 예측으로 덮어쓰지 않습니다.",
+            "rawInputAnnualGenerationKwh": round(existing_generation),
+            "floorAnnualGenerationKwh": round(floor_generation_kwh),
+            "formulaReferenceKwh": round(formula_generation_kwh),
+        }
+
+        if annual_generation_kwh != existing_generation:
+            model_type = "external-or-upstream-generation-v1+guardrail-floor"
+            calibration["reason"] = "입력/외부 API 발전량이 설치 용량 대비 과소 산출되어 보수적 물리 하한을 적용했습니다."
+    elif model_loaded:
+        raw_model_generation_kwh = max(0, float(model.predict([_feature_vector(features)])[0]))
+        floor_generation_kwh = _generation_guardrail_floor(features, formula_generation_kwh)
+        annual_generation_kwh = max(raw_model_generation_kwh, floor_generation_kwh)
         model_type = "random_forest_surrogate_v1"
+
+        if annual_generation_kwh != raw_model_generation_kwh:
+            model_type = "random_forest_surrogate_v1+guardrail-floor"
+            calibration = {
+                "source": "model_guardrail_floor",
+                "reason": "seed data 기반 ML 예측이 용량 대비 과소 산출되어 보수적 물리 하한을 적용했습니다.",
+                "rawModelAnnualGenerationKwh": round(raw_model_generation_kwh),
+                "floorAnnualGenerationKwh": round(floor_generation_kwh),
+                "formulaReferenceKwh": round(formula_generation_kwh),
+            }
     else:
-        annual_generation_kwh = _estimate_generation_formula(features)
+        annual_generation_kwh = formula_generation_kwh
         model_type = "fallback-formula-v1"
 
     confidence = _prediction_confidence(features, model_loaded)
@@ -290,6 +356,7 @@ def predict_generation(features: dict[str, Any]):
         "confidenceLabel": _confidence_label(confidence),
         "trainingDataSource": TRAINING_DATA_SOURCE,
         "isMeasuredGenerationModel": False,
+        "calibration": calibration,
     }
 
 

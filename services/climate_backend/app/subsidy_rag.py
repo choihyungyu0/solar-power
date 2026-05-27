@@ -12,7 +12,7 @@ from .supabase_client import (
 
 DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
 DEFAULT_MATCH_COUNT = 5
-MAIN_SUBSIDY_PROGRAM_NAME = "경기 주택태양광 지원사업"
+DEFAULT_SUBSIDY_PROGRAM_NAME = "주택 유형별 태양광 보조금"
 
 
 def _is_record(value: Any) -> bool:
@@ -294,16 +294,26 @@ def build_subsidy_rag_query(
         or _get_path(agent_payload, "building", "usage")
         or "공동주택"
     )
+    program_name = (
+        report_input_metrics.get("subsidyProgramName")
+        or _get_path(agent_payload, "subsidyRagInput", "subsidyProgramName")
+        or DEFAULT_SUBSIDY_PROGRAM_NAME
+    )
+    policy_mode = (
+        report_input_metrics.get("subsidyPolicyMode")
+        or _get_path(agent_payload, "subsidyRagInput", "subsidyPolicyMode")
+        or ""
+    )
     query = " ".join(
         part
         for part in (
             region_sido,
             region_sigungu,
-            MAIN_SUBSIDY_PROGRAM_NAME,
+            program_name,
             _as_text(building_usage),
             f"설치용량 {install_capacity_kw}kW" if install_capacity_kw else "",
             "보조금 자부담 중복 지원 여부",
-            "gyeonggi_home_solar_only",
+            policy_mode,
         )
         if _as_text(part)
     )

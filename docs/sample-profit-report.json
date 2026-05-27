@@ -27,15 +27,15 @@
     },
     "costAndSelfPayment": {
       "estimatedInstallCostKrw": 26764000,
-      "selfPaymentEstimateKrw": 14720000
+      "selfPaymentEstimateKrw": 16605000
     },
     "payback": {
       "annualSavingKrw": 2310000,
       "paybackYears": 6.3
     },
     "subsidyAndSuitability": {
-      "subsidyProgramName": "경기 주택태양광 지원사업",
-      "subsidyPolicyMode": "gyeonggi_home_solar_only",
+      "subsidyProgramName": "한국에너지공단 신재생에너지 보급사업(공동주택)",
+      "subsidyPolicyMode": "knrec_apartment_low_carbon_module",
       "subsidyStackingAllowed": false,
       "installationSuitabilityScore": 84,
       "installationSuitabilityGrade": "A",
@@ -43,20 +43,20 @@
     }
   },
   "subsidyMatrix": {
-    "programName": "경기 주택태양광 지원사업",
-    "policyMode": "gyeonggi_home_solar_only",
-    "supportType": "주택태양광 설치 보조금",
-    "regionSido": "경기도",
-    "regionSigungu": "화성시",
-    "targetBuildingType": "주택/공동주택 검토",
-    "subsidyEstimateKrw": 12044000,
+    "programName": "한국에너지공단 신재생에너지 보급사업(공동주택)",
+    "policyMode": "knrec_apartment_low_carbon_module",
+    "supportType": "저탄소 모듈 설치 보조",
+    "regionSido": "전국",
+    "regionSigungu": "확인 필요",
+    "targetBuildingType": "아파트 1개 동, 공동주택 공용부",
+    "subsidyEstimateKrw": 10159000,
     "subsidyAmountKrw": null,
     "subsidyRate": null,
-    "maxSubsidyKrw": 12044000,
+    "maxSubsidyKrw": 10159000,
     "stackingAllowed": false,
-    "stackingNote": "경기 주택태양광 지원사업 기준 단일 보조금 산정",
+    "stackingNote": "아파트는 경기태양광지원사업 대상이 아니며 한국에너지공단 공동주택 기준으로 산정",
     "eligibilityNote": "실제 지원 여부는 최신 공고, 예산 잔여 여부, 대상 요건 확인이 필요합니다.",
-    "sourceTitle": "경기 주택태양광 지원사업 공고 확인 필요",
+    "sourceTitle": "한국에너지공단 공동주택 보급사업 공고 확인 필요",
     "sourceUrl": null,
     "sourceYear": null,
     "status": "확인 필요"
@@ -74,18 +74,18 @@
   },
   "netInvestment": {
     "estimatedInstallCostKrw": 26764000,
-    "subsidyEstimateKrw": 12044000,
-    "selfPaymentBeforeLoanKrw": 14720000,
+    "subsidyEstimateKrw": 10159000,
+    "selfPaymentBeforeLoanKrw": 16605000,
     "estimatedLoanLimitKrw": 9240000,
-    "cashNeededKrw": 5480000,
+    "cashNeededKrw": 7365000,
     "annualSavingKrw": 2310000,
-    "paybackYears": 6.4,
+    "paybackYears": 7.2,
     "calculation": "installCost - subsidy - estimatedLoanLimit, minimum 0"
   },
   "reportNarrative": {
     "headline": "AI 기준 설치 적합도 A등급, 수익성 검토 가치가 있는 태양광 후보지입니다.",
-    "summary": "예상 연간 발전량은 27,550kWh, 예상 연간 절감/수익 기준은 2,310,000원입니다. 경기 주택태양광 지원사업 단일 기준 보조금 적용 후 예상 자부담은 14,720,000원이며, 추정 회수기간은 6.4년입니다.",
-    "salesMessage": "금융 지원 시나리오를 함께 검토하면 예상 대출 검토 한도는 9,240,000원, 초기 현금 필요액은 5,480,000원까지 낮아질 가능성이 있습니다. 보조금 예산이 소진되기 전에 상담을 통해 가능 여부를 확인해보세요.",
+    "summary": "예상 연간 발전량은 27,550kWh, 예상 연간 절감/수익 기준은 2,310,000원입니다. 한국에너지공단 신재생에너지 보급사업(공동주택) 기준 보조금 적용 후 예상 자부담은 16,605,000원이며, 추정 회수기간은 7.2년입니다.",
+    "salesMessage": "금융 지원 시나리오를 함께 검토하면 예상 대출 검토 한도는 9,240,000원, 초기 현금 필요액은 7,365,000원까지 낮아질 가능성이 있습니다. 보조금 예산이 소진되기 전에 상담을 통해 가능 여부를 확인해보세요.",
     "ctaText": "우리 아파트 태양광 설치하기",
     "ctaMessage": "우리 아파트 태양광 설치하기",
     "riskNotes": []
@@ -94,8 +94,8 @@
   "llmEnabled": false,
   "riskDisclaimers": [
     "본 리포트는 시뮬레이션 기반 예상·추정 결과이며 실제 발전량과 절감액을 보장하지 않습니다.",
-    "경기 주택태양광 지원사업 지원 여부와 금액은 최신 공고, 예산 잔여 여부, 대상 요건 확인이 필요합니다.",
-    "국가 보조금과 경기도 보조금은 중복 합산하지 않았습니다.",
+    "한국에너지공단 신재생에너지 보급사업(공동주택) 지원 여부와 금액은 최신 공고, 예산 잔여 여부, 대상 요건 확인이 필요합니다.",
+    "보조금 제도는 유형별로 분기했으며 제도 간 중복 합산하지 않았습니다.",
     "대출 가능 금액과 조건은 추정 시나리오이며 실제 승인은 금융기관 심사가 필요합니다.",
     "옥상 장애물, 구조안전성, 방수 상태, 관리주체 협의, 실제 공고 및 예산 잔여 여부는 AI 확정 항목이 아니며 현장조사와 관리주체 협의가 필요합니다."
   ],

@@ -5010,7 +5010,7 @@ function RiskMapPage() {
                       </dl>
 
                       <p className="aiSuitabilityNote">
-                        보조금은 경기 주택태양광 지원사업 단일 기준으로 표시합니다. 실제 지원 여부는 공고와
+                        보조금은 {activeReportInputMetrics.subsidyProgramName} 기준으로 표시합니다. 실제 지원 여부는 공고와
                         예산 잔여 여부에 따라 달라질 수 있습니다.
                       </p>
                     </>
@@ -5081,7 +5081,7 @@ function RiskMapPage() {
                     </div>
                     <div>
                       <dt>보조금 정책</dt>
-                      <dd>경기 주택태양광 지원사업</dd>
+                      <dd>{activeReportInputMetrics.subsidyProgramName}</dd>
                     </div>
                   </dl>
 

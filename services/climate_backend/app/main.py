@@ -126,7 +126,7 @@ def subsidy_rag_search(payload: SubsidyRagSearchRequest):
                 region_sigungu,
                 payload.buildingUsage,
                 f"{payload.installCapacityKw}kW" if payload.installCapacityKw else None,
-                "경기 주택태양광 지원사업 보조금 중복 지원 여부",
+                "주택 유형별 태양광 보조금 대상 여부와 중복 지원 여부",
             )
             if part
         )

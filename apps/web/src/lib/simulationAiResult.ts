@@ -1,5 +1,9 @@
 export type SimulationAiGrade = 'S' | 'A' | 'B' | 'C' | 'D';
-export type SimulationSubsidyPolicyMode = 'gyeonggi_home_solar_only' | string;
+export type SimulationSubsidyPolicyMode =
+  | 'knrec_apartment_low_carbon_module'
+  | 'gyeonggi_detached_home_3kw'
+  | 'housing_type_based_policy'
+  | string;
 
 export type SimulationAiFeatureScores = {
   shadingQuality: number;
@@ -68,7 +72,7 @@ export type SimulationAiReportInputMetrics = {
   selfPaymentEstimateKrw: number;
   annualSavingKrw: number;
   paybackYears: number;
-  subsidyProgramName: '경기 주택태양광 지원사업' | string;
+  subsidyProgramName: string;
   subsidyPolicyMode: SimulationSubsidyPolicyMode;
   subsidyStackingAllowed: boolean;
   subsidyStackingReason: string;

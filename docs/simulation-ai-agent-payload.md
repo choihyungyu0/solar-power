@@ -43,18 +43,18 @@ SolarMate의 Render climate backend는 건물 선택, climate.gg 음영 셀, 패
 3. `annualSavingKrw`, `paybackYears`: 연 절감액과 회수기간
 4. `subsidyProgramName`, `subsidyPolicyMode`, `installationSuitabilityScore`, `installationSuitabilityGrade`, `installationSuitabilityLabel`: 보조금 적용 가능성 / 설치 적합도
 
-보조금 기준은 다음 값으로 고정한다.
+보조금 기준은 건물 유형에 따라 분기한다. 아파트/공동주택은 한국에너지공단 공동주택 기준, 단독주택은 경기 시군 3kW 기준을 사용한다.
 
 ```json
 {
-  "subsidyProgramName": "경기 주택태양광 지원사업",
-  "subsidyPolicyMode": "gyeonggi_home_solar_only",
+  "subsidyProgramName": "한국에너지공단 신재생에너지 보급사업(공동주택)",
+  "subsidyPolicyMode": "knrec_apartment_low_carbon_module",
   "subsidyStackingAllowed": false,
-  "subsidyStackingReason": "경기 주택태양광 지원사업 기준 단일 보조금 산정"
+  "subsidyStackingReason": "아파트는 경기태양광지원사업 대상이 아니며 한국에너지공단 공동주택 기준으로 산정"
 }
 ```
 
-국가 보조금과 경기도 보조금을 중복 합산하지 않는다.
+서로 다른 보조금 제도를 중복 합산하지 않는다.
 정확한 지원금은 실제 공고, 대상 조건, 예산 잔여 여부 확인이 필요하며 보조금 수령을 보장하지 않는다.
 
 ## Field Check Items

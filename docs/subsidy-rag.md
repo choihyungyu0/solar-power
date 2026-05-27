@@ -144,4 +144,4 @@ powershell -ExecutionPolicy Bypass -File .\scripts\test-production-subsidy-rag-f
 - `/api/subsidy-rag/search`가 match를 반환한다.
 - `/api/ai-profit-report`의 `subsidyRagContext.enabled`가 true다.
 - `sourceReferences`가 1개 이상이다.
-- `reportNarrativeSource`는 OpenAI LLM 설정에 따라 `llm-structured-output` 또는 fallback 값이 될 수 있다.
+- `reportNarrativeSource`는 비용 절감용 템플릿 경로인 `deterministic-template`이다.

@@ -636,7 +636,7 @@ function ProfitReportModal({
 
                     return (
                       <li key={`${getPathText(match, ['sourceTitle']) || 'source'}-${index}`}>
-                        <strong>{getPathText(match, ['programName']) || '경기 주택태양광 지원사업'}</strong>
+                        <strong>{getPathText(match, ['programName']) || '보조금 공고 확인 필요'}</strong>
                         <p>
                           {[getPathText(match, ['regionSido']), getPathText(match, ['regionSigungu'])]
                             .filter(Boolean)

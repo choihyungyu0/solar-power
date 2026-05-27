@@ -203,6 +203,27 @@ where title is null
   or status is null
   or note is null;
 
+update public.subsidy_programs
+set
+  title = '한국에너지공단 공동주택 보급사업 후보',
+  program_name = '한국에너지공단 공동주택 보급사업 후보',
+  region = '전국',
+  region_sido = '전국',
+  region_sigungu = '전국',
+  target = '아파트 1개 동, 공동주택 공용부 전기 절감 검토 단지',
+  target_building_type = '아파트 1개 동, 공동주택 공용부 전기 절감 검토 단지',
+  support_type = '저탄소 모듈 설치 보조',
+  amount_text = '1개 동 최대 30kW, kW당 466,000원 추정',
+  source_name = '한국에너지공단',
+  source_title = '한국에너지공단',
+  source_url = '',
+  stacking_allowed = false,
+  stacking_note = '제도 간 중복 지원 여부는 실제 공고 확인 필요',
+  eligibility_note = '아파트는 경기태양광지원사업 대상이 아니므로 한국에너지공단 공동주택 기준으로 표시합니다.',
+  status = '확인 필요',
+  note = '아파트는 경기태양광지원사업 대상이 아니므로 한국에너지공단 공동주택 기준으로 표시합니다. 실제 지원 대상, 예산, 접수 가능 여부는 해당 연도 공고 확인이 필요합니다.'
+where title = '경기도 공동주택 태양광 지원 후보';
+
 -- 6. Subsidy RAG source documents and searchable pgvector chunks.
 -- These tables are written/read by the production backend with a service-role key.
 create table if not exists public.subsidy_documents (
@@ -539,28 +560,28 @@ select
 from (
   values
   (
-    '경기도 공동주택 태양광 지원 후보',
-    '경기도',
-    '공동주택, 공공임대, 관리주체 검토 단지',
-    '설치비 일부 보조 또는 정책사업 연계',
-    '연도별 공고 확인 필요',
-    '경기도/지자체 공고',
+    '한국에너지공단 공동주택 보급사업 후보',
+    '전국',
+    '아파트 1개 동, 공동주택 공용부 전기 절감 검토 단지',
+    '저탄소 모듈 설치 보조',
+    '1개 동 최대 30kW, kW당 466,000원 추정',
+    '한국에너지공단',
     null,
     '확인 필요',
     current_date,
-    '데모 데이터입니다. 실제 지원 대상, 예산, 접수 가능 여부는 해당 연도 공고 확인이 필요합니다.'
+    '아파트는 경기태양광지원사업 대상이 아니므로 한국에너지공단 공동주택 기준으로 표시합니다. 실제 지원 대상, 예산, 접수 가능 여부는 해당 연도 공고 확인이 필요합니다.'
   ),
   (
-    '한국에너지공단 주택·건물 지원사업 후보',
+    '개인 단독 설치 시 단독주택 지원 검토',
     '전국',
-    '주택, 건물, 공동 이용부 전기 절감 검토 대상',
-    '보조금 또는 정책자금',
-    '사업 공고 및 예산 기준 확인 필요',
-    '한국에너지공단',
-    'https://www.knrec.or.kr/',
-    '접수중',
+    '아파트 거주 개인이 단독 설치를 희망하는 경우',
+    '단독주택 기준 지원 가능성 검토',
+    '단독주택 3kW 기준 공고 확인 필요',
+    '경기도/시군 및 한국에너지공단 공고',
+    null,
+    '확인 필요',
     current_date,
-    'MVP 후보 데이터입니다. 수혜가 보장되지 않으며 실제 공고 조건 확인이 필요합니다.'
+    '공동주택 공용부 설치와 별개로 개인 단독 설치 희망 시 검토하는 후보입니다. 수혜가 보장되지 않으며 실제 공고 조건 확인이 필요합니다.'
   ),
   (
     '지자체 탄소중립 예산 연계 후보',

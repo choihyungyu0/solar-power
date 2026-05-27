@@ -16,6 +16,7 @@ from .geometry import (
     make_cells_in_polygon,
     normalize_geojson_polygon_4326,
 )
+from .subsidy_table import classify_housing_type, estimate_subsidy
 from .supabase_client import save_analysis_result, save_training_sample
 
 
@@ -44,8 +45,6 @@ MONTHLY_GENERATION_WEIGHTS = [
     0.049,
     0.043,
 ]
-GYEONGGI_HOME_SOLAR_SUBSIDY_RATE = 0.45
-GYEONGGI_HOME_SOLAR_SUBSIDY_CAP_KRW = 30_000_000
 
 
 def _elapsed_ms(started: float) -> int:
@@ -759,12 +758,34 @@ async def run_hybrid_pipeline(request):
         )
         install_capacity_kw = _coerce_float(expected_revenue.get("install_kw"), install_kw)
         monthly_generation_kwh = _build_monthly_generation_kwh(pv_output, annual_generation_kwh)
-        subsidy_estimate_krw = round(
-            min(
-                estimated_install_cost_krw * GYEONGGI_HOME_SOLAR_SUBSIDY_RATE,
-                GYEONGGI_HOME_SOLAR_SUBSIDY_CAP_KRW,
-            )
+        building_name = _read_feature_property(
+            selected_building_feature,
+            ["name", "building_name", "bldg_nm", "bldg_name", "apartment_name", "dong_name"],
+            "선택 건물",
         )
+        road_address = _read_feature_property(
+            selected_building_feature,
+            ["road_address", "rn_addr", "address", "addr", "bd_addr", "A3", "A4"],
+            "",
+        )
+        jibun_address = _read_feature_property(
+            selected_building_feature,
+            ["jibun_address", "jibun", "address", "addr", "A4"],
+            "",
+        )
+        building_usage = _read_feature_property(
+            selected_building_feature,
+            ["buildingUsage", "usage_name", "bldg_usg_cd", "main_purps_cd_nm", "mainPurpsCdNm"],
+            "확인 필요",
+        )
+        housing_type = classify_housing_type(building_usage)
+        subsidy_detail = estimate_subsidy(
+            estimated_install_cost_krw,
+            road_address or jibun_address,
+            housing_type=housing_type,
+            capacity_kw=install_capacity_kw,
+        )
+        subsidy_estimate_krw = round(_coerce_float(subsidy_detail.get("subsidyKrw"), 0))
         self_payment_estimate_krw = max(0, round(estimated_install_cost_krw - subsidy_estimate_krw))
         policy_loan_limit_krw = round(self_payment_estimate_krw * 0.75)
         payback_years = (
@@ -776,28 +797,13 @@ async def run_hybrid_pipeline(request):
         usable_area_m2 = round(used_cell_count * 3.5, 2)
         ai_input = {
             "buildingId": selected_building_id,
-            "buildingName": _read_feature_property(
-                selected_building_feature,
-                ["name", "building_name", "bldg_nm", "bldg_name", "apartment_name", "dong_name"],
-                "선택 건물",
-            ),
-            "roadAddress": _read_feature_property(
-                selected_building_feature,
-                ["road_address", "rn_addr", "address", "addr", "bd_addr", "A3", "A4"],
-                "",
-            ),
-            "jibunAddress": _read_feature_property(
-                selected_building_feature,
-                ["jibun_address", "jibun", "address", "addr", "A4"],
-                "",
-            ),
+            "buildingName": building_name,
+            "roadAddress": road_address,
+            "jibunAddress": jibun_address,
             "latitude": request.latitude,
             "longitude": request.longitude,
-            "buildingUsage": _read_feature_property(
-                selected_building_feature,
-                ["buildingUsage", "usage_name", "bldg_usg_cd", "main_purps_cd_nm", "mainPurpsCdNm"],
-                "확인 필요",
-            ),
+            "buildingUsage": building_usage,
+            "housingType": housing_type,
             "geometryType": roof_4326.geom_type,
             "roofAreaM2": round(roof_area, 2),
             "usableAreaM2": usable_area_m2,
@@ -819,10 +825,13 @@ async def run_hybrid_pipeline(request):
             "monthlyGenerationKwh": monthly_generation_kwh,
             "estimatedInstallCostKrw": round(estimated_install_cost_krw),
             "subsidyEstimateKrw": subsidy_estimate_krw,
-            "subsidyProgramName": "경기 주택태양광 지원사업",
-            "subsidyPolicyMode": "gyeonggi_home_solar_only",
+            "subsidyProgramName": subsidy_detail.get("program") or "보조금 공고 확인 필요",
+            "subsidyPolicyMode": "knrec_apartment_low_carbon_module"
+            if subsidy_detail.get("regime") == "apartment"
+            else "gyeonggi_detached_home_3kw",
             "subsidyStackingAllowed": False,
-            "subsidyStackingReason": "경기 주택태양광 지원사업 기준 단일 보조금 산정",
+            "subsidyStackingReason": subsidy_detail.get("disclaimer") or "주택 유형별 적용 제도를 분기하며 중복 합산하지 않음",
+            "subsidyDetail": subsidy_detail,
             "annualSavingKrw": round(annual_saving_krw),
             "policyLoanLimitKrw": policy_loan_limit_krw,
             "paybackYears": payback_years,

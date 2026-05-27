@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 기술 스택과 활성 코드
 
-- 실제 MVP 코드는 `apps/web` (React 18 + TypeScript + Vite, `@supabase/supabase-js` 로 Supabase 연동 예정).
+- 실제 MVP 코드는 `apps/web` (React 18 + TypeScript + Vite, `@supabase/supabase-js` 기반 Supabase Auth/DB 연동).
 - `apps/api` (FastAPI + Pydantic) 는 **레거시 스캐폴드** 입니다. `AGENTS.md` 지침에 따라 사용자가 명시적으로 요청하지 않는 한 Python API 에 기능을 추가하거나 백엔드 의존성을 재도입하지 않습니다.
 - Vercel 서버리스 함수는 `apps/web/api/` 에 위치 (예: `pv-analysis.ts`, `vworld-feature.ts`). 외부 한국 GIS/기후 API 의 서버사이드 프록시 역할을 하며, `apps/web/src/lib` · `apps/web/src/types` 의 공유 타입/헬퍼를 import 합니다.
 
@@ -49,8 +49,8 @@ uvicorn main:app --reload --port 8000
 
 ## 아키텍처
 
-- **2개의 진입 라우트** 를 `apps/web/src/App.tsx` 가 `window.location.pathname` 으로 직접 분기합니다 (라우터 라이브러리 없음).
-  - `/` — 랜딩. hero, 기능 카드, `ServiceIntroSection`, `SolarFeedSection`, contact CTA.
+- `apps/web/src/App.tsx` 는 React Router 기반으로 주요 화면을 라우팅합니다.
+  - `/` — 랜딩. hero와 `ServiceIntroSection` 중심이며, 도입 사례 시뮬레이션 아래 섹션은 현재 제거된 상태입니다.
   - `/risk-map` — `RiskMapPage.tsx`. 핵심 인터랙티브 기능.
   - `vercel.json` 이 모든 경로를 `/` 로 rewrite 하므로 어떤 화면을 렌더할지는 클라이언트가 결정합니다.
 
@@ -63,7 +63,7 @@ uvicorn main:app --reload --port 8000
 
 - **서버 프록시** (`apps/web/api/*.ts`) 는 `VWORLD_API_KEY` 같은 비밀값을 읽을 수 있는 **유일한** 위치입니다. 클라이언트 코드는 `VITE_*` 환경변수만 읽습니다 (예: `VITE_VWORLD_BUILDING_DATA_ID`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`).
 
-- **Supabase 통합** 은 `AGENTS.md` 에 정의되어 있습니다 (회원가입/로그인, 신청 저장, 시뮬레이션 저장, `supabase/schema.sql` 의 RLS). 대부분 아직 미구현 상태입니다.
+- **Supabase 통합** 은 `AGENTS.md` 에 정의되어 있습니다. 회원가입/로그인, 회원 프로필, 신청 저장, 시뮬레이션 저장, `supabase/schema.sql` 의 RLS를 기준으로 작업합니다.
 
 ## 컨벤션
 

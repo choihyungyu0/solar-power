@@ -13,14 +13,14 @@
 
 - `aiSimulationResult`: 설치 적합도, 예상 발전량, 경제성 추정, ML surrogate model 결과
 - `agentPayload.reportInputMetrics`: 상담/리포트용 4대 핵심 지표
-- `subsidy_programs`: 경기 주택태양광 지원사업 기준 보조금 matrix
+- `subsidy_programs`: 주택 유형별 보조금 matrix(아파트/공동주택은 한국에너지공단 공동주택 기준, 단독주택은 경기 시군 3kW 기준)
 - `userFinanceInput`: 선택 입력값
   - `availableCashKrw`
   - `preferredLoanYears`
   - `loanCoverageRatio`
 
 OpenAI 또는 LLM은 필수 의존성이 아니다.
-`OPENAI_API_KEY`, `ENABLE_LLM_PROFIT_REPORT=true`가 있을 때만 문장 다듬기용 LLM을 선택적으로 사용한다.
+현재 리포트 narrative는 비용 절감을 위해 결정론 템플릿을 기본 및 운영 경로로 사용한다.
 숫자, 보조금, 대출 한도, 회수기간은 항상 백엔드 결정론 코드가 먼저 계산하며 LLM은 재계산하지 않는다.
 
 ## 4대 핵심 지표
@@ -36,10 +36,10 @@ OpenAI 또는 LLM은 필수 의존성이 아니다.
   "selfPaymentEstimateKrw": 14720000,
   "annualSavingKrw": 2310000,
   "paybackYears": 6.3,
-  "subsidyProgramName": "경기 주택태양광 지원사업",
-  "subsidyPolicyMode": "gyeonggi_home_solar_only",
+  "subsidyProgramName": "한국에너지공단 신재생에너지 보급사업(공동주택)",
+  "subsidyPolicyMode": "knrec_apartment_low_carbon_module",
   "subsidyStackingAllowed": false,
-  "subsidyStackingReason": "경기 주택태양광 지원사업 기준 단일 보조금 산정",
+  "subsidyStackingReason": "아파트는 경기태양광지원사업 대상이 아니며 한국에너지공단 공동주택 기준으로 산정",
   "installationSuitabilityScore": 84,
   "installationSuitabilityGrade": "A",
   "installationSuitabilityLabel": "도입 검토 우선순위 높음",
@@ -56,16 +56,16 @@ OpenAI 또는 LLM은 필수 의존성이 아니다.
 
 ## 보조금 정책
 
-보조금 기준은 `경기 주택태양광 지원사업` 단일 기준이다.
+보조금 기준은 건물 유형에 따라 분기한다.
 
 ```json
 {
-  "subsidyPolicyMode": "gyeonggi_home_solar_only",
+  "subsidyPolicyMode": "knrec_apartment_low_carbon_module | gyeonggi_detached_home_3kw",
   "subsidyStackingAllowed": false
 }
 ```
 
-국가 보조금과 경기도 보조금을 중복 합산하지 않는다.
+아파트/공동주택은 한국에너지공단 공동주택 기준(`min(설치용량, 30kW) × 466,000원/kW`)으로 계산한다. 단독주택은 경기 시군별 3kW 표준 보조금 절대액으로 계산한다. 서로 다른 제도를 중복 합산하지 않는다.
 실제 지원 여부와 금액은 최신 공고, 예산 잔여 여부, 대상 요건 확인이 필요하다.
 
 ## 대출 시나리오
@@ -108,7 +108,7 @@ cashNeededKrw =
     "loanSupportScenario": {},
     "netInvestment": {},
     "reportNarrative": {},
-    "reportNarrativeSource": "deterministic-template | llm-structured-output",
+    "reportNarrativeSource": "deterministic-template",
     "llmEnabled": false,
     "llmError": "optional safe fallback reason",
     "riskDisclaimers": [],
@@ -125,57 +125,16 @@ cashNeededKrw =
 }
 ```
 
-## 선택적 LLM narrative 생성
+## Template narrative 생성
 
-LLM narrative는 `reportNarrative` 필드만 다듬는다.
-사용 모델은 Render FastAPI 백엔드 환경변수로만 설정한다.
-프론트엔드에는 `OPENAI_API_KEY`를 넣지 않는다.
+리포트 narrative는 비용 절감을 위해 결정론 템플릿으로 생성한다.
 
-환경변수:
-
-```text
-OPENAI_API_KEY=...
-ENABLE_LLM_PROFIT_REPORT=true
-OPENAI_MODEL=gpt-4o-mini
-```
-
-LLM 입력은 개인정보나 Supabase secret 없이 정제된 구조화 데이터만 포함한다.
-
-- 설치 적합도 등급/점수
-- 예상 연간 발전량
-- 예상 설치비
-- 예상 보조금
-- 예상 실투자금
-- 예상 회수기간
-- 대출 검토 시나리오
-- 리포트 주의사항
-
-LLM Structured Outputs JSON schema:
-
-```json
-{
-  "headline": "string",
-  "summary": "string",
-  "salesMessage": "string",
-  "ctaText": "string",
-  "riskNotes": ["string"]
-}
-```
-
-운영 규칙:
-
-- 한국어만 사용한다.
-- `예상`, `추정`, `가능성`, `검토`, `확인 필요` 표현을 사용한다.
-- 보조금, 대출 승인, 절감액을 보장하지 않는다.
-- 구조안전성이나 장애물 상태를 AI가 확정했다고 표현하지 않는다.
-- 제공된 숫자를 바꾸거나 재계산하지 않는다.
-
-Fallback:
-
-- `ENABLE_LLM_PROFIT_REPORT`가 `true`가 아니면 `reportNarrativeSource = deterministic-template`이다.
-- `OPENAI_API_KEY`가 없거나 OpenAI 호출이 실패하면 결정론 템플릿을 사용한다.
-- 실패 사유는 `llmError`에 안전한 문장으로만 기록하고 secret이나 원문 응답을 노출하지 않는다.
-- Supabase `profit_reports.report_json`에는 최종 narrative와 `reportNarrativeSource`, `llmEnabled`가 함께 저장된다.
+- `reportNarrativeSource = deterministic-template`
+- `llmEnabled = false`
+- 숫자, 보조금, 대출 한도, 회수기간은 백엔드 결정론 코드가 계산한 값을 그대로 사용한다.
+- 프론트엔드와 Render 환경변수에 OpenAI API 키를 요구하지 않는다.
+- 한국어, `예상`, `추정`, `가능성`, `검토`, `확인 필요` 표현을 유지한다.
+- 보조금, 대출 승인, 절감액, 구조안전성, 장애물 상태를 보장하지 않는다.
 
 ## Supabase 저장
 
@@ -228,15 +187,4 @@ npm.cmd run build
 6. `상담 신청하기`를 눌러 `/consultation`으로 이동한다.
 7. 상담 신청 후 Supabase `consultation_requests.agent_payload`에 `profitReport` 요약이 포함되는지 확인한다.
 
-LLM narrative 수동 테스트:
-
-```powershell
-cd services\climate_backend
-$env:ENABLE_LLM_PROFIT_REPORT = "true"
-$env:OPENAI_MODEL = "gpt-4o-mini"
-# OPENAI_API_KEY는 Render 또는 로컬 세션 환경변수로만 설정한다. 파일에 저장하지 않는다.
-python -m py_compile app/main.py app/profit_report_agent.py app/schemas.py
-```
-
-이후 `/api/ai-profit-report`를 `forceRegenerate: true`로 호출하면 새 리포트에서 `reportNarrativeSource`가 `llm-structured-output`인지 확인할 수 있다.
-키가 없거나 호출이 실패하면 `deterministic-template`으로 안전하게 fallback되어야 한다.
+리포트 narrative는 템플릿 경로가 정식 동작이다. `/api/ai-profit-report` 응답에서 `reportNarrativeSource`가 `deterministic-template`, `llmEnabled`가 `false`인지 확인한다.
