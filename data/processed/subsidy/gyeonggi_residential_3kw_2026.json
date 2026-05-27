@@ -1,0 +1,203 @@
+{
+  "program": "2026년 경기도 주택태양광(3kW) 시군별 보조금",
+  "source": "docs/경기주택태양광지원사업_시군별_보조금.xlsx",
+  "basis": {
+    "capacity_kw": 3,
+    "standard_install_cost_krw": 4541000,
+    "province_subsidy_krw": 1816000,
+    "province_ratio": 0.4
+  },
+  "apartment_program": {
+    "source": "한국에너지공단 신재생에너지 보급사업(공동주택)",
+    "per_kw_krw": 466000,
+    "max_capacity_kw_per_building": 30,
+    "module_condition": "저탄소 모듈",
+    "note": "아파트 1개 동 당 최대 30kW. 상한액 존재, 참여기업 당해년도 정부 보조금 금액에 따라 유동적. 아파트 거주 개인이 단독 설치 희망 시 단독주택 지원으로 신청 가능."
+  },
+  "unit": "krw",
+  "note": "단독주택은 경기 시군별 3kW 표준(절대 보조금=도비+시군비). 아파트 등 공동주택은 apartment_program(한국에너지공단) 기준 별도 산정.",
+  "sigungu": {
+    "가평군": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 1080000,
+      "self_payment_krw": 1645000,
+      "sigungu_subsidy_ratio": 0.238,
+      "total_support_ratio": 0.6377
+    },
+    "고양시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 908000,
+      "self_payment_krw": 1817000,
+      "sigungu_subsidy_ratio": 0.2,
+      "total_support_ratio": 0.5999
+    },
+    "과천시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 1363000,
+      "self_payment_krw": 1362000,
+      "sigungu_subsidy_ratio": 0.3,
+      "total_support_ratio": 0.7001
+    },
+    "광명시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 2166000,
+      "self_payment_krw": 559000,
+      "sigungu_subsidy_ratio": 0.477,
+      "total_support_ratio": 0.8769
+    },
+    "광주시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 908000,
+      "self_payment_krw": 1817000,
+      "sigungu_subsidy_ratio": 0.2,
+      "total_support_ratio": 0.5999
+    },
+    "구리시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 908000,
+      "self_payment_krw": 1817000,
+      "sigungu_subsidy_ratio": 0.2,
+      "total_support_ratio": 0.5999
+    },
+    "군포시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 1362000,
+      "self_payment_krw": 1363000,
+      "sigungu_subsidy_ratio": 0.3,
+      "total_support_ratio": 0.6998
+    },
+    "남양주시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 1362000,
+      "self_payment_krw": 1363000,
+      "sigungu_subsidy_ratio": 0.3,
+      "total_support_ratio": 0.6998
+    },
+    "동두천시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 908000,
+      "self_payment_krw": 1817000,
+      "sigungu_subsidy_ratio": 0.2,
+      "total_support_ratio": 0.5999
+    },
+    "부천시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 908000,
+      "self_payment_krw": 1817000,
+      "sigungu_subsidy_ratio": 0.2,
+      "total_support_ratio": 0.5999
+    },
+    "성남시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 1484000,
+      "self_payment_krw": 1241000,
+      "sigungu_subsidy_ratio": 0.327,
+      "total_support_ratio": 0.7267
+    },
+    "안양시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 987000,
+      "self_payment_krw": 1738000,
+      "sigungu_subsidy_ratio": 0.217,
+      "total_support_ratio": 0.6173
+    },
+    "양주시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 1362000,
+      "self_payment_krw": 1363000,
+      "sigungu_subsidy_ratio": 0.3,
+      "total_support_ratio": 0.6998
+    },
+    "양평군": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 988000,
+      "self_payment_krw": 1737000,
+      "sigungu_subsidy_ratio": 0.218,
+      "total_support_ratio": 0.6175
+    },
+    "여주시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 1000000,
+      "self_payment_krw": 1725000,
+      "sigungu_subsidy_ratio": 0.22,
+      "total_support_ratio": 0.6201
+    },
+    "연천군": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 1544000,
+      "self_payment_krw": 1181000,
+      "sigungu_subsidy_ratio": 0.34,
+      "total_support_ratio": 0.7399
+    },
+    "오산시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 986000,
+      "self_payment_krw": 1739000,
+      "sigungu_subsidy_ratio": 0.217,
+      "total_support_ratio": 0.617
+    },
+    "용인시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 455000,
+      "self_payment_krw": 2270000,
+      "sigungu_subsidy_ratio": 0.1,
+      "total_support_ratio": 0.5001
+    },
+    "의왕시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 1362000,
+      "self_payment_krw": 1363000,
+      "sigungu_subsidy_ratio": 0.3,
+      "total_support_ratio": 0.6998
+    },
+    "의정부시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 1362000,
+      "self_payment_krw": 1363000,
+      "sigungu_subsidy_ratio": 0.3,
+      "total_support_ratio": 0.6998
+    },
+    "이천시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 1000000,
+      "self_payment_krw": 1725000,
+      "sigungu_subsidy_ratio": 0.22,
+      "total_support_ratio": 0.6201
+    },
+    "파주시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 1816000,
+      "self_payment_krw": 909000,
+      "sigungu_subsidy_ratio": 0.4,
+      "total_support_ratio": 0.7998
+    },
+    "평택시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 960000,
+      "self_payment_krw": 1765000,
+      "sigungu_subsidy_ratio": 0.211,
+      "total_support_ratio": 0.6113
+    },
+    "포천시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 1362000,
+      "self_payment_krw": 1363000,
+      "sigungu_subsidy_ratio": 0.3,
+      "total_support_ratio": 0.6998
+    },
+    "하남시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 1068000,
+      "self_payment_krw": 1657000,
+      "sigungu_subsidy_ratio": 0.235,
+      "total_support_ratio": 0.6351
+    },
+    "화성시": {
+      "province_subsidy_krw": 1816000,
+      "sigungu_subsidy_krw": 925000,
+      "self_payment_krw": 1800000,
+      "sigungu_subsidy_ratio": 0.204,
+      "total_support_ratio": 0.6036
+    }
+  }
+}

@@ -8,11 +8,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .pipeline import create_request_diagnostics, debug_geometry_pipeline, run_hybrid_pipeline
+from .report_agent import build_solar_report
 from .schemas import (
     AdminConsultationStatusUpdateRequest,
     ClimateAnalysisRequest,
     ConsultationRequest,
     GeometryDebugRequest,
+    SolarReportRequest,
 )
 from .supabase_client import (
     check_supabase_health,
@@ -244,6 +246,28 @@ async def debug_geometry(payload: GeometryDebugRequest):
 
         return {
             "ok": False,
+            "errorType": type(error).__name__,
+            "error": str(error),
+            "trace": traceback.format_exc().splitlines()[-15:],
+        }
+
+
+@app.post("/api/solar-report")
+async def solar_report(payload: SolarReportRequest):
+    """aiSimulationResult -> 시군 보조금/대출을 결합한 분석 보고서(HTML + 구조화 데이터)."""
+    try:
+        return build_solar_report(
+            payload.aiSimulationResult,
+            sigungu=payload.sigungu,
+            loan_ratio=payload.loanRatio,
+            loan_term_years=payload.loanTermYears,
+        )
+    except Exception as error:
+        traceback.print_exc()
+
+        return {
+            "ok": False,
+            "message": "보고서 생성 중 오류가 발생했습니다.",
             "errorType": type(error).__name__,
             "error": str(error),
             "trace": traceback.format_exc().splitlines()[-15:],
