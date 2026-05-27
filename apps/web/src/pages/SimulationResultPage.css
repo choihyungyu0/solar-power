@@ -2223,6 +2223,42 @@
   }
 }
 
+.simulationResultLayout.isSingleColumn {
+  grid-template-columns: minmax(0, 980px);
+  justify-content: center;
+}
+
+.simulationResultLayout.isSingleColumn .simulationResultContent {
+  width: 100%;
+}
+
+.analysisEmptyState {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #d9e1ec;
+  border-radius: 8px;
+  padding: 22px;
+  background: #ffffff;
+}
+
+.analysisEmptyState strong {
+  color: #0f172a;
+  font-size: 20px;
+  font-weight: 950;
+}
+
+.analysisEmptyState p {
+  margin: 0;
+  color: #475569;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.analysisEmptyState .mapBackButton {
+  justify-self: start;
+}
+
 @media print {
   @page {
     size: A4;

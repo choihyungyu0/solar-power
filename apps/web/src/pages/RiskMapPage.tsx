@@ -1825,6 +1825,7 @@ function RiskMapPage() {
         ['단순 회수기간 추정', simplePaybackText],
       ]
     : [];
+  const shouldShowCompletedAnalysisActions = activeTab === 'solar' && hasPvAnalysisCompleted;
   const panelSpacingText = `행 ${formatMeters(DEFAULT_SOLAR_PANEL_LAYOUT_OPTIONS.rowGapM)} · 열 ${formatMeters(
     DEFAULT_SOLAR_PANEL_LAYOUT_OPTIONS.colGapM,
   )}`;
@@ -2731,9 +2732,9 @@ function RiskMapPage() {
     selectionMode,
   ]);
 
-  const handleResultDetailRequest = useCallback(() => {
+  const createCurrentStoredSimulationResult = useCallback(() => {
     const selectedAddress = selectedBuildingFootprint?.address ?? selectedBuilding.address;
-    const result = buildStoredSimulationResult({
+    return buildStoredSimulationResult({
       building: {
         name: selectedBuildingFootprint?.name ?? selectedBuilding.apartmentName,
         roadAddress: selectedAddress,
@@ -2753,14 +2754,6 @@ function RiskMapPage() {
         investmentKrw: overviewInvestmentKrw ?? undefined,
       },
     });
-    const didSave = saveSimulationResultToSession(result);
-
-    setAnalysisStatus(
-      didSave
-        ? '현재 선택 건물과 최신 예상 분석 결과를 저장하고 패널 선택 화면으로 이동합니다.'
-        : '브라우저 저장소를 사용할 수 없어 결과 화면에서 시나리오 기준 예시값을 표시합니다.',
-    );
-    window.location.assign('/simulation/setup');
   }, [
     activeAiSimulationResult,
     liveClimateBundle,
@@ -2777,6 +2770,30 @@ function RiskMapPage() {
     selectedBuildingFootprint,
   ]);
 
+  const handleResultDetailRequest = useCallback(() => {
+    const result = createCurrentStoredSimulationResult();
+    const didSave = saveSimulationResultToSession(result);
+
+    setAnalysisStatus(
+      didSave
+        ? '현재 선택 건물과 최신 예상 분석 결과를 저장하고 결과 상세 화면으로 이동합니다.'
+        : '브라우저 저장소를 사용할 수 없어 결과 화면에서 시나리오 기준 예시값을 표시합니다.',
+    );
+    window.location.assign('/simulation/result');
+  }, [createCurrentStoredSimulationResult]);
+
+  const handleAiSuitabilityReportRequest = useCallback(() => {
+    const result = createCurrentStoredSimulationResult();
+    const didSave = saveSimulationResultToSession(result);
+
+    setAnalysisStatus(
+      didSave
+        ? 'AI 설치 적합도 화면으로 이동합니다.'
+        : '브라우저 저장소를 사용할 수 없어 AI 설치 적합도 화면에서 예시값을 표시합니다.',
+    );
+    window.location.assign('/simulation/ai-suitability');
+  }, [createCurrentStoredSimulationResult]);
+
   const handleProfitReportRequest = useCallback(async () => {
     if (!activeAiSimulationResult?.agentPayload?.reportInputMetrics) {
       setProfitReportStatus('error');
@@ -2784,27 +2801,7 @@ function RiskMapPage() {
       return;
     }
 
-    const selectedAddress = selectedBuildingFootprint?.address ?? selectedBuilding.address;
-    const result = buildStoredSimulationResult({
-      building: {
-        name: selectedBuildingFootprint?.name ?? selectedBuilding.apartmentName,
-        roadAddress: selectedAddress,
-        jibunAddress: selectedBuildingFootprint ? '지번 정보 확인 필요' : selectedBuilding.address,
-        buildingId: selectedBuildingFootprint?.buildingId ?? 'demo-building',
-      },
-      liveClimateBundle:
-        liveClimateStatus === 'success' && liveClimateBundle?.pv_analysis_output ? liveClimateBundle : null,
-      aiSimulationResult: activeAiSimulationResult,
-      pvAnalysisResult,
-      selectedEstimate: {
-        panelCount: selectedBuilding.estimatedPanelCount,
-        installCapacityKw: selectedBuilding.estimatedCapacityKw,
-        annualGenerationKwh: selectedBuilding.estimatedAnnualGenerationKwh,
-        annualSavingKrw: selectedBuilding.estimatedAnnualSavingsKrw,
-        paybackYears: selectedBuilding.estimatedPaybackYears,
-        investmentKrw: overviewInvestmentKrw ?? undefined,
-      },
-    });
+    const result = createCurrentStoredSimulationResult();
 
     saveSimulationResultToSession(result);
     setProfitReportStatus('loading');
@@ -2824,8 +2821,8 @@ function RiskMapPage() {
         dbSaveStatus: response.dbSaveStatus,
       });
       setProfitReportStatus('success');
-      setProfitReportMessage('AI 수익 리포트를 저장하고 결과 화면으로 이동합니다.');
-      window.location.assign('/simulation/result');
+      setProfitReportMessage('AI 수익 리포트를 저장하고 리포트 화면으로 이동합니다.');
+      window.location.assign('/simulation/profit-report');
       return;
     }
 
@@ -2833,18 +2830,7 @@ function RiskMapPage() {
     setProfitReportMessage(response.message ?? 'AI 수익 리포트를 생성하지 못했습니다. 잠시 후 다시 시도해주세요.');
   }, [
     activeAiSimulationResult,
-    liveClimateBundle,
-    liveClimateStatus,
-    overviewInvestmentKrw,
-    pvAnalysisResult,
-    selectedBuilding.address,
-    selectedBuilding.apartmentName,
-    selectedBuilding.estimatedAnnualGenerationKwh,
-    selectedBuilding.estimatedAnnualSavingsKrw,
-    selectedBuilding.estimatedCapacityKw,
-    selectedBuilding.estimatedPanelCount,
-    selectedBuilding.estimatedPaybackYears,
-    selectedBuildingFootprint,
+    createCurrentStoredSimulationResult,
   ]);
 
   const handleRiskAnalysisRequest = useCallback(async () => {
@@ -4193,7 +4179,37 @@ function RiskMapPage() {
             </>
           )}
 
-          {activeTab === 'solar' && (
+          {shouldShowCompletedAnalysisActions && (
+            <section className="completedAnalysisActions" aria-label="분석 결과 이동">
+              <button
+                className="riskAnalysisButton resultDetailButton"
+                type="button"
+                onClick={handleResultDetailRequest}
+              >
+                결과 상세보기
+              </button>
+              <button
+                className="riskAnalysisButton aiProfitReportButton"
+                type="button"
+                onClick={handleProfitReportRequest}
+                disabled={profitReportStatus === 'loading'}
+              >
+                {profitReportStatus === 'loading' ? 'AI 수익 리포트 생성 중...' : 'AI 수익 리포트 보기'}
+              </button>
+              <button
+                className="riskAnalysisButton aiSuitabilityDetailButton"
+                type="button"
+                onClick={handleAiSuitabilityReportRequest}
+              >
+                AI 설치 적합도 보기
+              </button>
+              {profitReportMessage && (
+                <p className={`aiProfitReportStatus is-${profitReportStatus}`}>{profitReportMessage}</p>
+              )}
+            </section>
+          )}
+
+          {activeTab === 'solar' && !shouldShowCompletedAnalysisActions && (
             <>
               <div className="simulationSummary">
                 <span>{selectedBuilding.simulationConfidence}</span>
@@ -5220,14 +5236,16 @@ function RiskMapPage() {
             </>
           )}
 
-          {analysisStatus && <p className="analysisStatus">{analysisStatus}</p>}
+          {analysisStatus && !shouldShowCompletedAnalysisActions && <p className="analysisStatus">{analysisStatus}</p>}
 
-          <p className="riskDisclaimer">
-            본 태양광 가상 설치는 브이월드 공간정보와 입력값 기반의 1차 추정입니다. 실제 설치 가능 여부,
-            발전량, 절감액은 현장조사, 옥상 장애물, 음영, 구조안전성, 설비 사양, 관리주체 협의, 정책 공고
-            기준에 따라 달라질 수 있습니다. 실제 설치 가능 여부는 옥상 장애물, 음영, 구조안전성, 관리주체 협의,
-            현장조사에 따라 달라질 수 있습니다.
-          </p>
+          {!shouldShowCompletedAnalysisActions && (
+            <p className="riskDisclaimer">
+              본 태양광 가상 설치는 브이월드 공간정보와 입력값 기반의 1차 추정입니다. 실제 설치 가능 여부,
+              발전량, 절감액은 현장조사, 옥상 장애물, 음영, 구조안전성, 설비 사양, 관리주체 협의, 정책 공고
+              기준에 따라 달라질 수 있습니다. 실제 설치 가능 여부는 옥상 장애물, 음영, 구조안전성, 관리주체 협의,
+              현장조사에 따라 달라질 수 있습니다.
+            </p>
+          )}
         </aside>
       </section>
     </main>

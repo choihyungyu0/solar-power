@@ -29,6 +29,11 @@ import './SimulationResultPage.css';
 
 type SectionColor = 'orange' | 'green' | 'blue';
 type ValueTone = 'orange' | 'green' | 'blue' | 'navy';
+type SimulationResultView = 'detail' | 'profit' | 'suitability';
+
+type SimulationResultPageProps = {
+  view?: SimulationResultView;
+};
 
 type ResultMetric = {
   label: string;
@@ -442,7 +447,7 @@ function SubsidyRagEvidence({ report }: { report: NonNullable<StoredProfitReport
   );
 }
 
-function SimulationResultPage() {
+function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
   const storedResult = readSimulationResultFromSession();
   const normalized = normalizeResult(storedResult ?? fallbackDemoResult);
   const { result } = normalized;
@@ -453,6 +458,23 @@ function SimulationResultPage() {
   const [profitReportMessage, setProfitReportMessage] = useState('');
   const sourceLabel = getSourceLabel(result.source);
   const isDemo = result.source === 'demo';
+  const isDetailView = view === 'detail';
+  const isProfitView = view === 'profit';
+  const isSuitabilityView = view === 'suitability';
+  const pageCopy = {
+    detail: {
+      title: '결과 상세보기',
+      description: '선택하신 아파트의 설치 비용, 예상 발전량, 절감 효과를 자세히 확인해보세요.',
+    },
+    profit: {
+      title: 'AI 수익 리포트',
+      description: '예상 수익, 보조금, 금융 시나리오를 도입 판단용 리포트로 확인해보세요.',
+    },
+    suitability: {
+      title: 'AI 설치 적합도',
+      description: '음영, 면적, 발전량 추정 기반의 AI 설치 적합도와 검토 근거를 확인해보세요.',
+    },
+  }[view];
   const cumulativeSaving = createCumulativeValues(normalized.yearlyRevenue);
   const cumulativeNetProfit = cumulativeSaving.map((value) => Math.max(0, value - normalized.selfPaymentKrw));
   const resultSections: ResultSection[] = [
@@ -561,8 +583,8 @@ function SimulationResultPage() {
         <section className="resultTitleArea" aria-labelledby="simulation-result-title">
           <div>
             <span className={`resultSourcePill ${isDemo ? 'isDemo' : ''}`}>{sourceLabel}</span>
-            <h1 id="simulation-result-title">설치 결과 시뮬레이션</h1>
-            <p>선택하신 아파트의 태양광 설치 비용, 예상 수익, 절감 효과를 확인해보세요.</p>
+            <h1 id="simulation-result-title">{pageCopy.title}</h1>
+            <p>{pageCopy.description}</p>
           </div>
           <div className="resultTitleActions">
             <button className="printSaveButton" type="button" onClick={handlePrintSave}>
@@ -575,60 +597,74 @@ function SimulationResultPage() {
           </div>
         </section>
 
-        <section className="simulationResultLayout">
+        <section className={`simulationResultLayout ${isDetailView ? '' : 'isSingleColumn'}`}>
           <div className="simulationResultContent">
             <AddressSummary result={result} />
 
-            <MobileCostCard normalized={normalized} />
+            {isDetailView && (
+              <>
+                <MobileCostCard normalized={normalized} />
 
-            {result.aiSimulationResult && <AiAnalysisReport aiResult={result.aiSimulationResult} />}
+                <div className="resultMetricGrid">
+                  {resultSections.map((section) => (
+                    <ResultSectionCard key={section.title} section={section} />
+                  ))}
+                </div>
 
-            <ProfitReportSection
-              profitReport={profitReport}
-              status={profitReportStatus}
-              message={profitReportMessage}
-              canGenerate={Boolean(result.aiSimulationResult?.agentPayload?.reportInputMetrics)}
-              actions={profitReportActions}
-            />
+                <div className="ecoCardGrid">
+                  <EcoCard
+                    image={resultImages.tree}
+                    title="첫해 소나무 심는 효과"
+                    value={`${normalized.pineTreeEffect.toLocaleString('ko-KR')}그루`}
+                    alt="소나무 효과 이미지"
+                  />
+                  <EcoCard
+                    image={resultImages.co2}
+                    title="첫해 탄소 감축량"
+                    value={`${normalized.carbonReductionKg.toLocaleString('ko-KR')}kgCO₂`}
+                    alt="탄소 감축량 이미지"
+                  />
+                </div>
 
-            <div className="resultMetricGrid">
-              {resultSections.map((section) => (
-                <ResultSectionCard key={section.title} section={section} />
+                <div className="resultChartGrid">
+                  <TrendLineChart
+                    title="20년 수익 추이"
+                    netProfit={cumulativeNetProfit}
+                    cumulativeSaving={cumulativeSaving}
+                  />
+
+                  <BarChart
+                    title="월간 발전량 차트"
+                    data={normalized.monthlyGeneration}
+                    labels={normalized.monthlyGeneration.map((_, index) => `${index + 1}월`)}
+                    valueFormatter={(value) => `${Math.round(value).toLocaleString('ko-KR')}kWh`}
+                  />
+                </div>
+              </>
+            )}
+
+            {isProfitView && (
+              <ProfitReportSection
+                profitReport={profitReport}
+                status={profitReportStatus}
+                message={profitReportMessage}
+                canGenerate={Boolean(result.aiSimulationResult?.agentPayload?.reportInputMetrics)}
+                actions={profitReportActions}
+              />
+            )}
+
+            {isSuitabilityView &&
+              (result.aiSimulationResult ? (
+                <AiAnalysisReport aiResult={result.aiSimulationResult} />
+              ) : (
+                <AnalysisEmptyState
+                  title="AI 설치 적합도 결과가 없습니다."
+                  message="/risk-map에서 건물을 선택하고 발전량 분석을 먼저 실행해주세요."
+                />
               ))}
-            </div>
-
-            <div className="ecoCardGrid">
-              <EcoCard
-                image={resultImages.tree}
-                title="첫해 소나무 심는 효과"
-                value={`${normalized.pineTreeEffect.toLocaleString('ko-KR')}그루`}
-                alt="소나무 효과 이미지"
-              />
-              <EcoCard
-                image={resultImages.co2}
-                title="첫해 탄소 감축량"
-                value={`${normalized.carbonReductionKg.toLocaleString('ko-KR')}kgCO₂`}
-                alt="탄소 감축량 이미지"
-              />
-            </div>
-
-            <div className="resultChartGrid">
-              <TrendLineChart
-                title="20년 수익 추이"
-                netProfit={cumulativeNetProfit}
-                cumulativeSaving={cumulativeSaving}
-              />
-
-              <BarChart
-                title="월간 발전량 차트"
-                data={normalized.monthlyGeneration}
-                labels={normalized.monthlyGeneration.map((_, index) => `${index + 1}월`)}
-                valueFormatter={(value) => `${Math.round(value).toLocaleString('ko-KR')}kWh`}
-              />
-            </div>
           </div>
 
-          <CostPanel normalized={normalized} />
+          {isDetailView && <CostPanel normalized={normalized} />}
         </section>
 
         <p className="resultBottomNote">
@@ -642,6 +678,18 @@ function SimulationResultPage() {
         </section>
       </main>
     </div>
+  );
+}
+
+function AnalysisEmptyState({ title, message }: { title: string; message: string }) {
+  return (
+    <section className="analysisEmptyState" aria-label="분석 결과 없음">
+      <strong>{title}</strong>
+      <p>{message}</p>
+      <a className="mapBackButton" href="/risk-map">
+        지도에서 분석하기
+      </a>
+    </section>
   );
 }
 

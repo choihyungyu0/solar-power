@@ -1067,6 +1067,35 @@
   box-shadow: 0 16px 30px rgba(234, 179, 8, 0.24);
 }
 
+.completedAnalysisActions {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.completedAnalysisActions .riskAnalysisButton {
+  min-height: 58px;
+  margin-top: 0;
+  border-radius: 8px;
+}
+
+.aiSuitabilityDetailButton {
+  background: linear-gradient(180deg, #16a34a 0%, #15803d 100%);
+  color: #ffffff;
+  box-shadow: 0 16px 30px rgba(22, 163, 74, 0.22);
+}
+
+.completedAnalysisActions .aiProfitReportStatus {
+  margin: 0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.5;
+}
+
 .riskAnalysisButton:disabled {
   cursor: not-allowed;
   opacity: 0.72;

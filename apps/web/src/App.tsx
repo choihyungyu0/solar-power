@@ -30,7 +30,9 @@ function App() {
       <Route path="/" element={<HomePage />} />
       <Route path="/risk-map" element={<RiskMapPage />} />
       <Route path="/simulation/setup" element={<SimulationSetupPage />} />
-      <Route path="/simulation/result" element={<SimulationResultPage />} />
+      <Route path="/simulation/result" element={<SimulationResultPage view="detail" />} />
+      <Route path="/simulation/profit-report" element={<SimulationResultPage view="profit" />} />
+      <Route path="/simulation/ai-suitability" element={<SimulationResultPage view="suitability" />} />
       <Route path="/solar-adoption" element={<HomePage />} />
       <Route path="/solar-adoption/step-1" element={<SolarAdoptionStep1Page />} />
       <Route path="/solar-adoption/step-2" element={<SolarAdoptionStep2Page />} />
