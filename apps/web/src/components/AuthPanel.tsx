@@ -28,6 +28,8 @@ function AuthPanel({ supabase, session, isConfigured, setupMessage }: AuthPanelP
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [birthDate, setBirthDate] = useState('');
+  const [phone, setPhone] = useState('');
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -43,6 +45,8 @@ function AuthPanel({ supabase, session, isConfigured, setupMessage }: AuthPanelP
     const trimmedEmail = email.trim();
     const trimmedPassword = password.trim();
     const trimmedName = name.trim();
+    const trimmedBirthDate = birthDate.trim();
+    const trimmedPhone = phone.trim();
 
     if (!trimmedEmail || !trimmedPassword) {
       setMessage('이메일과 비밀번호를 입력해 주세요.');
@@ -51,6 +55,11 @@ function AuthPanel({ supabase, session, isConfigured, setupMessage }: AuthPanelP
 
     if (mode === 'signup' && !trimmedName) {
       setMessage('회원가입을 위해 이름을 입력해 주세요.');
+      return;
+    }
+
+    if (mode === 'signup' && (!trimmedBirthDate || !trimmedPhone)) {
+      setMessage('회원가입을 위해 생년월일과 전화번호를 입력해 주세요.');
       return;
     }
 
@@ -68,7 +77,7 @@ function AuthPanel({ supabase, session, isConfigured, setupMessage }: AuthPanelP
             email: trimmedEmail,
             password: trimmedPassword,
             options: {
-              data: createPrivacyConsentMetadata(trimmedName),
+              data: createPrivacyConsentMetadata(trimmedName, trimmedBirthDate, trimmedPhone),
             },
           })
         : await supabase.auth.signInWithPassword({ email: trimmedEmail, password: trimmedPassword });
@@ -136,6 +145,20 @@ function AuthPanel({ supabase, session, isConfigured, setupMessage }: AuthPanelP
             <label>
               이름
               <input value={name} onChange={(event) => setName(event.target.value)} type="text" placeholder="예: 김솔라" />
+            </label>
+            <label>
+              생년월일
+              <input value={birthDate} onChange={(event) => setBirthDate(event.target.value)} type="date" autoComplete="bday" />
+            </label>
+            <label>
+              전화번호
+              <input
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                type="tel"
+                autoComplete="tel"
+                placeholder="예: 010-1234-5678"
+              />
             </label>
             <section className="authPrivacyBox" aria-label="개인정보 수집 및 이용 동의">
               <strong>개인정보 수집 및 이용 동의</strong>

@@ -71,9 +71,11 @@ export function toPrivacyConsent(row: MemberProfileRow | null): MemberPrivacyCon
   };
 }
 
-export function createPrivacyConsentMetadata(name: string) {
+export function createPrivacyConsentMetadata(name: string, birthDate = '', phone = '') {
   return {
     name: name.trim(),
+    birth_date: birthDate.trim(),
+    phone: phone.trim(),
     privacy_agreed: true,
     privacy_agreed_at: new Date().toISOString(),
     privacy_consent_version: PRIVACY_CONSENT_VERSION,

@@ -14,6 +14,8 @@ type LoginFormState = {
   email: string;
   password: string;
   name: string;
+  birthDate: string;
+  phone: string;
   privacyAgreed: boolean;
 };
 
@@ -78,6 +80,8 @@ export default function LoginPage() {
     email: '',
     password: '',
     name: '',
+    birthDate: '',
+    phone: '',
     privacyAgreed: false,
   });
   const [message, setMessage] = useState('');
@@ -121,6 +125,8 @@ export default function LoginPage() {
     const email = form.email.trim();
     const password = form.password.trim();
     const name = form.name.trim();
+    const birthDate = form.birthDate.trim();
+    const phone = form.phone.trim();
 
     if (!email || !password) {
       setMessage('이메일과 비밀번호를 입력해 주세요.');
@@ -129,6 +135,11 @@ export default function LoginPage() {
 
     if (mode === 'signup' && !name) {
       setMessage('회원가입을 위해 이름을 입력해 주세요.');
+      return;
+    }
+
+    if (mode === 'signup' && (!birthDate || !phone)) {
+      setMessage('회원가입을 위해 생년월일과 전화번호를 입력해 주세요.');
       return;
     }
 
@@ -146,7 +157,7 @@ export default function LoginPage() {
             email,
             password,
             options: {
-              data: createPrivacyConsentMetadata(name),
+              data: createPrivacyConsentMetadata(name, birthDate, phone),
             },
           })
         : await supabase.auth.signInWithPassword({ email, password });
@@ -271,12 +282,37 @@ export default function LoginPage() {
                     />
                   </div>
 
+                  <div className="login-form-row">
+                    <label htmlFor="login-birth-date">생년월일</label>
+                    <input
+                      id="login-birth-date"
+                      name="birthDate"
+                      type="date"
+                      value={form.birthDate}
+                      autoComplete="bday"
+                      onChange={handleChange}
+                    />
+                  </div>
+
+                  <div className="login-form-row">
+                    <label htmlFor="login-phone">전화번호</label>
+                    <input
+                      id="login-phone"
+                      name="phone"
+                      type="tel"
+                      value={form.phone}
+                      autoComplete="tel"
+                      placeholder="예: 010-1234-5678"
+                      onChange={handleChange}
+                    />
+                  </div>
+
                   <section className="login-privacy-box" aria-label="개인정보 수집 및 이용 동의">
                     <strong>개인정보 수집 및 이용 동의</strong>
                     <dl>
                       <div>
                         <dt>수집 항목</dt>
-                        <dd>이메일, 이름, 비밀번호 인증정보, 요청서 입력 시 연락처와 아파트 정보</dd>
+                        <dd>이메일, 이름, 생년월일, 전화번호, 비밀번호 인증정보, 요청서 입력 시 아파트 정보</dd>
                       </div>
                       <div>
                         <dt>이용 목적</dt>
