@@ -11,11 +11,21 @@ create table if not exists public.profiles (
   email text,
   name text,
   phone text,
+  birth_date date,
+  privacy_agreed boolean not null default false,
+  privacy_agreed_at timestamptz,
+  privacy_consent_version text,
   user_type text not null default 'resident'
     check (user_type in ('resident', 'manager', 'owner', 'public_officer', 'admin')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.profiles
+  add column if not exists birth_date date,
+  add column if not exists privacy_agreed boolean not null default false,
+  add column if not exists privacy_agreed_at timestamptz,
+  add column if not exists privacy_consent_version text;
 
 -- 2. Apartment/public-housing solar installation request.
 create table if not exists public.apartment_solar_requests (
@@ -307,8 +317,26 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles (id, email, name)
-  values (new.id, new.email, coalesce(new.raw_user_meta_data->>'name', ''))
+  insert into public.profiles (
+    id,
+    email,
+    name,
+    phone,
+    birth_date,
+    privacy_agreed,
+    privacy_agreed_at,
+    privacy_consent_version
+  )
+  values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data->>'name', ''),
+    nullif(new.raw_user_meta_data->>'phone', ''),
+    nullif(new.raw_user_meta_data->>'birth_date', '')::date,
+    coalesce((new.raw_user_meta_data->>'privacy_agreed')::boolean, false),
+    nullif(new.raw_user_meta_data->>'privacy_agreed_at', '')::timestamptz,
+    nullif(new.raw_user_meta_data->>'privacy_consent_version', '')
+  )
   on conflict (id) do nothing;
   return new;
 end;
@@ -384,6 +412,12 @@ create policy "profiles_select_own"
 on public.profiles for select
 to authenticated
 using (id = auth.uid());
+
+drop policy if exists "profiles_insert_own" on public.profiles;
+create policy "profiles_insert_own"
+on public.profiles for insert
+to authenticated
+with check (id = auth.uid());
 
 drop policy if exists "profiles_update_own" on public.profiles;
 create policy "profiles_update_own"

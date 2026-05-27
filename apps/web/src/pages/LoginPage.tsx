@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { LuShieldCheck } from 'react-icons/lu';
 import SolarMateHeader from '../components/SolarMateHeader';
 import { clearDemoAuth, setDemoAuth } from '../lib/demoAuth';
+import { createPrivacyConsentMetadata } from '../lib/memberProfile';
 import { isSupabaseConfigured, supabase, supabaseConfigMessage } from '../lib/supabase';
 import { useSupabaseSession } from '../lib/useSupabaseSession';
 import './LoginPage.css';
@@ -12,6 +13,8 @@ type AuthMode = 'login' | 'signup';
 type LoginFormState = {
   email: string;
   password: string;
+  name: string;
+  privacyAgreed: boolean;
 };
 
 function LockIcon() {
@@ -74,16 +77,18 @@ export default function LoginPage() {
   const [form, setForm] = useState<LoginFormState>({
     email: '',
     password: '',
+    name: '',
+    privacyAgreed: false,
   });
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = event.target;
+    const { name, type, value, checked } = event.target;
 
     setForm((prevForm) => ({
       ...prevForm,
-      [name]: value,
+      [name]: type === 'checkbox' ? checked : value,
     }));
   };
 
@@ -115,9 +120,20 @@ export default function LoginPage() {
 
     const email = form.email.trim();
     const password = form.password.trim();
+    const name = form.name.trim();
 
     if (!email || !password) {
       setMessage('이메일과 비밀번호를 입력해 주세요.');
+      return;
+    }
+
+    if (mode === 'signup' && !name) {
+      setMessage('회원가입을 위해 이름을 입력해 주세요.');
+      return;
+    }
+
+    if (mode === 'signup' && !form.privacyAgreed) {
+      setMessage('회원가입을 위해 개인정보 수집 및 이용에 동의해 주세요.');
       return;
     }
 
@@ -126,7 +142,13 @@ export default function LoginPage() {
 
     const response =
       mode === 'signup'
-        ? await supabase.auth.signUp({ email, password })
+        ? await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+              data: createPrivacyConsentMetadata(name),
+            },
+          })
         : await supabase.auth.signInWithPassword({ email, password });
 
     setIsSubmitting(false);
@@ -233,6 +255,51 @@ export default function LoginPage() {
                   onChange={handleChange}
                 />
               </div>
+
+              {mode === 'signup' && (
+                <>
+                  <div className="login-form-row">
+                    <label htmlFor="login-name">이름</label>
+                    <input
+                      id="login-name"
+                      name="name"
+                      type="text"
+                      value={form.name}
+                      autoComplete="name"
+                      placeholder="예: 김솔라"
+                      onChange={handleChange}
+                    />
+                  </div>
+
+                  <section className="login-privacy-box" aria-label="개인정보 수집 및 이용 동의">
+                    <strong>개인정보 수집 및 이용 동의</strong>
+                    <dl>
+                      <div>
+                        <dt>수집 항목</dt>
+                        <dd>이메일, 이름, 비밀번호 인증정보, 요청서 입력 시 연락처와 아파트 정보</dd>
+                      </div>
+                      <div>
+                        <dt>이용 목적</dt>
+                        <dd>계정 생성, 요청서·시뮬레이션 저장, 상담 및 알림 선호 관리</dd>
+                      </div>
+                      <div>
+                        <dt>보유 기간</dt>
+                        <dd>회원 탈퇴 또는 처리 목적 달성 시까지. 실제 서비스 전 법무 검토가 필요합니다.</dd>
+                      </div>
+                    </dl>
+                    <label className="login-consent-row" htmlFor="login-privacy-agreed">
+                      <input
+                        id="login-privacy-agreed"
+                        name="privacyAgreed"
+                        type="checkbox"
+                        checked={form.privacyAgreed}
+                        onChange={handleChange}
+                      />
+                      <span>위 개인정보 수집 및 이용에 동의합니다. (필수)</span>
+                    </label>
+                  </section>
+                </>
+              )}
 
               <button className="login-submit-button" type="submit" disabled={isSubmitting}>
                 {isSubmitting ? '처리 중' : mode === 'signup' ? '회원가입' : '로그인'}

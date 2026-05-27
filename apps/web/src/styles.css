@@ -4349,6 +4349,46 @@ img {
   box-shadow: 0 0 0 3px rgba(11, 100, 233, 0.12);
 }
 
+.authPrivacyBox {
+  padding: 14px;
+  border: 1px solid #cbd8e7;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.authPrivacyBox strong {
+  display: block;
+  color: #0f336f;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.authPrivacyBox p {
+  margin: 7px 0 10px;
+  color: #526174;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.55;
+}
+
+.authPrivacyBox label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: #10213d;
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.45;
+}
+
+.authPrivacyBox input {
+  width: 17px;
+  min-height: 17px;
+  flex: 0 0 17px;
+  padding: 0;
+  accent-color: #0b64e9;
+}
+
 .mvpPrimaryButton {
   width: 100%;
   min-height: 54px;

@@ -219,6 +219,71 @@
   box-shadow: 0 0 0 4px rgba(11, 100, 233, 0.13);
 }
 
+.login-privacy-box {
+  margin: -4px 0 22px;
+  padding: 18px 20px;
+  border: 1.5px solid #cbd8ea;
+  border-radius: 8px;
+  background: #f8fbff;
+  color: #17233b;
+}
+
+.login-privacy-box strong {
+  display: block;
+  margin-bottom: 12px;
+  color: #0f336f;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.login-privacy-box dl {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.login-privacy-box div {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.login-privacy-box dt,
+.login-privacy-box dd {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.login-privacy-box dt {
+  color: #0b64e9;
+  font-weight: 850;
+}
+
+.login-privacy-box dd {
+  color: #475569;
+  font-weight: 650;
+}
+
+.login-consent-row {
+  min-height: 44px;
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #111827;
+  font-size: 16px;
+  font-weight: 850;
+  line-height: 1.4;
+}
+
+.login-consent-row input {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 19px;
+  accent-color: #0b64e9;
+}
+
 .login-submit-button {
   width: 100%;
   height: 83px;
@@ -400,6 +465,20 @@
     height: 58px;
     padding: 0 18px;
     font-size: 16px;
+  }
+
+  .login-privacy-box {
+    padding: 16px;
+  }
+
+  .login-privacy-box div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .login-consent-row {
+    align-items: flex-start;
+    font-size: 15px;
   }
 
   .login-submit-button {
