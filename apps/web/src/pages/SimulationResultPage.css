@@ -859,6 +859,8 @@
 .profitPointIcon svg {
   width: 31px;
   height: 31px;
+  color: #ffffff;
+  stroke: currentColor;
 }
 
 .profitMetricTile.is-blue .profitMetricIcon {
@@ -935,14 +937,21 @@
 .profitReviewPointPanel article {
   display: grid;
   grid-template-columns: 76px minmax(0, 1fr);
-  gap: 14px;
+  gap: 0 14px;
+  align-items: center;
   border: 1px solid #dbe5f1;
   border-radius: 8px;
   padding: 24px;
   background: #ffffff;
 }
 
+.profitReviewPointPanel article .profitPointIcon {
+  grid-row: 1 / 3;
+  align-self: start;
+}
+
 .profitReviewPointPanel article strong {
+  align-self: end;
   color: #0f766e;
   font-size: 18px;
   font-weight: 950;
@@ -954,6 +963,8 @@
   font-size: 15px;
   font-weight: 700;
   line-height: 1.65;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
 }
 
 .profitReviewPointPanel article b {
