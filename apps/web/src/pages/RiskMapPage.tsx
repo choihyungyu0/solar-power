@@ -43,8 +43,6 @@ import {
 import {
   estimateAnnualGenerationKwh,
   estimateAnnualSavingsKrw,
-  estimateCapacityKw,
-  estimateInstallableArea,
 } from '../lib/solarSimulation';
 import {
   DEFAULT_SOLAR_PANEL_LAYOUT_OPTIONS,
@@ -288,13 +286,6 @@ const mvpSolarEstimate = {
   estimatedPanelCount: 218,
 };
 
-const mvpAssumptionPreview = {
-  installableAreaM2: estimateInstallableArea(mvpSolarEstimate.estimatedRoofAreaM2),
-  capacityKw: estimateCapacityKw(mvpSolarEstimate.estimatedInstallableAreaM2),
-  annualGenerationKwh: estimateAnnualGenerationKwh(mvpSolarEstimate.estimatedCapacityKw),
-  annualSavingsKrw: estimateAnnualSavingsKrw(mvpSolarEstimate.estimatedAnnualGenerationKwh),
-};
-
 const demoBuilding: SelectedBuilding = {
   apartmentName: '한빛마을 3단지',
   address: '경기도 성남시 분당구 예시로 123',
@@ -353,25 +344,6 @@ const solarFields = [
   ['단순 회수기간 추정', 'estimatedPaybackYears', 'years'],
 ] as const;
 
-const pvAnalysisResultCards = [
-  { label: '연간 발전량 예상', render: (result: PvAnalysisResult) => formatEstimatedKwh(result.annualGenerationKwh) },
-  { label: '설치용량 추정', render: (result: PvAnalysisResult) => formatScenarioKw(result.installKw) },
-  {
-    label: '1년차 총 경제효과 예상',
-    render: (result: PvAnalysisResult) => formatEstimatedKrw(result.firstYearTotalEconomicEffectKrw),
-  },
-  {
-    label: '자가소비 절감액 예상',
-    render: (result: PvAnalysisResult) => formatEstimatedKrw(result.firstYearSelfConsumptionSavingKrw),
-  },
-  {
-    label: '잉여전력 매전 추정',
-    render: (result: PvAnalysisResult) => formatEstimatedKrw(result.estimatedSurplusSalesKrw),
-  },
-  { label: '총 설치비 추정', render: (result: PvAnalysisResult) => formatEstimatedKrw(result.estimatedInvestmentKrw) },
-  { label: '탄소 저감량 추정', render: (result: PvAnalysisResult) => formatEstimatedKg(result.carbonReductionKg) },
-] as const;
-
 const panelTabs = [
   { id: 'risk', label: '위험 진단' },
   { id: 'solar', label: '태양광 설치' },
@@ -405,20 +377,12 @@ function formatEstimatedKwh(value: number) {
   return `예상 ${Math.round(value).toLocaleString('ko-KR')}kWh`;
 }
 
-function formatScenarioKw(value: number) {
-  return `시나리오 기준 ${value.toLocaleString('ko-KR')}kW`;
-}
-
 function formatEstimatedKw(value: number) {
   return `추정 ${value.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}kW`;
 }
 
 function formatEstimatedKrw(value: number) {
   return `추정 ${Math.round(value).toLocaleString('ko-KR')}원`;
-}
-
-function formatEstimatedKg(value: number) {
-  return `추정 ${Math.round(value).toLocaleString('ko-KR')}kg`;
 }
 
 function toFiniteNumber(value: unknown) {
@@ -647,18 +611,6 @@ function formatSimplePaybackYears(years: number | null) {
   return years === null
     ? '계산 불가'
     : `${years.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}년`;
-}
-
-function getSimplePaybackSourceText(source: SimplePaybackSource) {
-  if (source === 'climate-live') {
-    return 'climate.gg live 결과 기준';
-  }
-
-  if (source === 'static-poc') {
-    return 'climate.gg 샘플 POC 기준';
-  }
-
-  return '건물 footprint fallback 기준';
 }
 
 function formatEstimatedSquareMeters(value: number | null | undefined) {
@@ -1353,7 +1305,7 @@ function RiskMapPage() {
   const [activeTab, setActiveTab] = useState<RiskPanelTab>('risk');
   const activeTabRef = useRef<RiskPanelTab>('risk');
   const [pvAnalysisStatus, setPvAnalysisStatus] = useState<PvAnalysisStatus>('idle');
-  const [pvAnalysisMessage, setPvAnalysisMessage] = useState('');
+  const [, setPvAnalysisMessage] = useState('');
   const [pvAnalysisResponse, setPvAnalysisResponse] = useState<PvAnalysisProxyResponse | null>(null);
   const [isSolarPanelLayerVisible, setIsSolarPanelLayerVisible] = useState(false);
   const [isClimatePanelModeEnabled, setIsClimatePanelModeEnabled] = useState(false);
@@ -1490,10 +1442,6 @@ function RiskMapPage() {
   const isClimateBackendPvBypassEnabled = isExternalClimateBackendConfigured();
   const configuredClimateBackendBaseUrl = getConfiguredClimateBackendBaseUrl();
   const pvAnalysisResult = pvAnalysisResponse?.result ?? null;
-  const monthlyGenerationMaxKwh = Math.max(
-    1,
-    ...(pvAnalysisResult?.monthlyGenerationSeries.map((item) => item.generationKwh) ?? [0]),
-  );
   const buildingFootprintCoordinateSummary = useMemo(
     () => summarizeBuildingFootprintCoordinates(buildingFootprints),
     [buildingFootprints],
@@ -1703,14 +1651,6 @@ function RiskMapPage() {
       : isClimateBackendPvBypassEnabled
         ? false
         : pvAnalysisStatus === 'success' || pvAnalysisStatus === 'fallback';
-  const pvAnalysisPanelSourceLabel =
-    pvAnalysisStatus === 'backend-result'
-      ? 'Render 백엔드 결과 · 시나리오 산식 포함'
-      : pvAnalysisStatus === 'local-fallback'
-        ? '프론트엔드 시나리오 산식'
-        : pvAnalysisResponse?.ok
-          ? '경기 기후 플랫폼 응답 · 시나리오 기준'
-          : '대체 데모 산식 · 시나리오 기준';
   const climateExpectedRevenue = activeClimatePvOutput?.expected_revenue;
   const isSeparatePvCalculating = hasLiveClimatePanelLayout && pvAnalysisStatus === 'calculating';
   const isBuildingDataApiLoading =
@@ -1751,7 +1691,6 @@ function RiskMapPage() {
       ? climateBundlePaybackYears
       : pvResultPaybackYears ?? footprintPaybackYears;
   const simplePaybackText = formatSimplePaybackYears(simplePaybackYears);
-  const simplePaybackSourceText = getSimplePaybackSourceText(simplePaybackSource);
   const overviewRoofAreaM2 = liveRoofAreaM2 ?? activeClimateBundle?.roof_area_sqm_5186 ?? selectedBuilding.estimatedRoofAreaM2;
   const overviewShadingAverage = liveShadingAverage ?? activeClimateBundle?.shading.score_mean ?? null;
   const overviewPanelCount =
@@ -4157,18 +4096,7 @@ function RiskMapPage() {
                 ))}
               </dl>
 
-              <p className="selectionNote">{selectedBuilding.selectionNote}</p>
-              <p className={`selectionNote selectionFeedbackText is-${selectionFeedbackStatus}`}>
-                {selectionFeedbackMessage}
-              </p>
-              <p className="selectionNote">
-                지도 이동: {mapFocusStatus.message}
-                {mapFocusStatus.method ? ` (${mapFocusStatus.method})` : ''}
-                {mapFocusStatus.markerAdded ? ' · 선택 마커 표시' : ''}
-                {mapFocusStatus.selectionSource || mapFocusStatus.selectionMethod
-                  ? ` · 클릭 ${mapFocusStatus.selectionSource ?? '-'} / ${mapFocusStatus.selectionMethod ?? '-'}`
-                  : ''}
-              </p>
+              {hasSelectedBuilding && <p className="selectionNote selectionFeedbackText is-success">건물 선택 완료</p>}
 
               <button
                 className="riskAnalysisButton"
@@ -5145,102 +5073,14 @@ function RiskMapPage() {
                 {pvAnalysisStatus === 'calculating' ? '발전량 분석 중...' : '발전량 분석 실행'}
               </button>
 
-              {pvAnalysisMessage && (
-                <p
-                  className={`pvAnalysisStatusText is-${pvAnalysisStatus}`}
-                  role={pvAnalysisStatus === 'error' ? 'alert' : 'status'}
-                >
-                  {pvAnalysisMessage}
-                </p>
-              )}
-
-              {pvAnalysisResult && (
-                <section
-                  className={`pvAnalysisPanel ${pvAnalysisResponse?.ok ? '' : 'isFallback'}`}
-                  aria-label="발전량 분석 결과"
-                >
-                  <div className="pvAnalysisPanelHeader">
-                    <span>{pvAnalysisPanelSourceLabel}</span>
-                    <span hidden>
-                      {pvAnalysisResponse?.ok
-                        ? '경기 기후 플랫폼 응답 · 시나리오 기준'
-                        : '대체 데모 산식 · 시나리오 기준'}
-                    </span>
-                    <strong>발전량 분석 결과</strong>
-                    <p>
-                      발전량과 경제효과는 예상·추정 값입니다. 실제 절감액은 전기요금, 자가소비율, 설비 조건,
-                      정책 공고 확인 결과에 따라 달라질 수 있습니다.
-                    </p>
-                  </div>
-
-                  <div className="pvResultGrid">
-                    {pvAnalysisResultCards.map((card) => (
-                      <div key={card.label}>
-                        <span>{card.label}</span>
-                        <strong>{card.render(pvAnalysisResult)}</strong>
-                      </div>
-                    ))}
-                    <div>
-                      <span>단순 회수기간 추정</span>
-                      <strong>{simplePaybackText}</strong>
-                      <small>{simplePaybackSourceText}</small>
-                    </div>
-                  </div>
-
-                  {pvAnalysisResult.monthlyGenerationSeries.length > 0 && (
-                    <div className="pvMonthlyChart" aria-label="월별 발전량 예상 차트">
-                      <div className="pvMonthlyChartHeader">
-                        <strong>월별 발전량 예상</strong>
-                        <span>시나리오 기준</span>
-                      </div>
-                      <ol>
-                        {pvAnalysisResult.monthlyGenerationSeries.map((item) => (
-                          <li key={item.month}>
-                            <span>{item.month}월</span>
-                            <div aria-hidden="true">
-                              <i style={{ inlineSize: `${Math.max(3, (item.generationKwh / monthlyGenerationMaxKwh) * 100)}%` }} />
-                            </div>
-                            <strong>{Math.round(item.generationKwh).toLocaleString('ko-KR')}kWh</strong>
-                          </li>
-                        ))}
-                      </ol>
-                    </div>
-                  )}
-                </section>
-              )}
-
-              <label className="panelToggleRow">
-                <span>지도에 태양광 패널 표시</span>
-                <input
-                  type="checkbox"
-                  checked={isSolarPanelLayerVisible}
-                  onChange={(event) => {
-                    panelVisibilityUserOverrideRef.current = true;
-                    setIsSolarPanelLayerVisible(event.target.checked);
-                  }}
-                />
-              </label>
-
-              <button
-                className="riskAnalysisButton resultDetailButton"
-                type="button"
-                onClick={handleResultDetailRequest}
-              >
-                결과 상세보기
-              </button>
-
-              <p className="assumptionNote">
-                MVP 산식 기준: 설치가능면적 {Math.round(mvpAssumptionPreview.installableAreaM2).toLocaleString('ko-KR')}
-                ㎡, 용량 {Math.round(mvpAssumptionPreview.capacityKw).toLocaleString('ko-KR')}kW, 연 발전량{' '}
-                {Math.round(mvpAssumptionPreview.annualGenerationKwh).toLocaleString('ko-KR')}kWh, 연 절감액{' '}
-                {Math.round(mvpAssumptionPreview.annualSavingsKrw).toLocaleString('ko-KR')}원 예시입니다.
-              </p>
             </>
           )}
 
-          {analysisStatus && !shouldShowCompletedAnalysisActions && <p className="analysisStatus">{analysisStatus}</p>}
+          {analysisStatus && activeTab === 'risk' && !shouldShowCompletedAnalysisActions && (
+            <p className="analysisStatus">{analysisStatus}</p>
+          )}
 
-          {!shouldShowCompletedAnalysisActions && (
+          {activeTab === 'risk' && !shouldShowCompletedAnalysisActions && (
             <p className="riskDisclaimer">
               본 태양광 가상 설치는 브이월드 공간정보와 입력값 기반의 1차 추정입니다. 실제 설치 가능 여부,
               발전량, 절감액은 현장조사, 옥상 장애물, 음영, 구조안전성, 설비 사양, 관리주체 협의, 정책 공고
