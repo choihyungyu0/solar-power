@@ -40,12 +40,16 @@ function AuthPanel({ supabase, session, isConfigured, setupMessage }: AuthPanelP
       return;
     }
 
-    if (!email || !password) {
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+    const trimmedName = name.trim();
+
+    if (!trimmedEmail || !trimmedPassword) {
       setMessage('이메일과 비밀번호를 입력해 주세요.');
       return;
     }
 
-    if (mode === 'signup' && !name.trim()) {
+    if (mode === 'signup' && !trimmedName) {
       setMessage('회원가입을 위해 이름을 입력해 주세요.');
       return;
     }
@@ -61,13 +65,13 @@ function AuthPanel({ supabase, session, isConfigured, setupMessage }: AuthPanelP
     const response =
       mode === 'signup'
         ? await supabase.auth.signUp({
-            email,
-            password,
+            email: trimmedEmail,
+            password: trimmedPassword,
             options: {
-              data: createPrivacyConsentMetadata(name),
+              data: createPrivacyConsentMetadata(trimmedName),
             },
           })
-        : await supabase.auth.signInWithPassword({ email, password });
+        : await supabase.auth.signInWithPassword({ email: trimmedEmail, password: trimmedPassword });
 
     setIsSubmitting(false);
 
