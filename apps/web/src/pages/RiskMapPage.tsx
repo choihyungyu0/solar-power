@@ -5064,15 +5064,6 @@ function RiskMapPage() {
                 ))}
               </dl>
 
-              <button
-                className="riskAnalysisButton pvAnalysisButton"
-                type="button"
-                onClick={handlePvAnalysisRequest}
-                disabled={pvAnalysisStatus === 'calculating'}
-              >
-                {pvAnalysisStatus === 'calculating' ? '발전량 분석 중...' : '발전량 분석 실행'}
-              </button>
-
             </>
           )}
 
