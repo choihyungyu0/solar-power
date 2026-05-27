@@ -765,7 +765,7 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
     <div className="simulationResultPage">
       <SolarMateHeader onBeforeLogin={() => saveSimulationResultToSession(normalized.result)} />
 
-      <main className="simulationResultMain">
+      <main className={`simulationResultMain ${isProfitView ? 'isProfitReportMain' : ''}`}>
         <section className="resultTitleArea" aria-labelledby="simulation-result-title">
           <div>
             <span className={`resultSourcePill ${isDemo ? 'isDemo' : ''}`}>{sourceLabel}</span>
@@ -783,7 +783,11 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
           </div>
         </section>
 
-        <section className={`simulationResultLayout ${isDetailView ? '' : 'isSingleColumn'}`}>
+        <section
+          className={`simulationResultLayout ${isDetailView ? '' : 'isSingleColumn'} ${
+            isProfitView ? 'isProfitReportLayout' : ''
+          }`}
+        >
           <div className="simulationResultContent">
             {!isProfitView && <AddressSummary result={result} />}
 

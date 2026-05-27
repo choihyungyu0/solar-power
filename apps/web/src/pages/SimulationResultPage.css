@@ -119,6 +119,12 @@
   padding: 24px 0 28px;
 }
 
+.simulationResultMain.isProfitReportMain {
+  width: 100%;
+  max-width: none;
+  padding: 24px clamp(16px, 2.8vw, 48px) 28px;
+}
+
 .resultTitleArea {
   display: flex;
   align-items: flex-end;
@@ -895,12 +901,16 @@
   color: #071634;
   font-size: 24px;
   font-weight: 950;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
 }
 
 .profitMetricTile div > p {
   margin-top: 8px;
   color: #334155;
   font-size: 14px;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
 }
 
 .profitReviewPointPanel {
@@ -2591,6 +2601,11 @@
   justify-content: center;
 }
 
+.simulationResultLayout.isSingleColumn.isProfitReportLayout {
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: stretch;
+}
+
 .simulationResultLayout.isSingleColumn .simulationResultContent {
   width: 100%;
 }
@@ -2620,6 +2635,12 @@
 
 .analysisEmptyState .mapBackButton {
   justify-self: start;
+}
+
+@media (max-width: 1500px) {
+  .profitReportCardGrid.is-detail {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 1120px) {
@@ -2652,8 +2673,13 @@
 
   .profitReportCardGrid.is-summary,
   .profitReportCardGrid.is-detail,
-  .profitReviewPointPanel > div {
+  .profitReviewPointPanel > div,
+  .profitReportPagedView .subsidyRagSourceList li {
     grid-template-columns: 1fr;
+  }
+
+  .profitReportPagedView .subsidyRagSourceList details {
+    justify-self: start;
   }
 
   .profitMetricTile,
