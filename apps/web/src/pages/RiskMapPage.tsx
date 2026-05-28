@@ -406,13 +406,6 @@ function getStoredResultCoordinate(result: StoredSimulationResult): Coordinate |
   return longitude !== null && latitude !== null ? [longitude, latitude] : null;
 }
 
-const riskLegendItems = [
-  { label: '낮음', tone: 'low' },
-  { label: '보통', tone: 'medium' },
-  { label: '높음', tone: 'high' },
-  { label: '위험 높음', tone: 'critical' },
-];
-
 const buildingFields = [
   ['아파트명', 'apartmentName'],
   ['주소', 'address'],
@@ -3972,17 +3965,6 @@ function RiskMapPage() {
                 </select>
               </label>
 
-              <label>
-                <span>위험 등급 필터</span>
-                <select defaultValue="all">
-                  <option value="all">전체</option>
-                  <option value="low">낮음</option>
-                  <option value="medium">보통</option>
-                  <option value="high">높음</option>
-                  <option value="critical">위험 높음</option>
-                </select>
-              </label>
-
               {MAP_LEFT_CLICK_SELECT_ONLY && (
                 <div className="mapMouseHint" role="note">
                   왼쪽 클릭: 건물 선택 · 오른쪽 드래그: 지도 이동 · 휠: 확대/축소
@@ -4163,13 +4145,7 @@ function RiskMapPage() {
               </div>
             )}
 
-            <div className="riskLegend" aria-label="위험 등급 범례">
-              {riskLegendItems.map((item) => (
-                <span key={item.label}>
-                  <i className={`legendDot legendDot-${item.tone}`} aria-hidden="true" />
-                  {item.label}
-                </span>
-              ))}
+            <div className="riskLegend" aria-label="지도 표시 범례">
               <span>
                 <i className="legendDot legendDot-selectedFootprint" aria-hidden="true" />
                 빨강: 선택 건물 footprint
@@ -4193,7 +4169,6 @@ function RiskMapPage() {
               <span>시나리오 기준 · 현장조사 필요</span>
               <h2>선택 건물 정보</h2>
             </div>
-            <strong>{selectedBuilding.riskLevel}</strong>
           </div>
 
           <section className="riskProcessPanel" aria-label="전기세 위험 지도 진행 단계">
