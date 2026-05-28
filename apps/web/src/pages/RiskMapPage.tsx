@@ -422,11 +422,6 @@ const solarFields = [
   ['단순 회수기간 추정', 'estimatedPaybackYears', 'years'],
 ] as const;
 
-const panelTabs = [
-  { id: 'risk', label: '위험 진단' },
-  { id: 'solar', label: '태양광 설치' },
-] as const;
-
 function formatSolarValue(value: number, unit: (typeof solarFields)[number][2]) {
   if (unit === 'count') {
     return `예상 ${value.toLocaleString('ko-KR')}장`;
@@ -1389,8 +1384,9 @@ function RiskMapPage() {
       ? '이전 분석 결과를 불러왔습니다. 결과 상세보기에서 AI 수익 리포트와 AI 설치 적합도를 함께 확인할 수 있습니다.'
       : '',
   );
-  const [activeTab, setActiveTab] = useState<RiskPanelTab>(() => (initialRestoredSimulationResult ? 'solar' : 'risk'));
+  const [activeTab] = useState<RiskPanelTab>(() => (initialRestoredSimulationResult ? 'solar' : 'risk'));
   const activeTabRef = useRef<RiskPanelTab>(initialRestoredSimulationResult ? 'solar' : 'risk');
+  const [isSimulationLoading, setIsSimulationLoading] = useState(false);
   const [pvAnalysisStatus, setPvAnalysisStatus] = useState<PvAnalysisStatus>(() =>
     initialRestoredSimulationResult ? 'success' : 'idle',
   );
@@ -1879,7 +1875,7 @@ function RiskMapPage() {
     (hasLiveClimatePanelLayout && Boolean(activeAiSimulationResult)) ||
     hasRestoredCompletedResult;
   const shouldShowCompletedAnalysisActions =
-    activeTab === 'solar' && ((hasPvAnalysisCompleted && hasCompletedClimateAnalysis) || hasRestoredCompletedResult);
+    (hasPvAnalysisCompleted && hasCompletedClimateAnalysis) || hasRestoredCompletedResult;
   const panelSpacingText = `행 ${formatMeters(DEFAULT_SOLAR_PANEL_LAYOUT_OPTIONS.rowGapM)} · 열 ${formatMeters(
     DEFAULT_SOLAR_PANEL_LAYOUT_OPTIONS.colGapM,
   )}`;
@@ -3336,20 +3332,36 @@ function RiskMapPage() {
   ]);
 
   const handleRiskAnalysisRequest = useCallback(async () => {
-    setActiveTab('solar');
-
-    if (isClimateLiveBackendEnabled) {
-      setAnalysisStatus('선택 건물 기준 태양광 시뮬레이션과 백엔드 분석을 함께 실행합니다.');
-      await handleLiveClimateAnalysisRequest();
+    if (isSimulationLoading) {
       return;
     }
 
-    setAnalysisStatus('선택 건물 기준 태양광 시뮬레이션을 실행합니다.');
-    await handlePvAnalysisRequest();
+    setIsSimulationLoading(true);
+
+    try {
+      if (isClimateLiveBackendEnabled) {
+        setAnalysisStatus('선택 건물 기준 태양광 시뮬레이션과 백엔드 분석을 함께 실행합니다.');
+        await handleLiveClimateAnalysisRequest();
+        return;
+      }
+
+      setAnalysisStatus('선택 건물 기준 태양광 시뮬레이션을 실행합니다.');
+      await handlePvAnalysisRequest();
+    } catch (error) {
+      setPvAnalysisStatus('error');
+      setAnalysisStatus(
+        error instanceof Error
+          ? error.message
+          : '태양광 시뮬레이션 처리 중 오류가 발생했습니다.',
+      );
+    } finally {
+      setIsSimulationLoading(false);
+    }
   }, [
     handleLiveClimateAnalysisRequest,
     handlePvAnalysisRequest,
     isClimateLiveBackendEnabled,
+    isSimulationLoading,
   ]);
 
   const updateSelectionInputDiagnostics = useCallback(
@@ -3848,6 +3860,13 @@ function RiskMapPage() {
     <main className="riskMapPage">
       <SolarMateHeader />
 
+      {isSimulationLoading && (
+        <div className="simulationFullscreenLoading" role="status" aria-live="assertive" aria-label="태양광 시뮬레이션 로딩 중">
+          <span className="simulationFullscreenSpinner" aria-hidden="true" />
+          <strong>로딩 중</strong>
+        </div>
+      )}
+
       <section className="riskMapWorkspace" aria-label="전기세 위험 지도 작업 영역">
         <div className="riskMapCanvasColumn">
           <div
@@ -4133,22 +4152,7 @@ function RiskMapPage() {
             </ol>
           </section>
 
-          <div className="riskPanelTabs" role="tablist" aria-label="선택 건물 분석 탭">
-            {panelTabs.map((tab) => (
-              <button
-                key={tab.id}
-                className={activeTab === tab.id ? 'isActive' : ''}
-                type="button"
-                role="tab"
-                aria-selected={activeTab === tab.id}
-                onClick={() => setActiveTab(tab.id)}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {activeTab === 'risk' && (
+          {activeTab === 'risk' && !shouldShowCompletedAnalysisActions && (
             <>
               <dl className="buildingInfoList">
                 {buildingFields.map(([label, key]) => (
@@ -4166,12 +4170,14 @@ function RiskMapPage() {
                 type="button"
                 onClick={handleRiskAnalysisRequest}
                 disabled={
+                  isSimulationLoading ||
                   pvAnalysisStatus === 'calculating' ||
                   liveClimateStatus === 'loading' ||
                   liveShadingStatus === 'trying'
                 }
               >
-                {pvAnalysisStatus === 'calculating' ||
+                {isSimulationLoading ||
+                pvAnalysisStatus === 'calculating' ||
                 liveClimateStatus === 'loading' ||
                 liveShadingStatus === 'trying'
                   ? '태양광 시뮬레이션 분석 중...'

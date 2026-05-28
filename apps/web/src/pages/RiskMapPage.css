@@ -348,6 +348,37 @@
   animation: mapApiLoadingSpin 0.78s linear infinite;
 }
 
+.simulationFullscreenLoading {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 20px;
+  background: rgba(247, 251, 255, 0.96);
+  color: #075bd8;
+  text-align: center;
+  pointer-events: all;
+  backdrop-filter: blur(10px);
+}
+
+.simulationFullscreenSpinner {
+  width: 58px;
+  height: 58px;
+  border: 6px solid rgba(20, 120, 255, 0.16);
+  border-top-color: #1478ff;
+  border-radius: 999px;
+  animation: mapApiLoadingSpin 0.78s linear infinite;
+}
+
+.simulationFullscreenLoading strong {
+  color: #0f172a;
+  font-size: clamp(26px, 6vw, 42px);
+  font-weight: 950;
+  line-height: 1.2;
+}
+
 @keyframes mapApiLoadingSpin {
   to {
     transform: rotate(360deg);
@@ -1558,7 +1589,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mapApiLoadingSpinner {
+  .mapApiLoadingSpinner,
+  .simulationFullscreenSpinner {
     animation: none;
   }
 }
