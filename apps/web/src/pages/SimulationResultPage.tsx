@@ -1117,6 +1117,22 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
   const isDetailView = view === 'detail';
   const isProfitView = view === 'profit';
   const isSuitabilityView = view === 'suitability';
+  const resultPageLinks = [
+    {
+      href: '/simulation/profit-report',
+      label: 'AI 수익 리포트 보기',
+      icon: LuFileText,
+      className: 'isProfit',
+      isCurrent: isProfitView,
+    },
+    {
+      href: '/simulation/ai-suitability',
+      label: 'AI 설치 적합도 보기',
+      icon: LuShieldCheck,
+      className: 'isSuitability',
+      isCurrent: isSuitabilityView,
+    },
+  ];
   const defaultPageCopy = {
     detail: {
       title: '결과 상세보기',
@@ -1256,9 +1272,18 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
               <LuPrinter aria-hidden="true" />
               PDF로 저장
             </button>
-            <a className="mapBackButton" href={RISK_MAP_RESTORE_URL}>
-              지도 다시 보기
-            </a>
+            {resultPageLinks.map(({ href, label, icon: ResultPageIcon, className, isCurrent }) => (
+              <a
+                className={`resultPageSwitchButton ${className} ${isCurrent ? 'isCurrent' : ''}`}
+                href={href}
+                aria-current={isCurrent ? 'page' : undefined}
+                key={href}
+                onClick={() => saveSimulationResultToSession(result)}
+              >
+                <ResultPageIcon aria-hidden="true" />
+                {label}
+              </a>
+            ))}
           </div>
         </section>
 

@@ -97,11 +97,9 @@ import {
 import {
   buildStoredSimulationResult,
   readSimulationResultFromSession,
-  saveProfitReportToSession,
   saveSimulationResultToSession,
   type StoredSimulationResult,
 } from '../lib/simulationResultStorage';
-import { generateProfitReport } from '../lib/profitReportClient';
 import { isSimulationAiResult, type SimulationAiResult } from '../lib/simulationAiResult';
 import type {
   ClimateBundle,
@@ -1388,11 +1386,9 @@ function RiskMapPage() {
   );
   const [analysisStatus, setAnalysisStatus] = useState(() =>
     initialRestoredSimulationResult
-      ? '이전 분석 결과를 불러왔습니다. 결과 상세보기, AI 수익 리포트, AI 설치 적합도를 다시 열 수 있습니다.'
+      ? '이전 분석 결과를 불러왔습니다. 결과 상세보기에서 AI 수익 리포트와 AI 설치 적합도를 함께 확인할 수 있습니다.'
       : '',
   );
-  const [profitReportStatus, setProfitReportStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [profitReportMessage, setProfitReportMessage] = useState('');
   const [activeTab, setActiveTab] = useState<RiskPanelTab>(() => (initialRestoredSimulationResult ? 'solar' : 'risk'));
   const activeTabRef = useRef<RiskPanelTab>(initialRestoredSimulationResult ? 'solar' : 'risk');
   const [pvAnalysisStatus, setPvAnalysisStatus] = useState<PvAnalysisStatus>(() =>
@@ -2848,57 +2844,6 @@ function RiskMapPage() {
     window.location.assign('/simulation/result');
   }, [createCurrentStoredSimulationResult]);
 
-  const handleAiSuitabilityReportRequest = useCallback(() => {
-    const result = createCurrentStoredSimulationResult();
-    const didSave = saveSimulationResultToSession(result);
-
-    setAnalysisStatus(
-      didSave
-        ? 'AI 설치 적합도 화면으로 이동합니다.'
-        : '브라우저 저장소를 사용할 수 없어 AI 설치 적합도 화면에서 예시값을 표시합니다.',
-    );
-    window.location.assign('/simulation/ai-suitability');
-  }, [createCurrentStoredSimulationResult]);
-
-  const handleProfitReportRequest = useCallback(async () => {
-    if (!activeAiSimulationResult?.agentPayload?.reportInputMetrics) {
-      setProfitReportStatus('error');
-      setProfitReportMessage('AI 수익 리포트를 만들기 위한 분석 지표가 아직 없습니다. 먼저 발전량 분석을 실행해주세요.');
-      return;
-    }
-
-    const result = createCurrentStoredSimulationResult();
-
-    saveSimulationResultToSession(result);
-    setProfitReportStatus('loading');
-    setProfitReportMessage('AI 수익·보조금·금융 리포트를 생성하고 있습니다.');
-
-    const response = await generateProfitReport({
-      analysisResultId: result.analysisResultId,
-      aiSimulationResult: result.aiSimulationResult ?? activeAiSimulationResult,
-      agentPayload: result.agentPayload ?? activeAiSimulationResult.agentPayload,
-    });
-
-    if (response.ok) {
-      saveProfitReportToSession({
-        profitReportId: response.profitReportId,
-        report: response.report,
-        reportMarkdown: response.reportMarkdown,
-        dbSaveStatus: response.dbSaveStatus,
-      });
-      setProfitReportStatus('success');
-      setProfitReportMessage('AI 수익 리포트를 저장하고 리포트 화면으로 이동합니다.');
-      window.location.assign('/simulation/profit-report');
-      return;
-    }
-
-    setProfitReportStatus('error');
-    setProfitReportMessage(response.message ?? 'AI 수익 리포트를 생성하지 못했습니다. 잠시 후 다시 시도해주세요.');
-  }, [
-    activeAiSimulationResult,
-    createCurrentStoredSimulationResult,
-  ]);
-
   const handleClimatePanelModeChange = useCallback(
     (nextEnabled: boolean) => {
       setIsClimatePanelModeEnabled(nextEnabled);
@@ -4244,24 +4189,6 @@ function RiskMapPage() {
               >
                 결과 상세보기
               </button>
-              <button
-                className="riskAnalysisButton aiProfitReportButton"
-                type="button"
-                onClick={handleProfitReportRequest}
-                disabled={profitReportStatus === 'loading'}
-              >
-                {profitReportStatus === 'loading' ? 'AI 수익 리포트 생성 중...' : 'AI 수익 리포트 보기'}
-              </button>
-              <button
-                className="riskAnalysisButton aiSuitabilityDetailButton"
-                type="button"
-                onClick={handleAiSuitabilityReportRequest}
-              >
-                AI 설치 적합도 보기
-              </button>
-              {profitReportMessage && (
-                <p className={`aiProfitReportStatus is-${profitReportStatus}`}>{profitReportMessage}</p>
-              )}
             </section>
           )}
 
@@ -5154,18 +5081,9 @@ function RiskMapPage() {
                     금융기관 심사 확인이 필요합니다.
                   </p>
 
-                  <button
-                    className="riskAnalysisButton aiProfitReportButton"
-                    type="button"
-                    onClick={handleProfitReportRequest}
-                    disabled={profitReportStatus === 'loading'}
-                  >
-                    {profitReportStatus === 'loading' ? 'AI 수익 리포트 생성 중...' : 'AI 수익 리포트 보기'}
-                  </button>
-
-                  {profitReportMessage && (
-                    <p className={`aiProfitReportStatus is-${profitReportStatus}`}>{profitReportMessage}</p>
-                  )}
+                  <p className="aiProfitReportGuide">
+                    결과 상세보기 화면에서 AI 수익 리포트와 설치 적합도 상세 페이지를 함께 확인할 수 있습니다.
+                  </p>
                 </section>
               )}
 

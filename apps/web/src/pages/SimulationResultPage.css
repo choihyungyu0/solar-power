@@ -89,6 +89,7 @@
 .resultLoginButton,
 .resultHeaderCta,
 .mapBackButton,
+.resultPageSwitchButton,
 .consultApplyButton {
   display: inline-flex;
   align-items: center;
@@ -179,6 +180,34 @@
   border: 1px solid #d8e0ea;
   background: #ffffff;
   color: #1f3b66;
+}
+
+.resultPageSwitchButton {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #0758c7;
+  white-space: nowrap;
+}
+
+.resultPageSwitchButton.isProfit {
+  border-color: #67e8f9;
+  background: #ecfeff;
+  color: #0e7490;
+}
+
+.resultPageSwitchButton.isSuitability {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.resultPageSwitchButton.isCurrent {
+  box-shadow: inset 0 0 0 2px currentColor;
+}
+
+.resultPageSwitchButton svg {
+  width: 18px;
+  height: 18px;
 }
 
 .printSaveButton {
@@ -2075,7 +2104,8 @@
   }
 
   .printSaveButton,
-  .mapBackButton {
+  .mapBackButton,
+  .resultPageSwitchButton {
     flex: 1 1 170px;
   }
 
@@ -2555,6 +2585,16 @@
   .resultTitleArea {
     display: block;
     margin-bottom: 16px;
+  }
+
+  .resultTitleActions {
+    margin-top: 14px;
+    flex-wrap: wrap;
+  }
+
+  .printSaveButton,
+  .resultPageSwitchButton {
+    flex: 1 1 190px;
   }
 
   .resultSourcePill,
@@ -3475,6 +3515,7 @@
   .solarmate-header,
   .resultTitleActions,
   .printSaveButton,
+  .resultPageSwitchButton,
   .mapBackButton,
   .consultApplyButton,
   .resultCostPanel,
