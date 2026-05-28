@@ -24,77 +24,15 @@
   min-width: 0;
   display: inline-flex;
   align-items: center;
-  gap: 12px;
   width: fit-content;
   color: #10213d;
 }
 
-.solarmate-header-logo-mark {
-  width: 56px;
-  height: 52px;
-  position: relative;
-  flex: 0 0 auto;
-}
-
-.solarmate-header-logo-sun {
-  position: absolute;
-  top: 0;
-  left: 28px;
-  width: 23px;
-  height: 23px;
-  border: 4px solid #ffb800;
-  border-radius: 50%;
-  background: #ffffff;
-  box-shadow:
-    0 -12px 0 -8px #ffb800,
-    0 12px 0 -8px #ffb800,
-    12px 0 0 -8px #ffb800,
-    -12px 0 0 -8px #ffb800,
-    9px 9px 0 -8px #ffb800,
-    -9px 9px 0 -8px #ffb800,
-    9px -9px 0 -8px #ffb800,
-    -9px -9px 0 -8px #ffb800;
-}
-
-.solarmate-header-logo-panel {
-  position: absolute;
-  left: 0;
-  bottom: 2px;
-  width: 55px;
-  height: 30px;
-  padding: 3px;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 3px;
-  background: #075bbb;
-  clip-path: polygon(12% 0, 100% 0, 88% 100%, 0 100%);
-  transform: skewX(-16deg);
-}
-
-.solarmate-header-logo-panel span {
-  border: 1px solid rgba(255, 255, 255, 0.72);
-  background: #2f80ed;
-}
-
-.solarmate-header-logo-text {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-  line-height: 1;
-}
-
-.solarmate-header-logo-text strong {
-  color: #082a63;
-  font-size: 32px;
-  font-weight: 900;
-  letter-spacing: 0;
-}
-
-.solarmate-header-logo-text small {
-  color: #0b4a9f;
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0;
+.solarmate-header-logo-image {
+  width: 156px;
+  height: auto;
+  display: block;
+  object-fit: contain;
 }
 
 .solarmate-header-nav {
@@ -211,33 +149,8 @@
     padding: 14px 16px;
   }
 
-  .solarmate-header-logo {
-    gap: 10px;
-  }
-
-  .solarmate-header-logo-mark {
-    width: 50px;
-    height: 46px;
-  }
-
-  .solarmate-header-logo-sun {
-    left: 25px;
-    width: 20px;
-    height: 20px;
-    border-width: 3px;
-  }
-
-  .solarmate-header-logo-panel {
-    width: 48px;
-    height: 26px;
-  }
-
-  .solarmate-header-logo-text strong {
-    font-size: 24px;
-  }
-
-  .solarmate-header-logo-text small {
-    font-size: 12px;
+  .solarmate-header-logo-image {
+    width: 126px;
   }
 
   .solarmate-header-auth {

@@ -275,14 +275,8 @@ export default function AdminConsultationsPage() {
     <div className="admin-consultations-page">
       <header className="admin-consultations-header">
         <a className="admin-consultations-brand" href="/" aria-label="이코햇 홈">
-          <span className="admin-consultations-brand-mark" aria-hidden="true">
-            <span />
-            <span />
-          </span>
-          <span>
-            <strong>이코햇</strong>
-            <small>SolarMate Admin</small>
-          </span>
+          <img className="admin-consultations-brand-image" src="/assets/logo.png" alt="이코햇" />
+          <small>SolarMate Admin</small>
         </a>
 
         <div className="admin-consultations-header-actions">
@@ -316,7 +310,9 @@ export default function AdminConsultationsPage() {
               <LuRefreshCw aria-hidden="true" />
               {isLoading ? '불러오는 중' : '새로고침'}
             </button>
-            <p>키 저장 안 함 · 새로고침하면 다시 입력해야 합니다.</p>
+            <p>
+              관리자코드:<strong>admin</strong> · 키 저장 안 함 · 새로고침하면 다시 입력해야 합니다.
+            </p>
           </form>
         </section>
 

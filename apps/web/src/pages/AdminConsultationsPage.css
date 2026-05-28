@@ -26,59 +26,23 @@
   min-width: 0;
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   color: #0f172a;
   text-decoration: none;
 }
 
-.admin-consultations-brand-mark {
-  width: 45px;
-  height: 42px;
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-  flex: 0 0 auto;
-}
-
-.admin-consultations-brand-mark span:first-child {
-  width: 20px;
-  height: 20px;
-  position: absolute;
-  top: 0;
-  right: 5px;
-  border-radius: 50%;
-  background: #facc15;
-}
-
-.admin-consultations-brand-mark span:last-child {
-  width: 34px;
-  height: 24px;
-  border: 3px solid #1d4ed8;
-  border-radius: 5px;
-  background:
-    linear-gradient(90deg, transparent 31%, #1d4ed8 31% 38%, transparent 38% 62%, #1d4ed8 62% 69%, transparent 69%),
-    linear-gradient(0deg, transparent 44%, #1d4ed8 44% 56%, transparent 56%),
-    #60a5fa;
-  transform: skewX(-10deg);
-}
-
-.admin-consultations-brand strong,
-.admin-consultations-brand small {
+.admin-consultations-brand-image {
+  width: 148px;
+  height: auto;
   display: block;
-  line-height: 1;
-}
-
-.admin-consultations-brand strong {
-  color: #0f2a5f;
-  font-size: 25px;
-  font-weight: 950;
+  object-fit: contain;
 }
 
 .admin-consultations-brand small {
-  margin-top: 4px;
   color: #0e7490;
   font-size: 12px;
   font-weight: 900;
+  line-height: 1;
 }
 
 .admin-consultations-header-actions a {
@@ -196,6 +160,11 @@
   font-size: 12px;
   font-weight: 850;
   text-align: right;
+}
+
+.admin-consultations-key-form p strong {
+  color: #0f172a;
+  font-weight: 950;
 }
 
 .admin-consultations-summary {

@@ -175,11 +175,7 @@ function SolarFeedSection() {
         <div className="solarFooterInner">
           <div className="solarFooterBrand">
             <a className="solarFooterLogo" href="/" aria-label="이코햇 홈">
-              <span className="solarFooterLogoMark" aria-hidden="true" />
-              <span>
-                <strong>이코햇</strong>
-                <small>EcoHat</small>
-              </span>
+              <img className="solarFooterLogoImage" src="/assets/logo.png" alt="이코햇" />
             </a>
             <p>아파트 태양광 도입의 모든 과정을 쉽고 투명하게 도와드리는 파트너, 이코햇</p>
             <div className="solarSocialLinks" aria-label="소셜 링크 예시">

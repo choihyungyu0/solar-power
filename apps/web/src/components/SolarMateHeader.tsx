@@ -57,19 +57,7 @@ export default function SolarMateHeader({ variant = 'public', onBeforeLogin, onB
   return (
     <header className={`solarmate-header ${variant === 'member' ? 'is-member' : ''}`}>
       <NavLink className="solarmate-header-logo" to="/" aria-label="이코햇 홈">
-        <span className="solarmate-header-logo-mark" aria-hidden="true">
-          <span className="solarmate-header-logo-sun" />
-          <span className="solarmate-header-logo-panel">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <span key={index} />
-            ))}
-          </span>
-        </span>
-
-        <span className="solarmate-header-logo-text">
-          <strong>이코햇</strong>
-          <small>EcoHat</small>
-        </span>
+        <img className="solarmate-header-logo-image" src="/assets/logo.png" alt="이코햇" />
       </NavLink>
 
       <nav className="solarmate-header-nav" aria-label="주요 메뉴">
