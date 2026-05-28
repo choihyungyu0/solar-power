@@ -1,9 +1,10 @@
-import { useCallback, useState, type CSSProperties } from 'react';
+import { useCallback, useState, type CSSProperties, type FormEvent } from 'react';
 import type { IconType } from 'react-icons';
 import {
   LuArrowLeft,
   LuArrowRight,
   LuBadgeCheck,
+  LuBot,
   LuBuilding2,
   LuChartNoAxesColumnIncreasing,
   LuCheck,
@@ -19,8 +20,10 @@ import {
   LuPhone,
   LuPrinter,
   LuSearch,
+  LuSend,
   LuShieldCheck,
   LuSunMedium,
+  LuX,
   LuZap,
 } from 'react-icons/lu';
 import SolarMateHeader from '../components/SolarMateHeader';
@@ -34,11 +37,17 @@ import {
   type StoredProfitReport,
   type StoredSimulationResult,
 } from '../lib/simulationResultStorage';
+import { requestAiChatAnswer } from '../lib/aiChatClient';
 import './SimulationResultPage.css';
 
 type SectionColor = 'orange' | 'green' | 'blue';
 type ValueTone = 'orange' | 'green' | 'blue' | 'navy';
 type SimulationResultView = 'detail' | 'profit' | 'suitability';
+type ChatMessage = {
+  id: number;
+  role: 'assistant' | 'user';
+  text: string;
+};
 
 type SimulationResultPageProps = {
   view?: SimulationResultView;
@@ -406,6 +415,337 @@ function getCostItems(normalized: NormalizedResult) {
     { label: '자부담금', value: formatKrw(normalized.selfPaymentKrw), tone: 'orange' as ValueTone },
     { label: '대출한도 (75%)', value: formatKrw(normalized.loanLimitKrw), tone: 'navy' as ValueTone },
   ];
+}
+
+const aiConsultSuggestedQuestions = [
+  '왜 이 등급인가요?',
+  '자부담은 얼마인가요?',
+  '보조금 가능성은?',
+  '상담 전에 뭘 준비하나요?',
+];
+
+function includesAny(value: string, keywords: string[]) {
+  return keywords.some((keyword) => value.includes(keyword));
+}
+
+function getAiChatMetrics(normalized: NormalizedResult) {
+  const aiResult = normalized.result.aiSimulationResult;
+
+  return aiResult ? resolveAiReportMetrics(aiResult, normalized) : null;
+}
+
+function createInitialChatMessage(normalized: NormalizedResult) {
+  const metrics = getAiChatMetrics(normalized);
+  const suitabilityText = metrics
+    ? `AI 설치 적합도 ${metrics.suitabilityGrade}등급, ${metrics.suitabilityScore}점`
+    : 'AI 설치 적합도는 분석 결과가 있을 때 더 자세히 안내할 수 있습니다';
+
+  return `안녕하세요. ${normalized.result.building.name}의 저장된 분석값을 보고 상담해 드릴게요.\n현재 기준은 ${suitabilityText}이고, 예상 연간 발전량은 ${formatKwh(
+    normalized.annualGenerationKwh,
+  )}입니다.`;
+}
+
+function createDefaultChatAnswer(normalized: NormalizedResult, profitReport: StoredProfitReport | null) {
+  const metrics = getAiChatMetrics(normalized);
+  const reportSummary = profitReport?.report.reportNarrative?.summary;
+
+  if (reportSummary) {
+    return `${reportSummary}\n\n더 자세히 보려면 적합도, 보조금, 자부담, 회수기간, 준비서류 중 하나를 물어봐 주세요.`;
+  }
+
+  return `현재 분석값 기준으로 예상 발전량은 ${formatKwh(normalized.annualGenerationKwh)}, 예상 연간 절감/수익은 ${formatKrw(
+    normalized.annualSavingKrw,
+  )}, 회수기간은 ${formatPaybackYears(normalized.paybackYears)}입니다.${
+    metrics ? ` AI 적합도는 ${metrics.suitabilityGrade}등급 ${metrics.suitabilityScore}점입니다.` : ''
+  }\n\n실제 설치 가능 여부와 보조금은 현장조사와 실제 공고 확인이 필요합니다.`;
+}
+
+function createAiChatAnswer(
+  rawQuestion: string,
+  normalized: NormalizedResult,
+  profitReport: StoredProfitReport | null,
+) {
+  const question = rawQuestion.trim().toLowerCase();
+  const metrics = getAiChatMetrics(normalized);
+  const aiResult = normalized.result.aiSimulationResult;
+  const suitability = aiResult?.buildingSuitability ?? aiResult?.suitability;
+  const reasons = normalizeStringList(suitability?.reasons);
+  const warnings = normalizeStringList(suitability?.warnings);
+  const requiredDocuments = normalizeStringList(aiResult?.agentPayload.requiredDocuments);
+  const fieldCheckRequired = normalizeStringList(aiResult?.agentPayload.fieldCheckRequired);
+  const questionsToAskUser = normalizeStringList(aiResult?.agentPayload.questionsToAskUser);
+  const subsidyProgramName =
+    metrics?.subsidyProgramName ??
+    profitReport?.report.fourMetrics?.subsidyAndSuitability?.subsidyProgramName ??
+    '보조금 공고 확인 필요';
+
+  if (includesAny(question, ['적합', '등급', '점수', '왜'])) {
+    if (!metrics) {
+      return 'AI 설치 적합도 결과가 아직 없습니다. 지도에서 건물을 선택하고 발전량 분석을 먼저 실행하면 등급과 근거를 안내할 수 있습니다.';
+    }
+
+    const reasonText = reasons.length > 0 ? `\n주요 근거: ${reasons.slice(0, 3).join(', ')}` : '';
+    const warningText = warnings.length > 0 ? `\n주의 항목: ${warnings.slice(0, 3).join(', ')}` : '';
+
+    return `현재 AI 설치 적합도는 ${metrics.suitabilityGrade}등급, ${metrics.suitabilityScore}점입니다.\n${metrics.suitabilityLabel}${reasonText}${warningText}\n\n이 점수는 예상 발전량, 면적, 음영, 경제성 추정값을 함께 본 결과이며 실제 확정 판정은 현장 확인이 필요합니다.`;
+  }
+
+  if (includesAny(question, ['발전', '전기', 'kwh', '생산'])) {
+    const monthlyAverage = Math.round(normalized.annualGenerationKwh / 12);
+
+    return `예상 연간 발전량은 ${formatKwh(normalized.annualGenerationKwh)}입니다.\n월평균으로 단순 환산하면 약 ${monthlyAverage.toLocaleString(
+      'ko-KR',
+    )} kWh 수준입니다.\n\n데이터 소스는 ${getSourceLabel(normalized.result.source)}이며, 실제 발전량은 일사량, 음영, 설비 성능, 유지관리 상태에 따라 달라질 수 있습니다.`;
+  }
+
+  if (includesAny(question, ['자부담', '비용', '투자비', '설치비', '돈', '얼마'])) {
+    const installCost = metrics?.estimatedInstallCostKrw ?? normalized.investmentKrw;
+    const selfPayment = metrics?.selfPaymentEstimateKrw ?? normalized.selfPaymentKrw;
+
+    return `예상 설치비는 ${formatKrw(installCost)}이고, 보조금 추정 반영 후 예상 자부담은 ${formatKrw(
+      selfPayment,
+    )}입니다.\n정책융자 한도 예시는 ${formatKrw(normalized.loanLimitKrw)}로 잡혀 있습니다.\n\n실제 견적은 시공사 현장조사, 구조 검토, 전기공사 범위에 따라 달라집니다.`;
+  }
+
+  if (includesAny(question, ['보조금', '지원금', '정책', '공고'])) {
+    const subsidy = metrics?.subsidyEstimateKrw ?? normalized.subsidyMaxKrw;
+
+    return `현재 리포트는 ${subsidyProgramName} 기준으로 보조금 후보를 검토합니다.\n예상 보조금은 ${formatKrw(
+      subsidy,
+    )}로 표시되지만, 수급이 보장되는 것은 아닙니다.\n\n실제 지원 여부는 접수 기간, 예산 잔여분, 공동주택 조건, 서류 적합성 확인이 필요합니다.`;
+  }
+
+  if (includesAny(question, ['회수', '기간', 'payback', '수익'])) {
+    return `예상 회수기간은 ${formatPaybackYears(normalized.paybackYears)}입니다.\n예상 연간 절감/수익은 ${formatKrw(
+      normalized.annualSavingKrw,
+    )}이고, 20년 누적 절감/수익 추정은 ${formatKrw(normalized.twentyYearSavingKrw)}입니다.\n\n전기요금, 발전량, 유지관리비, 보조금 확정 여부에 따라 실제 회수기간은 달라질 수 있습니다.`;
+  }
+
+  if (includesAny(question, ['서류', '준비', '현장', '확인', '상담'])) {
+    const documents =
+      requiredDocuments.length > 0
+        ? requiredDocuments
+        : ['건축물대장 또는 건물 기본 정보', '공용부 전기요금 고지서', '옥상 평면도 또는 현장 사진'];
+    const checks =
+      fieldCheckRequired.length > 0
+        ? fieldCheckRequired
+        : ['옥상 장애물', '구조안전성', '방수 상태', '관리주체 협의', '실제 공고 및 예산 잔여 여부'];
+    const questions =
+      questionsToAskUser.length > 0
+        ? `\n상담 질문 예시: ${questionsToAskUser.slice(0, 2).join(' / ')}`
+        : '';
+
+    return `상담 전에는 ${documents.join(', ')}를 준비하면 좋습니다.\n현장 확인 항목은 ${checks.join(
+      ', ',
+    )}입니다.${questions}\n\n상담 신청을 남기면 이 분석값을 바탕으로 다음 검토 단계로 이어갈 수 있습니다.`;
+  }
+
+  return createDefaultChatAnswer(normalized, profitReport);
+}
+
+function buildAiChatContext(normalized: NormalizedResult, profitReport: StoredProfitReport | null) {
+  const metrics = getAiChatMetrics(normalized);
+  const aiResult = normalized.result.aiSimulationResult;
+  const suitability = aiResult?.buildingSuitability ?? aiResult?.suitability;
+
+  return {
+    building: normalized.result.building,
+    source: normalized.result.source,
+    analysisResultId: normalized.result.analysisResultId ?? null,
+    coreMetrics: {
+      panelCount: normalized.panelCount,
+      installCapacityKw: normalized.installCapacityKw,
+      annualGenerationKwh: normalized.annualGenerationKwh,
+      annualSavingKrw: normalized.annualSavingKrw,
+      paybackYears: normalized.paybackYears,
+      investmentKrw: normalized.investmentKrw,
+      subsidyMaxKrw: normalized.subsidyMaxKrw,
+      selfPaymentKrw: normalized.selfPaymentKrw,
+      loanLimitKrw: normalized.loanLimitKrw,
+      firstYearSavingKrw: normalized.firstYearSavingKrw,
+      twentyYearSavingKrw: normalized.twentyYearSavingKrw,
+    },
+    aiMetrics: metrics,
+    suitability: suitability
+      ? {
+          score: suitability.score,
+          grade: suitability.grade,
+          label: suitability.label,
+          reasons: suitability.reasons,
+          warnings: suitability.warnings,
+          cluster: suitability.cluster,
+        }
+      : null,
+    agentPayload: aiResult
+      ? {
+          summaryForCounselor: aiResult.agentPayload.summaryForCounselor,
+          fieldCheckRequired: aiResult.agentPayload.fieldCheckRequired,
+          questionsToAskUser: aiResult.agentPayload.questionsToAskUser,
+          requiredDocuments: aiResult.agentPayload.requiredDocuments,
+          nextStep: aiResult.agentPayload.nextStep,
+          subsidyRagInput: aiResult.agentPayload.subsidyRagInput,
+        }
+      : null,
+    profitReport: profitReport?.report
+      ? {
+          reportNarrative: profitReport.report.reportNarrative,
+          fourMetrics: profitReport.report.fourMetrics,
+          netInvestment: profitReport.report.netInvestment,
+          loanSupportScenario: profitReport.report.loanSupportScenario,
+          riskDisclaimers: profitReport.report.riskDisclaimers,
+          sourceReferences: profitReport.report.sourceReferences,
+        }
+      : null,
+  };
+}
+
+function AiConsultChatWidget({
+  normalized,
+  profitReport,
+  onConsultationApply,
+}: {
+  normalized: NormalizedResult;
+  profitReport: StoredProfitReport | null;
+  onConsultationApply: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [messageText, setMessageText] = useState('');
+  const [isAnswering, setIsAnswering] = useState(false);
+  const [chatStatusText, setChatStatusText] = useState('OpenAI 실시간 상담 연결 대기');
+  const [messages, setMessages] = useState<ChatMessage[]>(() => [
+    {
+      id: 1,
+      role: 'assistant',
+      text: createInitialChatMessage(normalized),
+    },
+  ]);
+
+  const sendMessage = useCallback(
+    async (nextText: string) => {
+      const trimmedText = nextText.trim();
+
+      if (!trimmedText || isAnswering) {
+        return;
+      }
+
+      const userMessageId = Date.now();
+      const assistantMessageId = userMessageId + 1;
+      const previousMessages = messages.slice(-8);
+
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        { id: userMessageId, role: 'user', text: trimmedText },
+        {
+          id: assistantMessageId,
+          role: 'assistant',
+          text: 'OpenAI로 답변을 생성하고 있습니다...',
+        },
+      ]);
+      setMessageText('');
+      setIsOpen(true);
+      setIsAnswering(true);
+      setChatStatusText('OpenAI 답변 생성 중');
+
+      const response = await requestAiChatAnswer({
+        question: trimmedText,
+        messages: previousMessages.map((message) => ({
+          role: message.role,
+          content: message.text,
+        })),
+        context: buildAiChatContext(normalized, profitReport),
+      });
+      const fallbackAnswer = createAiChatAnswer(trimmedText, normalized, profitReport);
+      const answer = response.ok
+        ? response.answer
+        : `${fallbackAnswer}\n\n(OpenAI 연결 실패: ${response.message})`;
+
+      setMessages((currentMessages) =>
+        currentMessages.map((message) =>
+          message.id === assistantMessageId
+            ? {
+                ...message,
+                text: answer,
+              }
+            : message,
+        ),
+      );
+      setChatStatusText(response.ok ? `OpenAI 응답 사용${response.model ? ` · ${response.model}` : ''}` : 'OpenAI 실패 · 분석값 답변 사용');
+      setIsAnswering(false);
+    },
+    [isAnswering, messages, normalized, profitReport],
+  );
+
+  const handleSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      sendMessage(messageText);
+    },
+    [messageText, sendMessage],
+  );
+
+  return (
+    <div className={`aiConsultChatWidget ${isOpen ? 'isOpen' : ''}`}>
+      {isOpen && (
+        <section className="aiConsultChatPanel" role="dialog" aria-label="AI 상담하기">
+          <header className="aiConsultChatHeader">
+            <div>
+              <span aria-hidden="true">
+                <LuBot />
+              </span>
+              <div>
+                <strong>AI 상담하기</strong>
+                <p>{chatStatusText}</p>
+              </div>
+            </div>
+            <button type="button" onClick={() => setIsOpen(false)} aria-label="AI 상담 닫기">
+              <LuX aria-hidden="true" />
+            </button>
+          </header>
+
+          <div className="aiConsultChatMessages" aria-live="polite">
+            {messages.map((message) => (
+              <p className={`aiConsultChatBubble is-${message.role}`} key={message.id}>
+                {message.text}
+              </p>
+            ))}
+          </div>
+
+          <div className="aiConsultQuickQuestions" aria-label="빠른 질문">
+            {aiConsultSuggestedQuestions.map((question) => (
+              <button type="button" key={question} onClick={() => sendMessage(question)} disabled={isAnswering}>
+                {question}
+              </button>
+            ))}
+          </div>
+
+          <form className="aiConsultChatForm" onSubmit={handleSubmit}>
+            <input
+              type="text"
+              value={messageText}
+              placeholder="궁금한 점을 입력하세요"
+              aria-label="AI 상담 질문"
+              onChange={(event) => setMessageText(event.target.value)}
+            />
+            <button type="submit" aria-label="질문 보내기" disabled={isAnswering}>
+              <LuSend aria-hidden="true" />
+            </button>
+          </form>
+
+          <div className="aiConsultChatFooter">
+            <span>예상·추정 답변입니다. 실제 공고와 현장 확인이 필요합니다.</span>
+            <button type="button" onClick={onConsultationApply}>
+              상담 신청하기
+            </button>
+          </div>
+        </section>
+      )}
+
+      <button className="aiConsultChatLauncher" type="button" onClick={() => setIsOpen((current) => !current)}>
+        <LuMessageCircle aria-hidden="true" />
+        AI 상담하기
+      </button>
+    </div>
+  );
 }
 
 function ProfitReportSection({
@@ -1013,6 +1353,12 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
           <p>예상 리포트를 바탕으로 실제 보조금, 대출 가능성, 현장 확인 항목을 상담에서 검토하세요.</p>
         </section>
       </main>
+
+      <AiConsultChatWidget
+        normalized={normalized}
+        profitReport={profitReport}
+        onConsultationApply={handleConsultationApply}
+      />
     </div>
   );
 }

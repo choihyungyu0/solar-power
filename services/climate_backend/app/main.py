@@ -1,3 +1,4 @@
+import json
 import os
 import traceback
 from hmac import compare_digest
@@ -12,6 +13,7 @@ from .profit_report_agent import build_profit_report, build_profit_report_markdo
 from .report_agent import build_solar_report
 from .schemas import (
     AdminConsultationStatusUpdateRequest,
+    AiChatRequest,
     ClimateAnalysisRequest,
     ConsultationRequest,
     GeometryDebugRequest,
@@ -110,6 +112,151 @@ def health():
 @app.get("/api/db-health")
 def db_health():
     return check_supabase_health()
+
+
+AI_CHAT_DEFAULT_MODEL = "gpt-4o-mini"
+AI_CHAT_UNSAFE_CLAIM_PATTERNS = (
+    "보장됩니다",
+    "확정됩니다",
+    "무조건",
+    "반드시 지원",
+    "반드시 승인",
+    "보조금 지급 확정",
+    "대출 승인 확정",
+    "절감 보장",
+    "수익 보장",
+)
+
+
+def _get_ai_chat_model() -> str:
+    return os.getenv("OPENAI_MODEL", "").strip() or AI_CHAT_DEFAULT_MODEL
+
+
+def _compact_json(value: Any, max_chars: int = 8000) -> str:
+    try:
+        text = json.dumps(value, ensure_ascii=False, default=str)
+    except TypeError:
+        text = json.dumps({"value": str(value)}, ensure_ascii=False)
+
+    if len(text) <= max_chars:
+        return text
+
+    return f"{text[:max_chars]}...[truncated]"
+
+
+def _sanitize_ai_chat_answer(answer: str) -> str:
+    safe_answer = answer.strip()
+
+    for pattern in AI_CHAT_UNSAFE_CLAIM_PATTERNS:
+        safe_answer = safe_answer.replace(pattern, "확인 필요합니다")
+
+    if "실제 공고" not in safe_answer and "현장" not in safe_answer:
+        safe_answer = f"{safe_answer}\n\n실제 지원 여부와 설치 가능성은 공고, 예산 잔여 여부, 현장조사 확인이 필요합니다."
+
+    return safe_answer
+
+
+@app.post("/api/ai-chat")
+async def create_ai_chat_answer(payload: AiChatRequest):
+    question = payload.question.strip()
+
+    if not question:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "message": "질문을 입력해 주세요.",
+                "errorType": "ValidationError",
+            },
+        )
+
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+
+    if not api_key:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "ok": False,
+                "message": "OpenAI API 키가 백엔드에 설정되지 않았습니다.",
+                "errorType": "OpenAINotConfigured",
+            },
+        )
+
+    try:
+        from openai import OpenAI
+    except Exception as error:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "ok": False,
+                "message": "OpenAI SDK를 불러오지 못했습니다.",
+                "errorType": type(error).__name__,
+                "reason": str(error),
+            },
+        )
+
+    context_text = _compact_json(payload.context)
+    conversation_messages = [
+        {
+            "role": message.role,
+            "content": message.content.strip()[:1200],
+        }
+        for message in payload.messages[-8:]
+        if message.content.strip()
+    ]
+    model = _get_ai_chat_model()
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "너는 이코햇 SolarMate의 태양광 도입 상담 AI다. "
+                "사용자가 보는 결과 상세, AI 수익 리포트, AI 설치 적합도 화면의 저장된 분석값만 근거로 답한다. "
+                "전문적이지만 짧고 쉬운 한국어로 답하고, 확정/보장 표현을 금지한다. "
+                "보조금, 발전량, 절감액, 대출, 회수기간은 항상 예상/추정이며 실제 공고와 현장조사가 필요하다고 말한다. "
+                "정책 신청 가능 여부를 확정하지 말고 다음 행동을 안내한다."
+            ),
+        },
+        {
+            "role": "system",
+            "content": f"현재 화면 분석 context(JSON): {context_text}",
+        },
+        *conversation_messages,
+        {
+            "role": "user",
+            "content": question,
+        },
+    ]
+
+    try:
+        client = OpenAI(api_key=api_key, timeout=20)
+        completion = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=0.25,
+            max_tokens=520,
+        )
+        answer = completion.choices[0].message.content if completion.choices else None
+
+        if not answer:
+            raise ValueError("OpenAI response was empty.")
+
+        return {
+            "ok": True,
+            "answer": _sanitize_ai_chat_answer(answer),
+            "source": "openai-chat-completions",
+            "llmEnabled": True,
+            "model": model,
+        }
+    except Exception as error:
+        return JSONResponse(
+            status_code=502,
+            content={
+                "ok": False,
+                "message": "AI 상담 답변을 생성하지 못했습니다.",
+                "errorType": type(error).__name__,
+                "reason": str(error),
+            },
+        )
 
 
 @app.post("/api/subsidy-rag/search")

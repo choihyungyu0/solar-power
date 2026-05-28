@@ -3103,6 +3103,290 @@
   justify-self: start;
 }
 
+.aiConsultChatWidget {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 140;
+  display: grid;
+  justify-items: end;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.aiConsultChatWidget > * {
+  pointer-events: auto;
+}
+
+.aiConsultChatLauncher {
+  min-height: 54px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 20px;
+  background: #1268ef;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 950;
+  box-shadow: 0 14px 30px rgba(18, 104, 239, 0.28);
+  cursor: pointer;
+}
+
+.aiConsultChatLauncher svg {
+  width: 21px;
+  height: 21px;
+  stroke-width: 2.5;
+}
+
+.aiConsultChatPanel {
+  width: min(408px, calc(100vw - 32px));
+  max-height: min(680px, calc(100vh - 112px));
+  display: grid;
+  grid-template-rows: auto minmax(180px, 1fr) auto auto auto;
+  overflow: hidden;
+  border: 1px solid #d8e4f3;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+}
+
+.aiConsultChatHeader {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e1e8f0;
+  background: #f8fbff;
+}
+
+.aiConsultChatHeader > div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.aiConsultChatHeader > div > span {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #e8f1ff;
+  color: #1268ef;
+  flex: 0 0 auto;
+}
+
+.aiConsultChatHeader svg {
+  width: 22px;
+  height: 22px;
+}
+
+.aiConsultChatHeader strong {
+  display: block;
+  color: #071634;
+  font-size: 18px;
+  font-weight: 950;
+  line-height: 1.1;
+}
+
+.aiConsultChatHeader p {
+  margin: 4px 0 0;
+  color: #536174;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.aiConsultChatHeader button {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #d6e0ec;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1f3155;
+  cursor: pointer;
+}
+
+.aiConsultChatMessages {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  overflow-y: auto;
+  padding: 16px;
+  background: #f6f8fb;
+}
+
+.aiConsultChatBubble {
+  width: fit-content;
+  max-width: 86%;
+  margin: 0;
+  border-radius: 8px;
+  padding: 11px 13px;
+  color: #172033;
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.55;
+  white-space: pre-line;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.aiConsultChatBubble.is-assistant {
+  justify-self: start;
+  border: 1px solid #dbe6f5;
+  background: #ffffff;
+}
+
+.aiConsultChatBubble.is-user {
+  justify-self: end;
+  background: #1268ef;
+  color: #ffffff;
+}
+
+.aiConsultQuickQuestions {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 10px 14px;
+  border-top: 1px solid #e1e8f0;
+  background: #ffffff;
+}
+
+.aiConsultQuickQuestions button {
+  min-height: 34px;
+  flex: 0 0 auto;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 0 11px;
+  background: #eff6ff;
+  color: #0758c7;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.aiConsultQuickQuestions button:disabled,
+.aiConsultChatForm button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.aiConsultChatForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid #edf1f6;
+  background: #ffffff;
+}
+
+.aiConsultChatForm input {
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid #d8e0ea;
+  border-radius: 8px;
+  padding: 0 13px;
+  color: #0f172a;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  outline: 0;
+}
+
+.aiConsultChatForm input:focus {
+  border-color: #1268ef;
+  box-shadow: 0 0 0 3px rgba(18, 104, 239, 0.12);
+}
+
+.aiConsultChatForm button {
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: #ffb800;
+  color: #071634;
+  cursor: pointer;
+}
+
+.aiConsultChatForm svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2.7;
+}
+
+.aiConsultChatFooter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 14px;
+  background: #ffffff;
+}
+
+.aiConsultChatFooter span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.aiConsultChatFooter button {
+  min-height: 36px;
+  border: 1px solid #16a34a;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #f0fdf4;
+  color: #15803d;
+  font-size: 12px;
+  font-weight: 950;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+@media (max-width: 540px) {
+  .aiConsultChatWidget {
+    right: 16px;
+    bottom: 16px;
+  }
+
+  .aiConsultChatLauncher {
+    min-height: 50px;
+    padding: 0 16px;
+    font-size: 15px;
+  }
+
+  .aiConsultChatPanel {
+    width: calc(100vw - 32px);
+    max-height: calc(100vh - 96px);
+  }
+
+  .aiConsultChatMessages {
+    padding: 14px;
+  }
+
+  .aiConsultChatBubble {
+    max-width: 92%;
+    font-size: 13px;
+  }
+
+  .aiConsultChatFooter {
+    grid-template-columns: 1fr;
+  }
+
+  .aiConsultChatFooter button {
+    width: 100%;
+  }
+}
+
 @media (max-width: 1500px) {
   .profitReportCardGrid.is-detail {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3198,7 +3482,8 @@
   .ecoCardGrid,
   .sectionResultImage,
   .mobileConsultButton,
-  .policyInfoBox button {
+  .policyInfoBox button,
+  .aiConsultChatWidget {
     display: none !important;
   }
 

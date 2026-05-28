@@ -77,6 +77,19 @@ class ProfitReportRequest(BaseModel):
     source: Optional[str] = None
 
 
+class AiChatMessage(BaseModel):
+    role: Literal["user", "assistant"] = "user"
+    content: str = Field(default="", max_length=1200)
+
+
+class AiChatRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=1200)
+    messages: list[AiChatMessage] = Field(default_factory=list, max_length=12)
+    context: dict[str, Any] = Field(default_factory=dict)
+    isTest: bool = False
+    source: Optional[str] = None
+
+
 class SubsidyRagSearchRequest(BaseModel):
     regionSido: Optional[str] = "경기도"
     regionSigungu: Optional[str] = None
