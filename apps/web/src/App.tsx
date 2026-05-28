@@ -1,10 +1,15 @@
-import { useEffect, useMemo, useRef, useState, type FocusEvent, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
-import { LuArrowRight } from 'react-icons/lu';
-import SafeLocalImage from './components/SafeLocalImage';
-import ServiceIntroSection from './components/ServiceIntroSection';
-import SolarMateHeader from './components/SolarMateHeader';
-import { readLandingAddressText, saveLandingAddressDraft } from './lib/addressDraft';
+import {
+  LuArrowRight,
+  LuFileText,
+  LuMapPin,
+  LuMenu,
+  LuMessageCircle,
+  LuPhone,
+  LuSunMedium,
+} from 'react-icons/lu';
+import { saveLandingAddressDraft } from './lib/addressDraft';
 import AdminConsultationsPage from './pages/AdminConsultationsPage';
 import ConsultationCompletePage from './pages/ConsultationCompletePage';
 import ConsultationPage from './pages/ConsultationPage';
@@ -23,46 +28,6 @@ import {
 } from './pages/SolarAdoptionFlowPages';
 import SimulationResultPage from './pages/SimulationResultPage';
 import SimulationSetupPage from './pages/SimulationSetupPage';
-
-type HeroAddressOption = {
-  apartmentName: string;
-  address: string;
-  region: string;
-  note: string;
-};
-
-const heroAddressOptions: HeroAddressOption[] = [
-  {
-    apartmentName: '동탄 반송 예시단지',
-    address: '경기도 화성시 동탄구 반송동 88-12',
-    region: '화성시 동탄구',
-    note: '경기도 서비스 지역',
-  },
-  {
-    apartmentName: '동탄능동마을 주공아파트',
-    address: '경기도 화성시 동탄구 능동 1083',
-    region: '화성시 동탄구',
-    note: '공동주택 후보',
-  },
-  {
-    apartmentName: '동탄능동마을주공아파트',
-    address: '경기도 화성시 동탄구 능동 1110',
-    region: '화성시 동탄구',
-    note: '공동주택 후보',
-  },
-  {
-    apartmentName: '능동역 이지더원 아파트',
-    address: '경기도 화성시 동탄구 능동 1109',
-    region: '화성시 동탄구',
-    note: '주소 검색 예시',
-  },
-  {
-    apartmentName: '수원 팔달 상담 예시 주소',
-    address: '경기도 수원시 팔달구 경수대로 464',
-    region: '수원시 팔달구',
-    note: '상담 흐름 예시',
-  },
-];
 
 function App() {
   return (
@@ -97,36 +62,12 @@ function App() {
 
 function HomePage() {
   const navigate = useNavigate();
-  const heroAddressInputRef = useRef<HTMLInputElement>(null);
-  const [heroAddress, setHeroAddress] = useState(() => readLandingAddressText());
-  const [isHeroAddressOptionsOpen, setIsHeroAddressOptionsOpen] = useState(false);
-
-  const filteredHeroAddressOptions = useMemo(() => {
-    const query = heroAddress.trim().toLowerCase();
-
-    if (!query) {
-      return heroAddressOptions;
-    }
-
-    return heroAddressOptions.filter((option) =>
-      `${option.apartmentName} ${option.address} ${option.region} ${option.note}`.toLowerCase().includes(query),
-    );
-  }, [heroAddress]);
-
-  useEffect(() => {
-    if (!window.location.hash) {
-      return;
-    }
-
-    window.requestAnimationFrame(() => {
-      document.querySelector(window.location.hash)?.scrollIntoView();
-    });
-  }, []);
+  const [heroAddress, setHeroAddress] = useState('경기도 화성시 동탄구 반송동 88-12');
 
   const handleHeroAddressSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const savedDraft = saveLandingAddressDraft(heroAddress, 'landing-hero');
+    const savedDraft = saveLandingAddressDraft(heroAddress || '경기도 화성시 동탄구 반송동 88-12', 'landing-hero');
 
     if (!savedDraft) {
       window.alert('주소를 입력해 주세요.');
@@ -136,112 +77,174 @@ function HomePage() {
     navigate('/risk-map');
   };
 
-  const handleHeroAddressBlur = (event: FocusEvent<HTMLDivElement>) => {
-    const nextFocusedElement = event.relatedTarget;
-
-    if (nextFocusedElement && event.currentTarget.contains(nextFocusedElement as Node)) {
-      return;
-    }
-
-    setIsHeroAddressOptionsOpen(false);
-  };
-
-  const handleHeroAddressOptionSelect = (address: string) => {
-    setHeroAddress(address);
-    setIsHeroAddressOptionsOpen(false);
-  };
-
-  const handleHeroQuickCheck = () => {
-    setIsHeroAddressOptionsOpen(true);
-    heroAddressInputRef.current?.focus();
-  };
+  const caseCards = [
+    {
+      tone: 'blue',
+      label: '사용자 테스트 후기',
+      quote: '복잡할 줄 알았는데, 단계별로 안내가 잘 되어 이해하기 쉬웠어요.',
+      name: '김ㅇㅇ 님',
+      saving: '1,120,000원',
+      point: '경제성',
+    },
+    {
+      tone: 'green',
+      label: '도입 사례 예시',
+      quote: '보조금 조건을 자동으로 매칭해줘서 신청 준비가 훨씬 빨라졌어요.',
+      name: '이ㅇㅇ 님',
+      saving: '980,000원',
+      point: '신속한 진행',
+    },
+    {
+      tone: 'orange',
+      label: '파일럿 피드백',
+      quote: '정보가 투명하게 정리되어 있어 의사결정에 큰 도움이 되었습니다.',
+      name: '박ㅇㅇ 님',
+      saving: '1,350,000원',
+      point: '정보 투명성',
+    },
+  ];
 
   return (
-    <main className="pageShell">
-      <div className="siteFrame">
-        <SolarMateHeader />
-
-        <section className="heroSection" aria-labelledby="hero-title">
-          <div className="heroCopy">
-            <h1 id="hero-title">
-              지역별 차등
-              <br />
-              전기요금제가 걱정된다면?
-            </h1>
-            <button className="heroCheckLink" type="button" onClick={handleHeroQuickCheck}>
-              태양광 설치 확인하기
-              <span aria-hidden="true">
+    <main className="pageShell solsolLanding">
+      <section className="solsolHero" aria-labelledby="solsol-hero-title">
+        <header className="solsolHeader" aria-label="쏠쏠햇 상단 메뉴">
+          <button className="solsolLogoButton" type="button" onClick={() => navigate('/')}>
+            <img src="/assets/logo.png" alt="쏠쏠햇" />
+          </button>
+          <nav className="solsolNav" aria-label="주요 메뉴">
+            <button className="isActive" type="button" onClick={() => navigate('/solar-adoption')}>
+              태양광 도입
+            </button>
+            <button type="button" onClick={() => navigate('/service')}>
+              서비스 소개
+            </button>
+            <button type="button" onClick={() => navigate('/notice')}>
+              공지사항
+            </button>
+            <button type="button" onClick={() => navigate('/consultation')}>
+              상담하기
+            </button>
+          </nav>
+          <div className="solsolHeaderActions">
+            <button className="solsolSignupButton" type="button" onClick={() => navigate('/login?mode=signup')}>
+              <span className="solsolAuthArrow" aria-hidden="true">
                 <LuArrowRight />
               </span>
+              회원가입
             </button>
-            <div className="heroActions">
-              <form className="heroAddressForm" onSubmit={handleHeroAddressSubmit}>
-                <div className="heroAddressCombobox" onBlur={handleHeroAddressBlur}>
-                  <label className="heroAddressField" htmlFor="hero-address-input">
-                    <span>아파트 주소</span>
-                    <input
-                      ref={heroAddressInputRef}
-                      id="hero-address-input"
-                      type="text"
-                      value={heroAddress}
-                      placeholder="예: 경기도 화성시 동탄구 반송동 88-12"
-                      autoComplete="off"
-                      aria-autocomplete="list"
-                      aria-controls="hero-address-options"
-                      aria-expanded={isHeroAddressOptionsOpen}
-                      onFocus={() => setIsHeroAddressOptionsOpen(true)}
-                      onChange={(event) => {
-                        setHeroAddress(event.target.value);
-                        setIsHeroAddressOptionsOpen(true);
-                      }}
-                    />
-                  </label>
+            <button className="solsolLoginButton" type="button" onClick={() => navigate('/login?mode=login')}>
+              <span className="solsolAuthArrow" aria-hidden="true">
+                <LuArrowRight />
+              </span>
+              로그인
+            </button>
+            <button className="solsolMenuButton" type="button" onClick={() => navigate('/service')} aria-label="메뉴 열기">
+              <LuMenu />
+            </button>
+          </div>
+        </header>
 
-                  {isHeroAddressOptionsOpen && (
-                    <div id="hero-address-options" className="heroAddressOptions" role="listbox" aria-label="아파트 주소 후보">
-                      <div className="heroAddressOptionsHeader">주소 후보</div>
-                      {filteredHeroAddressOptions.length > 0 ? (
-                        filteredHeroAddressOptions.map((option) => (
-                          <button
-                            key={option.address}
-                            className="heroAddressOption"
-                            type="button"
-                            role="option"
-                            aria-selected={heroAddress === option.address}
-                            onClick={() => handleHeroAddressOptionSelect(option.address)}
-                          >
-                            <span className="heroAddressOptionName">{option.apartmentName}</span>
-                            <span className="heroAddressOptionAddress">{option.address}</span>
-                            <span className="heroAddressOptionMeta">
-                              {option.region} · {option.note}
-                            </span>
-                          </button>
-                        ))
-                      ) : (
-                        <div className="heroAddressNoOption" role="status">
-                          <strong>입력한 주소로 계속 진행</strong>
-                          <span>정확한 매칭은 다음 지도 단계에서 확인합니다.</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
+        <div className="solsolHeroContent">
+          <h1 id="solsol-hero-title">
+            지역별 차등
+            <br />
+            전기요금제가
+            <br />
+            걱정된다면?
+          </h1>
+
+          <button className="solsolCheckLink" type="button" onClick={() => navigate('/solar-adoption/step-1')}>
+            태양광 설치 확인하기
+            <span aria-hidden="true">
+              <LuArrowRight />
+            </span>
+          </button>
+
+          <form className="solsolSearchForm" onSubmit={handleHeroAddressSubmit} aria-label="태양광 설치 주소 입력">
+            <label className="solsolSearchField">
+              <LuMapPin aria-hidden="true" />
+              <input
+                aria-label="아파트 주소"
+                value={heroAddress}
+                placeholder="주소를 입력하여 예상 발전량과 비용을 확인해 보세요"
+                onChange={(event) => setHeroAddress(event.target.value)}
+              />
+            </label>
+            <button className="solsolSearchButton" type="submit">
+              <LuSunMedium aria-hidden="true" />
+              <span>우리 아파트</span>
+              태양광 설치하기
+            </button>
+          </form>
+        </div>
+
+        <aside className="solsolQuickBar" aria-label="빠른 상담 메뉴">
+          <div className="solsolQuickBrand">
+            <img src="/assets/logo.png" alt="" aria-hidden="true" />
+            <span>빠른 상담</span>
+          </div>
+          <button type="button" onClick={() => navigate('/consultation')}>
+            <span>
+              <LuPhone aria-hidden="true" />
+            </span>
+            설치문의
+          </button>
+          <button type="button" onClick={() => navigate('/consultation')}>
+            <span>
+              <LuMessageCircle aria-hidden="true" />
+            </span>
+            상담톡
+          </button>
+          <button type="button" onClick={() => navigate('/service')}>
+            <span>
+              <LuFileText aria-hidden="true" />
+            </span>
+            사례보기
+          </button>
+          <button type="button" onClick={() => navigate('/consultation')}>
+            <span>
+              <LuMapPin aria-hidden="true" />
+            </span>
+            오시는 길
+          </button>
+          <div className="solsolQuickPhone">
+            <small>고객센터</small>
+            <strong>1544<br />5579</strong>
+          </div>
+        </aside>
+
+        <button className="solsolFloatingChat" type="button" onClick={() => navigate('/consultation')}>
+          <LuMessageCircle aria-hidden="true" />
+          상담하기
+        </button>
+      </section>
+
+      <section className="solsolCases" aria-labelledby="solsol-cases-title">
+        <div className="solsolCasesTop">
+          <h2 id="solsol-cases-title">도입 사례 시뮬레이션</h2>
+          <p>후기는 실제 고객 후기가 아닌 서비스 화면 예시 문구입니다.</p>
+        </div>
+
+        <div className="solsolCaseGrid">
+          {caseCards.map((card) => (
+            <article className={`solsolCaseCard ${card.tone}`} key={card.label}>
+              <span className="solsolCaseLabel">{card.label}</span>
+              <blockquote>“ {card.quote} ”</blockquote>
+              <strong className="solsolCaseName">{card.name}</strong>
+              <div className="solsolCaseStats">
+                <div>
+                  <span>예상 연간 절감액</span>
+                  <strong>{card.saving}</strong>
                 </div>
-              </form>
-            </div>
-          </div>
-
-          <div className="heroVisual" aria-label="도심 아파트 태양광 이미지">
-            <SafeLocalImage
-              src="/assets/landing/urban-solar-building.png"
-              fallbackSrc="/assets/landing/apartment-isometric.png"
-              alt="태양광 패널이 설치된 도심 아파트"
-              className="heroImage"
-            />
-          </div>
-        </section>
-
-        <ServiceIntroSection />
-      </div>
+                <div>
+                  <span>만족 포인트</span>
+                  <em>{card.point}</em>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
     </main>
   );
 }
