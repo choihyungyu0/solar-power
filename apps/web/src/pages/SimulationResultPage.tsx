@@ -1119,6 +1119,13 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
   const isSuitabilityView = view === 'suitability';
   const resultPageLinks = [
     {
+      href: '/simulation/result',
+      label: '상세결과보기',
+      icon: LuPanelTop,
+      className: 'isDetail',
+      isCurrent: isDetailView,
+    },
+    {
       href: '/simulation/profit-report',
       label: 'AI 수익 리포트 보기',
       icon: LuFileText,

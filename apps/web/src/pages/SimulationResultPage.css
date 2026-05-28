@@ -137,8 +137,11 @@
 .resultTitleActions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 10px;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .resultSourcePill {
@@ -187,6 +190,12 @@
   background: #eff6ff;
   color: #0758c7;
   white-space: nowrap;
+}
+
+.resultPageSwitchButton.isDetail {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 
 .resultPageSwitchButton.isProfit {
