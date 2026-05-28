@@ -2906,12 +2906,6 @@ function RiskMapPage() {
     createCurrentStoredSimulationResult,
   ]);
 
-  const handleRiskAnalysisRequest = useCallback(async () => {
-    setAnalysisStatus('선택 건물 기준 위험 분석과 발전량 분석을 함께 실행합니다.');
-    setActiveTab('solar');
-    await handlePvAnalysisRequest();
-  }, [handlePvAnalysisRequest]);
-
   const handleClimatePanelModeChange = useCallback(
     (nextEnabled: boolean) => {
       setIsClimatePanelModeEnabled(nextEnabled);
@@ -3401,6 +3395,23 @@ function RiskMapPage() {
     selectedBuildingId,
     selectedBuildingFootprint,
     selectedCoordinate,
+  ]);
+
+  const handleRiskAnalysisRequest = useCallback(async () => {
+    setActiveTab('solar');
+
+    if (isClimateLiveBackendEnabled) {
+      setAnalysisStatus('선택 건물 기준 태양광 시뮬레이션과 백엔드 분석을 함께 실행합니다.');
+      await handleLiveClimateAnalysisRequest();
+      return;
+    }
+
+    setAnalysisStatus('선택 건물 기준 태양광 시뮬레이션을 실행합니다.');
+    await handlePvAnalysisRequest();
+  }, [
+    handleLiveClimateAnalysisRequest,
+    handlePvAnalysisRequest,
+    isClimateLiveBackendEnabled,
   ]);
 
   const updateSelectionInputDiagnostics = useCallback(
@@ -4234,9 +4245,17 @@ function RiskMapPage() {
                 className="riskAnalysisButton"
                 type="button"
                 onClick={handleRiskAnalysisRequest}
-                disabled={pvAnalysisStatus === 'calculating'}
+                disabled={
+                  pvAnalysisStatus === 'calculating' ||
+                  liveClimateStatus === 'loading' ||
+                  liveShadingStatus === 'trying'
+                }
               >
-                {pvAnalysisStatus === 'calculating' ? '발전량 분석 중...' : '이 건물로 위험 분석 시작'}
+                {pvAnalysisStatus === 'calculating' ||
+                liveClimateStatus === 'loading' ||
+                liveShadingStatus === 'trying'
+                  ? '태양광 시뮬레이션 분석 중...'
+                  : '태양광 시뮬레이션 시작'}
               </button>
             </>
           )}
