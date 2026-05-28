@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FocusEvent, type FormEvent } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { LuSearch } from 'react-icons/lu';
 import SafeLocalImage from './components/SafeLocalImage';
@@ -23,6 +23,46 @@ import {
 } from './pages/SolarAdoptionFlowPages';
 import SimulationResultPage from './pages/SimulationResultPage';
 import SimulationSetupPage from './pages/SimulationSetupPage';
+
+type HeroAddressOption = {
+  apartmentName: string;
+  address: string;
+  region: string;
+  note: string;
+};
+
+const heroAddressOptions: HeroAddressOption[] = [
+  {
+    apartmentName: '동탄 반송 예시단지',
+    address: '경기도 화성시 동탄구 반송동 88-12',
+    region: '화성시 동탄구',
+    note: '경기도 서비스 지역',
+  },
+  {
+    apartmentName: '동탄능동마을 주공아파트',
+    address: '경기도 화성시 동탄구 능동 1083',
+    region: '화성시 동탄구',
+    note: '공동주택 후보',
+  },
+  {
+    apartmentName: '동탄능동마을주공아파트',
+    address: '경기도 화성시 동탄구 능동 1110',
+    region: '화성시 동탄구',
+    note: '공동주택 후보',
+  },
+  {
+    apartmentName: '능동역 이지더원 아파트',
+    address: '경기도 화성시 동탄구 능동 1109',
+    region: '화성시 동탄구',
+    note: '주소 검색 예시',
+  },
+  {
+    apartmentName: '수원 팔달 상담 예시 주소',
+    address: '경기도 수원시 팔달구 경수대로 464',
+    region: '수원시 팔달구',
+    note: '상담 흐름 예시',
+  },
+];
 
 function App() {
   return (
@@ -58,6 +98,19 @@ function App() {
 function HomePage() {
   const navigate = useNavigate();
   const [heroAddress, setHeroAddress] = useState(() => readLandingAddressText());
+  const [isHeroAddressOptionsOpen, setIsHeroAddressOptionsOpen] = useState(false);
+
+  const filteredHeroAddressOptions = useMemo(() => {
+    const query = heroAddress.trim().toLowerCase();
+
+    if (!query) {
+      return heroAddressOptions;
+    }
+
+    return heroAddressOptions.filter((option) =>
+      `${option.apartmentName} ${option.address} ${option.region} ${option.note}`.toLowerCase().includes(query),
+    );
+  }, [heroAddress]);
 
   useEffect(() => {
     if (!window.location.hash) {
@@ -82,6 +135,21 @@ function HomePage() {
     navigate('/risk-map');
   };
 
+  const handleHeroAddressBlur = (event: FocusEvent<HTMLDivElement>) => {
+    const nextFocusedElement = event.relatedTarget;
+
+    if (nextFocusedElement && event.currentTarget.contains(nextFocusedElement as Node)) {
+      return;
+    }
+
+    setIsHeroAddressOptionsOpen(false);
+  };
+
+  const handleHeroAddressOptionSelect = (address: string) => {
+    setHeroAddress(address);
+    setIsHeroAddressOptionsOpen(false);
+  };
+
   return (
     <main className="pageShell">
       <div className="siteFrame">
@@ -102,16 +170,55 @@ function HomePage() {
             </p>
             <div className="heroActions">
               <form className="heroAddressForm" onSubmit={handleHeroAddressSubmit}>
-                <label className="heroAddressField" htmlFor="hero-address-input">
-                  <span>아파트 주소</span>
-                  <input
-                    id="hero-address-input"
-                    type="text"
-                    value={heroAddress}
-                    placeholder="예: 경기도 화성시 동탄구 반송동 88-12"
-                    onChange={(event) => setHeroAddress(event.target.value)}
-                  />
-                </label>
+                <div className="heroAddressCombobox" onBlur={handleHeroAddressBlur}>
+                  <label className="heroAddressField" htmlFor="hero-address-input">
+                    <span>아파트 주소</span>
+                    <input
+                      id="hero-address-input"
+                      type="text"
+                      value={heroAddress}
+                      placeholder="예: 경기도 화성시 동탄구 반송동 88-12"
+                      autoComplete="off"
+                      aria-autocomplete="list"
+                      aria-controls="hero-address-options"
+                      aria-expanded={isHeroAddressOptionsOpen}
+                      onFocus={() => setIsHeroAddressOptionsOpen(true)}
+                      onChange={(event) => {
+                        setHeroAddress(event.target.value);
+                        setIsHeroAddressOptionsOpen(true);
+                      }}
+                    />
+                  </label>
+
+                  {isHeroAddressOptionsOpen && (
+                    <div id="hero-address-options" className="heroAddressOptions" role="listbox" aria-label="아파트 주소 후보">
+                      <div className="heroAddressOptionsHeader">주소 후보</div>
+                      {filteredHeroAddressOptions.length > 0 ? (
+                        filteredHeroAddressOptions.map((option) => (
+                          <button
+                            key={option.address}
+                            className="heroAddressOption"
+                            type="button"
+                            role="option"
+                            aria-selected={heroAddress === option.address}
+                            onClick={() => handleHeroAddressOptionSelect(option.address)}
+                          >
+                            <span className="heroAddressOptionName">{option.apartmentName}</span>
+                            <span className="heroAddressOptionAddress">{option.address}</span>
+                            <span className="heroAddressOptionMeta">
+                              {option.region} · {option.note}
+                            </span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="heroAddressNoOption" role="status">
+                          <strong>입력한 주소로 계속 진행</strong>
+                          <span>정확한 매칭은 다음 지도 단계에서 확인합니다.</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <button className="primaryButton" type="submit">
                   <LuSearch aria-hidden="true" />
                   우리 아파트 태양광 설치하기

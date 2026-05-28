@@ -402,7 +402,14 @@ img {
   min-width: min(100%, 590px);
 }
 
+.heroAddressCombobox {
+  position: relative;
+  min-width: 310px;
+  flex: 1 1 auto;
+}
+
 .heroAddressField {
+  width: 100%;
   min-width: 310px;
   flex: 1 1 auto;
   display: grid;
@@ -434,6 +441,101 @@ img {
 
 .heroAddressField input::placeholder {
   color: #94a3b8;
+}
+
+.heroAddressOptions {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  right: 0;
+  z-index: 12;
+  display: grid;
+  gap: 6px;
+  max-height: min(328px, calc(100vh - 220px));
+  overflow-y: auto;
+  border: 1px solid #dbe3ed;
+  border-radius: 16px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 20px 44px rgba(15, 23, 42, 0.16);
+  text-align: left;
+}
+
+.heroAddressOptionsHeader {
+  padding: 4px 6px 5px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.heroAddressOption {
+  width: 100%;
+  display: grid;
+  gap: 2px;
+  border-radius: 8px;
+  padding: 11px 12px;
+  background: transparent;
+  text-align: left;
+  transition:
+    background 0.16s ease,
+    transform 0.16s ease;
+}
+
+.heroAddressOption:hover,
+.heroAddressOption:focus-visible,
+.heroAddressOption[aria-selected="true"] {
+  background: #fff7d6;
+  outline: 0;
+}
+
+.heroAddressOption:focus-visible {
+  box-shadow: inset 0 0 0 2px #f2b600;
+}
+
+.heroAddressOptionName,
+.heroAddressOptionAddress,
+.heroAddressOptionMeta {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.heroAddressOptionName {
+  color: #111827;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.heroAddressOptionAddress {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.35;
+}
+
+.heroAddressOptionMeta {
+  color: #718096;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.heroAddressNoOption {
+  display: grid;
+  gap: 3px;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8fafc;
+  color: #334155;
+}
+
+.heroAddressNoOption strong {
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.heroAddressNoOption span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .heroAddressForm .primaryButton {
@@ -3923,8 +4025,19 @@ img {
     flex-direction: column;
   }
 
+  .heroAddressCombobox {
+    width: 100%;
+    min-width: 0;
+  }
+
   .heroAddressField {
     min-width: 0;
+  }
+
+  .heroAddressOptions {
+    position: static;
+    max-height: 296px;
+    margin-top: 8px;
   }
 
   .heroAddressForm .primaryButton {
