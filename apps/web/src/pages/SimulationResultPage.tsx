@@ -45,6 +45,7 @@ type SimulationResultPageProps = {
 };
 
 const AI_SUITABILITY_PAGE_COUNT = 3;
+const RISK_MAP_RESTORE_URL = '/risk-map?restore=analysis';
 
 type ResultMetric = {
   label: string;
@@ -915,7 +916,7 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
               <LuPrinter aria-hidden="true" />
               PDF로 저장
             </button>
-            <a className="mapBackButton" href="/risk-map">
+            <a className="mapBackButton" href={RISK_MAP_RESTORE_URL}>
               지도 다시 보기
             </a>
           </div>
@@ -1021,7 +1022,7 @@ function AnalysisEmptyState({ title, message }: { title: string; message: string
     <section className="analysisEmptyState" aria-label="분석 결과 없음">
       <strong>{title}</strong>
       <p>{message}</p>
-      <a className="mapBackButton" href="/risk-map">
+      <a className="mapBackButton" href={RISK_MAP_RESTORE_URL}>
         지도에서 분석하기
       </a>
     </section>

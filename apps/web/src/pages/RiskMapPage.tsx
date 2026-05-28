@@ -96,8 +96,10 @@ import {
 } from '../lib/vworldFeatureQuery';
 import {
   buildStoredSimulationResult,
+  readSimulationResultFromSession,
   saveProfitReportToSession,
   saveSimulationResultToSession,
+  type StoredSimulationResult,
 } from '../lib/simulationResultStorage';
 import { generateProfitReport } from '../lib/profitReportClient';
 import { isSimulationAiResult, type SimulationAiResult } from '../lib/simulationAiResult';
@@ -317,6 +319,91 @@ function createInitialSelectedBuilding() {
     simulationNote:
       '아직 실제 건물 polygon이 선택되지 않았습니다. 주소 검색 또는 지도 클릭 후 예상·추정 분석이 실제 건물 데이터에 반영됩니다.',
   };
+}
+
+function shouldRestoreAnalysisActionsFromUrl() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return new URLSearchParams(window.location.search).get('restore') === 'analysis';
+}
+
+function readRestoredSimulationResult() {
+  if (!shouldRestoreAnalysisActionsFromUrl()) {
+    return null;
+  }
+
+  return readSimulationResultFromSession();
+}
+
+function getStoredResultSourceText(result: StoredSimulationResult) {
+  if (result.source === 'climate-live-hybrid') {
+    return 'climate.gg 라이브 분석 결과';
+  }
+
+  if (result.source === 'pv-analysis') {
+    return 'PV 발전량 분석 결과';
+  }
+
+  return '저장된 시나리오 분석 결과';
+}
+
+function createSelectedBuildingFromStoredResult(result: StoredSimulationResult): SelectedBuilding {
+  const solar = result.solar;
+  const installCapacityKw = toFiniteNumber(solar.installCapacityKw) ?? demoBuilding.estimatedCapacityKw;
+  const panelCount = toFiniteNumber(solar.panelCount) ?? demoBuilding.estimatedPanelCount;
+
+  return {
+    ...demoBuilding,
+    apartmentName: result.building.name || '선택 아파트',
+    address: result.building.roadAddress || result.building.jibunAddress || '주소 확인 필요',
+    currentMonthlyFee: '상담 입력 전 확인 필요',
+    monthlyUsage: '상담 입력 전 확인 필요',
+    riskLevel: '보통',
+    fiveYearExtraCost: '상담 입력 후 추정',
+    solarPotential: '분석 완료',
+    subsidyReview: '실제 공고 확인 필요',
+    selectionNote: '이전 분석 결과에서 돌아왔습니다. 아래 버튼으로 상세 결과와 AI 리포트를 다시 확인할 수 있습니다.',
+    estimatedRoofAreaM2: Math.round(Math.max(1, installCapacityKw) * 8),
+    estimatedInstallableAreaM2: Math.round(Math.max(1, panelCount) * 3.2),
+    estimatedCapacityKw: installCapacityKw,
+    estimatedAnnualGenerationKwh: toFiniteNumber(solar.annualGenerationKwh) ?? demoBuilding.estimatedAnnualGenerationKwh,
+    estimatedAnnualSavingsKrw: toFiniteNumber(solar.annualSavingKrw) ?? demoBuilding.estimatedAnnualSavingsKrw,
+    estimatedPaybackYears: toFiniteNumber(solar.paybackYears) ?? demoBuilding.estimatedPaybackYears,
+    estimatedPanelCount: Math.round(panelCount),
+    simulationConfidence: getStoredResultSourceText(result),
+    simulationNote:
+      '브라우저에 저장된 최신 분석 스냅샷입니다. 실제 설치 가능 여부는 현장조사, 구조안전성, 실제 공고 확인이 필요합니다.',
+  };
+}
+
+function createRestoredBuildingFootprint(result: StoredSimulationResult): SelectedBuildingFootprint {
+  return {
+    buildingId: result.building.buildingId || 'restored-building',
+    analysisSessionId: result.analysisResultId ?? `restored-${result.storedAt || 'session'}`,
+    address: result.building.roadAddress || result.building.jibunAddress || '주소 확인 필요',
+    name: result.building.name || '선택 아파트',
+    geometryType: 'Polygon',
+    selectionMode: 'nearest',
+    distanceMeters: null,
+  };
+}
+
+function getStoredResultCoordinate(result: StoredSimulationResult): Coordinate | null {
+  const location =
+    result.agentPayload?.subsidyRagInput?.location ??
+    result.aiSimulationResult?.agentPayload?.subsidyRagInput?.location;
+
+  if (typeof location !== 'object' || location === null) {
+    return null;
+  }
+
+  const locationRecord = location as { longitude?: unknown; latitude?: unknown };
+  const longitude = toFiniteNumber(locationRecord.longitude);
+  const latitude = toFiniteNumber(locationRecord.latitude);
+
+  return longitude !== null && latitude !== null ? [longitude, latitude] : null;
 }
 
 const riskLegendItems = [
@@ -1287,11 +1374,18 @@ function getBuildingSourceRequestPath(source: string, diagnostics?: BuildingFoot
 }
 
 function RiskMapPage() {
+  const initialRestoredSimulationResult = useMemo(readRestoredSimulationResult, []);
+  const [restoredCompletedResult, setRestoredCompletedResult] =
+    useState<StoredSimulationResult | null>(initialRestoredSimulationResult);
   const [mapStatus, setMapStatus] = useState<MapLoadStatus>('loading');
   const [mapErrorMessage, setMapErrorMessage] = useState(
     '브이월드 3D 지도 로드에 실패했습니다. API 키, SDK URL, 허용 도메인을 확인해주세요.',
   );
-  const [selectedBuilding, setSelectedBuilding] = useState<SelectedBuilding>(createInitialSelectedBuilding);
+  const [selectedBuilding, setSelectedBuilding] = useState<SelectedBuilding>(() =>
+    initialRestoredSimulationResult
+      ? createSelectedBuildingFromStoredResult(initialRestoredSimulationResult)
+      : createInitialSelectedBuilding(),
+  );
   const [addressSearchText, setAddressSearchText] = useState(() => readLandingAddressDraft()?.address ?? '');
   const [addressSearchStatus, setAddressSearchStatus] = useState<AddressSearchStatus>('idle');
   const [addressSearchMessage, setAddressSearchMessage] = useState(() =>
@@ -1299,12 +1393,18 @@ function RiskMapPage() {
       ? '첫 화면에서 입력한 주소를 불러왔습니다. 건물 데이터가 준비되면 검색할 수 있습니다.'
       : '',
   );
-  const [analysisStatus, setAnalysisStatus] = useState('');
+  const [analysisStatus, setAnalysisStatus] = useState(() =>
+    initialRestoredSimulationResult
+      ? '이전 분석 결과를 불러왔습니다. 결과 상세보기, AI 수익 리포트, AI 설치 적합도를 다시 열 수 있습니다.'
+      : '',
+  );
   const [profitReportStatus, setProfitReportStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [profitReportMessage, setProfitReportMessage] = useState('');
-  const [activeTab, setActiveTab] = useState<RiskPanelTab>('risk');
-  const activeTabRef = useRef<RiskPanelTab>('risk');
-  const [pvAnalysisStatus, setPvAnalysisStatus] = useState<PvAnalysisStatus>('idle');
+  const [activeTab, setActiveTab] = useState<RiskPanelTab>(() => (initialRestoredSimulationResult ? 'solar' : 'risk'));
+  const activeTabRef = useRef<RiskPanelTab>(initialRestoredSimulationResult ? 'solar' : 'risk');
+  const [pvAnalysisStatus, setPvAnalysisStatus] = useState<PvAnalysisStatus>(() =>
+    initialRestoredSimulationResult ? 'success' : 'idle',
+  );
   const [, setPvAnalysisMessage] = useState('');
   const [pvAnalysisResponse, setPvAnalysisResponse] = useState<PvAnalysisProxyResponse | null>(null);
   const [isSolarPanelLayerVisible, setIsSolarPanelLayerVisible] = useState(false);
@@ -1324,7 +1424,9 @@ function RiskMapPage() {
   const [liveClimatePanelGeojson, setLiveClimatePanelGeojson] = useState<ClimatePanelsGeoJson | null>(null);
   const [liveBackendRoofPolygon4326, setLiveBackendRoofPolygon4326] = useState<ClimateRoofPolygon4326 | null>(null);
   const [liveClimateDiagnostics, setLiveClimateDiagnostics] = useState<ClimateLiveAnalysisDiagnostics | null>(null);
-  const [aiSimulationResult, setAiSimulationResult] = useState<SimulationAiResult | null>(null);
+  const [aiSimulationResult, setAiSimulationResult] = useState<SimulationAiResult | null>(
+    initialRestoredSimulationResult?.aiSimulationResult ?? null,
+  );
   const [cameraMoveStatus, setCameraMoveStatus] = useState('climate.gg POC 패널 위치 계산 대기');
   const panelVisibilityUserOverrideRef = useRef(false);
   const climateFocusPocRef = useRef<string | null>(null);
@@ -1349,17 +1451,33 @@ function RiskMapPage() {
     lastPointerMovePx: 0,
     lastSelectionIgnoredBecauseDrag: false,
   });
-  const [selectedCoordinate, setSelectedCoordinate] = useState<Coordinate | null>(null);
-  const [selectionMode, setSelectionMode] = useState<SelectionMode>('screen-fallback');
-  const [geometryQueryStatus, setGeometryQueryStatus] = useState<GeometryQueryStatus>('idle');
-  const [geometryQueryMessage, setGeometryQueryMessage] = useState('건물을 클릭하면 브이월드 공간정보 조회를 시도합니다.');
-  const [selectionFeedbackStatus, setSelectionFeedbackStatus] = useState<SelectionFeedbackStatus>('idle');
-  const [selectionFeedbackMessage, setSelectionFeedbackMessage] = useState('지도에서 건물을 클릭해 선택하세요.');
+  const [selectedCoordinate, setSelectedCoordinate] = useState<Coordinate | null>(() =>
+    initialRestoredSimulationResult ? getStoredResultCoordinate(initialRestoredSimulationResult) : null,
+  );
+  const [selectionMode, setSelectionMode] = useState<SelectionMode>(() =>
+    initialRestoredSimulationResult ? 'building_footprint' : 'screen-fallback',
+  );
+  const [geometryQueryStatus, setGeometryQueryStatus] = useState<GeometryQueryStatus>(() =>
+    initialRestoredSimulationResult ? 'found' : 'idle',
+  );
+  const [geometryQueryMessage, setGeometryQueryMessage] = useState(() =>
+    initialRestoredSimulationResult
+      ? '이전 분석 결과의 선택 건물 정보를 불러왔습니다.'
+      : '건물을 클릭하면 브이월드 공간정보 조회를 시도합니다.',
+  );
+  const [selectionFeedbackStatus, setSelectionFeedbackStatus] = useState<SelectionFeedbackStatus>(() =>
+    initialRestoredSimulationResult ? 'success' : 'idle',
+  );
+  const [selectionFeedbackMessage, setSelectionFeedbackMessage] = useState(() =>
+    initialRestoredSimulationResult ? '이전 분석 결과 불러오기 완료' : '지도에서 건물을 클릭해 선택하세요.',
+  );
   const [selectionClickDiagnostics, setSelectionClickDiagnostics] = useState<SelectionClickDiagnostics>(
     createSelectionClickDiagnostics,
   );
   const [mapFocusStatus, setMapFocusStatus] = useState<MapFocusStatus>({
-    message: '지도에서 건물을 클릭하면 해당 위치로 시점 이동을 시도합니다.',
+    message: initialRestoredSimulationResult
+      ? '이전 분석 결과의 지도 화면으로 돌아왔습니다.'
+      : '지도에서 건물을 클릭하면 해당 위치로 시점 이동을 시도합니다.',
     moved: false,
     markerAdded: false,
   });
@@ -1376,7 +1494,9 @@ function RiskMapPage() {
   );
   const buildingFootprintUrlRef = useRef(buildingFootprintLoadState.url);
   const buildingFootprintFeatureCountRef = useRef(0);
-  const [selectedBuildingFootprint, setSelectedBuildingFootprint] = useState<SelectedBuildingFootprint>(null);
+  const [selectedBuildingFootprint, setSelectedBuildingFootprint] = useState<SelectedBuildingFootprint>(() =>
+    initialRestoredSimulationResult ? createRestoredBuildingFootprint(initialRestoredSimulationResult) : null,
+  );
   const [selectedBuildingFeature, setSelectedBuildingFeature] = useState<SelectableBuildingFeature | null>(null);
   const [selectedBuildingGeometry, setSelectedBuildingGeometry] = useState<PolygonCoordinates | null>(null);
   const [selectedRoofPolygon, setSelectedRoofPolygon] = useState<PolygonCoordinates | null>(null);
@@ -1764,9 +1884,13 @@ function RiskMapPage() {
         ['단순 회수기간 추정', simplePaybackText],
       ]
     : [];
+  const hasRestoredCompletedResult = Boolean(restoredCompletedResult);
   const hasCompletedClimateAnalysis =
-    !isClimateLiveBackendEnabled || (hasLiveClimatePanelLayout && Boolean(activeAiSimulationResult));
-  const shouldShowCompletedAnalysisActions = activeTab === 'solar' && hasPvAnalysisCompleted && hasCompletedClimateAnalysis;
+    !isClimateLiveBackendEnabled ||
+    (hasLiveClimatePanelLayout && Boolean(activeAiSimulationResult)) ||
+    hasRestoredCompletedResult;
+  const shouldShowCompletedAnalysisActions =
+    activeTab === 'solar' && ((hasPvAnalysisCompleted && hasCompletedClimateAnalysis) || hasRestoredCompletedResult);
   const panelSpacingText = `행 ${formatMeters(DEFAULT_SOLAR_PANEL_LAYOUT_OPTIONS.rowGapM)} · 열 ${formatMeters(
     DEFAULT_SOLAR_PANEL_LAYOUT_OPTIONS.colGapM,
   )}`;
@@ -2106,6 +2230,7 @@ function RiskMapPage() {
   const runAddressSearch = useCallback(
     async (rawQuery: string) => {
       const query = rawQuery.trim();
+      setRestoredCompletedResult(null);
 
       if (!query) {
         setAddressSearchStatus('error');
@@ -2274,6 +2399,8 @@ function RiskMapPage() {
   }, []);
 
   const handleMapSelection = useCallback(async (selection?: VWorldSelection) => {
+    setRestoredCompletedResult(null);
+
     const coordinate =
       typeof selection?.longitude === 'number' && typeof selection?.latitude === 'number'
         ? ([selection.longitude, selection.latitude] as Coordinate)
@@ -2674,6 +2801,10 @@ function RiskMapPage() {
   ]);
 
   const createCurrentStoredSimulationResult = useCallback(() => {
+    if (restoredCompletedResult) {
+      return restoredCompletedResult;
+    }
+
     const selectedAddress = selectedBuildingFootprint?.address ?? selectedBuilding.address;
     return buildStoredSimulationResult({
       building: {
@@ -2701,6 +2832,7 @@ function RiskMapPage() {
     liveClimateStatus,
     overviewInvestmentKrw,
     pvAnalysisResult,
+    restoredCompletedResult,
     selectedBuilding.address,
     selectedBuilding.apartmentName,
     selectedBuilding.estimatedAnnualGenerationKwh,
