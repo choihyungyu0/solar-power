@@ -4310,7 +4310,7 @@ img {
   border: 0;
   padding: 0;
   background: transparent;
-  color: #238aff;
+  color: #1478ff;
   font-size: clamp(20px, 1.6vw, 28px);
   font-weight: 950;
   letter-spacing: 0;
@@ -4337,8 +4337,8 @@ img {
 .heroActions {
   position: relative;
   z-index: 4;
-  width: min(100%, 850px);
-  max-width: 850px;
+  width: min(100%, 420px);
+  max-width: 420px;
   margin: 46px 0 0;
   align-items: stretch;
   justify-content: flex-start;
@@ -4349,7 +4349,7 @@ img {
   width: 100%;
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(320px, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: stretch;
   gap: 14px;
   flex: 0 1 auto;

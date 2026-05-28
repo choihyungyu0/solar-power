@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FocusEvent, type FormEvent } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
-import { LuArrowRight, LuSearch } from 'react-icons/lu';
+import { LuArrowRight } from 'react-icons/lu';
 import SafeLocalImage from './components/SafeLocalImage';
 import ServiceIntroSection from './components/ServiceIntroSection';
 import SolarMateHeader from './components/SolarMateHeader';
@@ -226,10 +226,6 @@ function HomePage() {
                     </div>
                   )}
                 </div>
-                <button className="primaryButton" type="submit">
-                  <LuSearch aria-hidden="true" />
-                  태양광 설치하기
-                </button>
               </form>
             </div>
           </div>
