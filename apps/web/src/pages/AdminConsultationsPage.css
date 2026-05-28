@@ -686,22 +686,6 @@
   background: #ffffff;
 }
 
-.admin-report-rag-box summary {
-  color: #475569;
-  font-size: 12px;
-  font-weight: 850;
-  cursor: pointer;
-}
-
-.admin-report-rag-box pre {
-  max-height: 160px;
-  overflow: auto;
-  white-space: pre-wrap;
-  color: #334155;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
 .admin-report-warning-box {
   display: grid;
   gap: 8px;
@@ -727,32 +711,6 @@
   line-height: 1.5;
 }
 
-.admin-report-preview {
-  border: 1px solid #dfe6ef;
-  border-radius: 8px;
-  background: #ffffff;
-}
-
-.admin-report-preview summary {
-  cursor: pointer;
-  padding: 12px 14px;
-  color: #344054;
-  font-size: 13px;
-  font-weight: 950;
-}
-
-.admin-report-preview pre {
-  max-height: 320px;
-  overflow: auto;
-  margin: 0;
-  border-top: 1px solid #e6ebf3;
-  padding: 14px;
-  background: #f8fafc;
-  color: #0f172a;
-  font-size: 12px;
-  line-height: 1.55;
-  white-space: pre-wrap;
-}
 
 @media (max-width: 980px) {
   .admin-consultations-toolbar,

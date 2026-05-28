@@ -5,6 +5,8 @@ import os
 from datetime import datetime, timezone
 from typing import Any
 
+from .subsidy_table import classify_housing_type, estimate_subsidy
+
 
 DEFAULT_SUBSIDY_PROGRAM_NAME = "보조금 공고 확인 필요"
 DEFAULT_SUBSIDY_POLICY_MODE = "housing_type_based_policy"
@@ -14,6 +16,8 @@ SCHEMA_VERSION = "solarmate-profit-report-v1"
 DEFAULT_LOAN_YEARS = 5
 DEFAULT_LOAN_COVERAGE_RATIO = 0.8
 DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
+APARTMENT_POLICY_MODE = "knrec_apartment_low_carbon_module"
+DETACHED_POLICY_MODE = "gyeonggi_detached_home_3kw"
 LLM_REPORT_NARRATIVE_SOURCE = "llm-structured-output"
 DETERMINISTIC_REPORT_NARRATIVE_SOURCE = "deterministic-template"
 LLM_UNSAFE_CLAIM_PATTERNS = (
@@ -104,6 +108,60 @@ def _get_location(agent_payload: dict[str, Any]) -> dict[str, Any] | str:
     return "경기도"
 
 
+def _location_to_text(location: Any) -> str:
+    if isinstance(location, dict):
+        return " ".join(
+            str(location.get(key) or "")
+            for key in ("roadAddress", "jibunAddress", "address", "regionSido", "regionSigungu")
+        ).strip()
+
+    return str(location or "").strip()
+
+
+def _resolve_report_housing_type(agent_payload: dict[str, Any], metrics: dict[str, Any]) -> str:
+    subsidy_rag_input = _get_path(agent_payload, "subsidyRagInput")
+    subsidy_rag_input = subsidy_rag_input if isinstance(subsidy_rag_input, dict) else {}
+
+    for value in (subsidy_rag_input.get("housingType"), metrics.get("housingType")):
+        if value in ("apartment", "detached"):
+            return str(value)
+
+    location_text = _location_to_text(_get_location(agent_payload))
+    candidate_text = " ".join(
+        str(value or "")
+        for value in (
+            subsidy_rag_input.get("buildingUsage"),
+            subsidy_rag_input.get("buildingName"),
+            metrics.get("buildingUsage"),
+            location_text,
+        )
+    )
+    classified_type = classify_housing_type(candidate_text)
+
+    if classified_type in ("apartment", "detached"):
+        return classified_type
+
+    if metrics.get("subsidyPolicyMode") == APARTMENT_POLICY_MODE or subsidy_rag_input.get("subsidyPolicyMode") == APARTMENT_POLICY_MODE:
+        return "apartment"
+
+    # Existing stored payloads sometimes marked unknown buildings as detached
+    # because the old fallback used the 3kW Gyeonggi home-solar path. For this
+    # apartment/public-housing product, unknown housing data should stay on the
+    # apartment/common-housing subsidy path until field documents say otherwise.
+    return "apartment"
+
+
+def _resolve_install_capacity_kw(agent_payload: dict[str, Any], metrics: dict[str, Any]) -> float:
+    subsidy_rag_input = _get_path(agent_payload, "subsidyRagInput")
+    subsidy_rag_input = subsidy_rag_input if isinstance(subsidy_rag_input, dict) else {}
+
+    return _as_float(
+        metrics.get("installCapacityKw")
+        or subsidy_rag_input.get("installCapacityKw")
+        or _get_path(agent_payload, "reportInputMetrics", "installCapacityKw")
+    )
+
+
 def _format_krw(value: Any) -> str:
     return f"{_money(value):,}원"
 
@@ -144,21 +202,35 @@ def build_subsidy_matrix(
     policy = policy_data if isinstance(policy_data, dict) else {}
     subsidy_rag_input = _get_path(agent_payload, "subsidyRagInput")
     subsidy_rag_input = subsidy_rag_input if isinstance(subsidy_rag_input, dict) else {}
+    housing_type = _resolve_report_housing_type(agent_payload, metrics)
+    install_cost_krw = _money(
+        policy.get("estimated_install_cost_krw")
+        or metrics.get("estimatedInstallCostKrw")
+        or subsidy_rag_input.get("estimatedInstallCostKrw")
+    )
+    install_capacity_kw = _resolve_install_capacity_kw(agent_payload, metrics)
+    subsidy_detail = estimate_subsidy(
+        install_cost_krw,
+        policy.get("region_sigungu") or _location_to_text(_get_location(agent_payload)),
+        housing_type=housing_type,
+        capacity_kw=install_capacity_kw,
+    )
     program_name = (
         policy.get("program_name")
         or policy.get("source_title")
+        or subsidy_detail.get("program")
         or metrics.get("subsidyProgramName")
         or subsidy_rag_input.get("subsidyProgramName")
         or DEFAULT_SUBSIDY_PROGRAM_NAME
     )
     policy_mode = (
         policy.get("policy_mode")
-        or metrics.get("subsidyPolicyMode")
-        or subsidy_rag_input.get("subsidyPolicyMode")
+        or (APARTMENT_POLICY_MODE if housing_type == "apartment" else DETACHED_POLICY_MODE)
         or DEFAULT_SUBSIDY_POLICY_MODE
     )
     stacking_note = (
         policy.get("stacking_note")
+        or subsidy_detail.get("disclaimer")
         or metrics.get("subsidyStackingReason")
         or subsidy_rag_input.get("subsidyStackingReason")
         or DEFAULT_SUBSIDY_STACKING_REASON
@@ -166,8 +238,7 @@ def build_subsidy_matrix(
     subsidy_estimate_krw = _money(
         policy.get("subsidy_amount_krw")
         or policy.get("max_subsidy_krw")
-        or metrics.get("subsidyEstimateKrw")
-        or subsidy_rag_input.get("subsidyEstimateKrw")
+        or subsidy_detail.get("subsidyKrw")
     )
     subsidy_rate = policy.get("subsidy_rate")
 
@@ -175,32 +246,40 @@ def build_subsidy_matrix(
         "programName": program_name,
         "policyMode": policy_mode,
         "supportType": policy.get("support_type") or "주택태양광 설치 보조금",
-        "regionSido": policy.get("region_sido") or ("전국" if "한국에너지공단" in str(program_name) else "경기도"),
-        "regionSigungu": policy.get("region_sigungu") or "확인 필요",
-        "targetBuildingType": policy.get("target_building_type") or "주택/공동주택 검토",
+        "regionSido": policy.get("region_sido") or ("전국" if housing_type == "apartment" else "경기도"),
+        "regionSigungu": policy.get("region_sigungu") or (subsidy_detail.get("sigungu") or "확인 필요"),
+        "targetBuildingType": policy.get("target_building_type") or ("공동주택/아파트" if housing_type == "apartment" else "단독주택"),
         "subsidyEstimateKrw": subsidy_estimate_krw,
-        "subsidyAmountKrw": _money(policy.get("subsidy_amount_krw")) or None,
+        "subsidyAmountKrw": _money(policy.get("subsidy_amount_krw")) or subsidy_estimate_krw or None,
         "subsidyRate": _as_float(subsidy_rate) if subsidy_rate is not None else None,
         "maxSubsidyKrw": _money(policy.get("max_subsidy_krw")) or subsidy_estimate_krw,
         "stackingAllowed": False,
         "stackingNote": stacking_note,
-        "eligibilityNote": policy.get("eligibility_note") or "실제 지원 여부는 최신 공고, 예산 잔여 여부, 대상 요건 확인이 필요합니다.",
+        "eligibilityNote": policy.get("eligibility_note")
+        or subsidy_detail.get("disclaimer")
+        or "실제 지원 여부는 최신 공고, 예산 잔여 여부, 대상 요건 확인이 필요합니다.",
         "sourceTitle": policy.get("source_title") or f"{program_name} 공고 확인 필요",
         "sourceUrl": policy.get("source_url"),
         "sourceYear": policy.get("source_year"),
         "status": "확인 필요",
+        "housingType": housing_type,
+        "subsidyDetail": subsidy_detail,
     }
 
 
 def build_loan_scenario(
     agent_payload: dict[str, Any],
     user_finance_input: dict[str, Any] | None,
+    subsidy_matrix: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     metrics = _get_report_input_metrics(agent_payload)
     finance_input = _normalize_finance_input(user_finance_input)
     loan_years = finance_input["preferredLoanYears"]
     loan_coverage_ratio = finance_input["loanCoverageRatio"]
-    self_payment_estimate_krw = _money(metrics.get("selfPaymentEstimateKrw"))
+    install_cost_krw = _money(metrics.get("estimatedInstallCostKrw"))
+    subsidy_estimate_krw = _money(subsidy_matrix.get("subsidyEstimateKrw")) if isinstance(subsidy_matrix, dict) else 0
+    corrected_self_payment_krw = max(0, install_cost_krw - subsidy_estimate_krw) if install_cost_krw > 0 else 0
+    self_payment_estimate_krw = corrected_self_payment_krw or _money(metrics.get("selfPaymentEstimateKrw"))
     annual_revenue_basis_krw = _money(metrics.get("annualSavingKrw"))
     estimated_loan_limit_krw = min(
         self_payment_estimate_krw,
@@ -271,9 +350,12 @@ def _build_building_summary(
     }
 
 
-def _build_four_metrics(report_input_metrics: dict[str, Any]) -> dict[str, Any]:
-    program_name = report_input_metrics.get("subsidyProgramName") or DEFAULT_SUBSIDY_PROGRAM_NAME
-    policy_mode = report_input_metrics.get("subsidyPolicyMode") or DEFAULT_SUBSIDY_POLICY_MODE
+def _build_four_metrics(report_input_metrics: dict[str, Any], subsidy_matrix: dict[str, Any]) -> dict[str, Any]:
+    program_name = subsidy_matrix.get("programName") or report_input_metrics.get("subsidyProgramName") or DEFAULT_SUBSIDY_PROGRAM_NAME
+    policy_mode = subsidy_matrix.get("policyMode") or report_input_metrics.get("subsidyPolicyMode") or DEFAULT_SUBSIDY_POLICY_MODE
+    install_cost_krw = _money(report_input_metrics.get("estimatedInstallCostKrw"))
+    subsidy_estimate_krw = _money(subsidy_matrix.get("subsidyEstimateKrw"))
+    self_payment_estimate_krw = max(0, install_cost_krw - subsidy_estimate_krw)
 
     return {
         "expectedGeneration": {
@@ -281,8 +363,8 @@ def _build_four_metrics(report_input_metrics: dict[str, Any]) -> dict[str, Any]:
             "monthlyGenerationKwh": report_input_metrics.get("monthlyGenerationKwh") or [],
         },
         "costAndSelfPayment": {
-            "estimatedInstallCostKrw": _money(report_input_metrics.get("estimatedInstallCostKrw")),
-            "selfPaymentEstimateKrw": _money(report_input_metrics.get("selfPaymentEstimateKrw")),
+            "estimatedInstallCostKrw": install_cost_krw,
+            "selfPaymentEstimateKrw": self_payment_estimate_krw,
         },
         "payback": {
             "annualSavingKrw": _money(report_input_metrics.get("annualSavingKrw")),
@@ -308,7 +390,7 @@ def _build_report_narrative(
     grade = report_input_metrics.get("installationSuitabilityGrade") or "검토"
     annual_generation = _format_kwh(report_input_metrics.get("annualGenerationKwh"))
     annual_saving = _format_krw(report_input_metrics.get("annualSavingKrw"))
-    self_payment = _format_krw(report_input_metrics.get("selfPaymentEstimateKrw"))
+    self_payment = _format_krw(net_investment.get("selfPaymentBeforeLoanKrw"))
     cash_needed = _format_krw(net_investment.get("cashNeededKrw"))
     payback = _format_years(net_investment.get("paybackYears"))
     loan_limit = _format_krw(loan_scenario.get("estimatedLoanLimitKrw"))
@@ -726,7 +808,7 @@ def build_profit_report(
         raise ValueError("agentPayload.reportInputMetrics is required.")
 
     subsidy_matrix = build_subsidy_matrix(agent_payload, policy_data)
-    loan_scenario = build_loan_scenario(agent_payload, user_finance_input)
+    loan_scenario = build_loan_scenario(agent_payload, user_finance_input, subsidy_matrix)
     net_investment = calculate_net_investment(report_input_metrics, subsidy_matrix, loan_scenario)
     narrative = _build_report_narrative(report_input_metrics, subsidy_matrix, loan_scenario, net_investment)
     risk_disclaimers = _build_risk_disclaimers(agent_payload)
@@ -743,7 +825,7 @@ def build_profit_report(
             "llmPolishEnabled": False,
         },
         "buildingSummary": _build_building_summary(ai_simulation_result, agent_payload),
-        "fourMetrics": _build_four_metrics(report_input_metrics),
+        "fourMetrics": _build_four_metrics(report_input_metrics, subsidy_matrix),
         "subsidyMatrix": subsidy_matrix,
         "loanSupportScenario": loan_scenario,
         "netInvestment": net_investment,

@@ -1,22 +1,30 @@
 import { useCallback, useState, type CSSProperties } from 'react';
 import type { IconType } from 'react-icons';
 import {
+  LuArrowLeft,
+  LuArrowRight,
+  LuBadgeCheck,
   LuBuilding2,
   LuChartNoAxesColumnIncreasing,
+  LuCheck,
   LuChevronLeft,
   LuChevronRight,
   LuCircleCheck,
   LuCoins,
+  LuFileText,
   LuInfo,
   LuMapPin,
+  LuMessageCircle,
+  LuPanelTop,
   LuPhone,
   LuPrinter,
+  LuSearch,
+  LuShieldCheck,
   LuSunMedium,
   LuZap,
 } from 'react-icons/lu';
 import SolarMateHeader from '../components/SolarMateHeader';
 import { generateProfitReport } from '../lib/profitReportClient';
-import { formatAgentPayloadJson } from '../lib/simulationAiResult';
 import {
   readProfitReportFromSession,
   readSimulationResultFromSession,
@@ -35,6 +43,8 @@ type SimulationResultView = 'detail' | 'profit' | 'suitability';
 type SimulationResultPageProps = {
   view?: SimulationResultView;
 };
+
+const AI_SUITABILITY_PAGE_COUNT = 3;
 
 type ResultMetric = {
   label: string;
@@ -218,6 +228,133 @@ function formatPaybackYears(value: number | null) {
 
 function formatOptionalPaybackYears(value: number) {
   return formatPaybackYears(value > 0 ? value : null);
+}
+
+function pickFiniteNumber(...values: unknown[]) {
+  for (const value of values) {
+    const numberValue = toFiniteNumber(value);
+
+    if (numberValue !== null) {
+      return numberValue;
+    }
+  }
+
+  return null;
+}
+
+function pickText(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function getRecordNumber(record: Record<string, unknown> | undefined, key: string) {
+  return record ? toFiniteNumber(record[key]) : null;
+}
+
+function getRecordText(record: Record<string, unknown> | undefined, key: string) {
+  return record && typeof record[key] === 'string' ? record[key] : null;
+}
+
+function normalizeStringList(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : [];
+}
+
+function getAiSuitabilityPageCopy(page: number) {
+  if (page === 2) {
+    return {
+      title: '설치 적합도 상세 분석',
+      description: '발전량 모델, 군집 특성, 배치 요약과 예측 신뢰도를 확인하세요.',
+    };
+  }
+
+  if (page === 3) {
+    return {
+      title: '현장 확인 및 상담 준비',
+      description: '실제 상담 전에 확인할 항목과 준비 서류를 정리했습니다.',
+    };
+  }
+
+  return {
+    title: 'AI 설치 적합도',
+    description: '음영, 면적, 발전량 추정 기반의 AI 설치 적합도와 검토 근거를 확인해보세요.',
+  };
+}
+
+function resolveAiReportMetrics(
+  aiResult: NonNullable<StoredSimulationResult['aiSimulationResult']>,
+  normalized: NormalizedResult,
+) {
+  const suitability = aiResult.buildingSuitability ?? aiResult.suitability;
+  const reportInputMetrics = aiResult.agentPayload.reportInputMetrics;
+  const economics = aiResult.economics;
+  const subsidyRagInput = aiResult.agentPayload.subsidyRagInput;
+  const annualGenerationKwh =
+    pickFiniteNumber(
+      reportInputMetrics?.annualGenerationKwh,
+      aiResult.generationPrediction.annualGenerationKwh,
+      normalized.annualGenerationKwh,
+    ) ?? 0;
+  const estimatedInstallCostKrw =
+    pickFiniteNumber(
+      reportInputMetrics?.estimatedInstallCostKrw,
+      getRecordNumber(economics, 'estimatedInstallCostKrw'),
+      subsidyRagInput.estimatedInstallCostKrw,
+      normalized.investmentKrw,
+    ) ?? 0;
+  const subsidyEstimateKrw =
+    pickFiniteNumber(
+      reportInputMetrics?.subsidyEstimateKrw,
+      getRecordNumber(economics, 'subsidyEstimateKrw'),
+      subsidyRagInput.subsidyEstimateKrw,
+      normalized.subsidyMaxKrw,
+    ) ?? 0;
+  const selfPaymentEstimateKrw =
+    pickFiniteNumber(
+      reportInputMetrics?.selfPaymentEstimateKrw,
+      getRecordNumber(economics, 'estimatedSelfPaymentKrw'),
+      subsidyRagInput.selfPaymentEstimateKrw,
+      normalized.selfPaymentKrw,
+    ) ?? 0;
+  const annualSavingKrw =
+    pickFiniteNumber(
+      reportInputMetrics?.annualSavingKrw,
+      getRecordNumber(economics, 'annualSavingKrw'),
+      normalized.annualSavingKrw,
+    ) ?? 0;
+  const paybackYears =
+    pickFiniteNumber(reportInputMetrics?.paybackYears, getRecordNumber(economics, 'paybackYears'), normalized.paybackYears) ??
+    0;
+  const policyLoanLimitKrw =
+    pickFiniteNumber(getRecordNumber(economics, 'policyLoanLimitKrw'), normalized.loanLimitKrw) ?? 0;
+  const installCapacityKw =
+    pickFiniteNumber(subsidyRagInput.installCapacityKw, normalized.installCapacityKw) ?? normalized.installCapacityKw;
+  const subsidyProgramName =
+    pickText(reportInputMetrics?.subsidyProgramName, getRecordText(economics, 'subsidyProgramName'), subsidyRagInput.subsidyProgramName) ??
+    '보조금 공고 확인 필요';
+  const recommendedAction =
+    pickText(reportInputMetrics?.recommendedAction, aiResult.recommendedAction) ??
+    '현장 확인 후 설치 규모와 경제성을 재검토하는 것을 권장합니다.';
+
+  return {
+    annualGenerationKwh,
+    estimatedInstallCostKrw,
+    subsidyEstimateKrw,
+    selfPaymentEstimateKrw,
+    policyLoanLimitKrw,
+    annualSavingKrw,
+    paybackYears,
+    installCapacityKw,
+    subsidyProgramName,
+    suitabilityScore: reportInputMetrics?.installationSuitabilityScore ?? suitability.score,
+    suitabilityGrade: reportInputMetrics?.installationSuitabilityGrade ?? suitability.grade,
+    suitabilityLabel: reportInputMetrics?.installationSuitabilityLabel ?? suitability.label,
+    recommendedAction,
+  };
 }
 
 function formatChartKrw(value: number) {
@@ -411,9 +548,9 @@ function ProfitReportSection({
             <ProfitMetricTile
               color="orange"
               icon={LuCoins}
-              label="실투자금/회수기간"
-              value={formatKrw(netInvestment.cashNeededKrw)}
-              note={`약 ${formatPaybackYears(netInvestment.paybackYears)} 추정`}
+              label="자부담/회수기간"
+              value={formatKrw(netInvestment.selfPaymentBeforeLoanKrw)}
+              note={`회수기간 ${formatPaybackYears(netInvestment.paybackYears)} 추정`}
             />
           </div>
         </>
@@ -461,9 +598,9 @@ function ProfitReportSection({
             <ProfitMetricTile
               color="orange"
               icon={LuChartNoAxesColumnIncreasing}
-              label="실투자금/회수기간"
-              value={formatKrw(netInvestment.cashNeededKrw)}
-              note={`약 ${formatPaybackYears(netInvestment.paybackYears)} 추정`}
+              label="자부담/회수기간"
+              value={formatKrw(netInvestment.selfPaymentBeforeLoanKrw)}
+              note={`회수기간 ${formatPaybackYears(netInvestment.paybackYears)} 추정`}
             />
           </div>
 
@@ -497,7 +634,7 @@ function ProfitReportSection({
                 <strong>금융·대출 시나리오</strong>
                 <p>
                   금융기관 대출 지원 시 약 <b>{formatKrw(loanScenario.estimatedLoanLimitKrw)}</b>까지 지원 가능하며,
-                  최종 실투자금은 약 <b>{formatKrw(netInvestment.cashNeededKrw)}</b>로 추정됩니다.
+                  초기 현금 필요액은 약 <b>{formatKrw(netInvestment.cashNeededKrw)}</b>로 추정됩니다.
                 </p>
               </article>
             </div>
@@ -525,11 +662,6 @@ function ProfitReportSection({
           </div>
 
           <SubsidyRagEvidence report={report} />
-
-          <details className="agentPayloadPreview">
-            <summary>개발자 JSON · profitReport</summary>
-            <pre>{JSON.stringify(report, null, 2)}</pre>
-          </details>
 
           <section className="profitNextStepPanel" aria-label="다음 단계">
             <div>
@@ -622,10 +754,6 @@ function SubsidyRagEvidence({ report }: { report: NonNullable<StoredProfitReport
               보조금 {formatOptionalKrw(match.subsidyAmountKrw ?? match.maxSubsidyKrw)} · 자부담{' '}
               {formatOptionalKrw(match.selfPaymentKrw)} · 중복지원 {match.stackingAllowed ? '검토 필요' : '불가'}
             </p>
-            <details>
-              <summary>근거 chunk 보기</summary>
-              <pre>{match.chunkText || '근거 텍스트가 없습니다.'}</pre>
-            </details>
           </li>
         ))}
       </ul>
@@ -637,6 +765,7 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
   const storedResult = readSimulationResultFromSession();
   const normalized = normalizeResult(storedResult ?? fallbackDemoResult);
   const { result } = normalized;
+  const [suitabilityPage, setSuitabilityPage] = useState(1);
   const [profitReport, setProfitReport] = useState<StoredProfitReport | null>(() => readProfitReportFromSession());
   const [profitReportStatus, setProfitReportStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>(() =>
     readProfitReportFromSession() ? 'ready' : 'idle',
@@ -647,7 +776,7 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
   const isDetailView = view === 'detail';
   const isProfitView = view === 'profit';
   const isSuitabilityView = view === 'suitability';
-  const pageCopy = {
+  const defaultPageCopy = {
     detail: {
       title: '결과 상세보기',
       description: '선택하신 아파트의 설치 비용, 예상 발전량, 절감 효과를 자세히 확인해보세요.',
@@ -656,11 +785,9 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
       title: 'AI 수익 리포트',
       description: '예상 수익, 보조금, 금융 시나리오를 도입 판단용 리포트로 확인해보세요.',
     },
-    suitability: {
-      title: 'AI 설치 적합도',
-      description: '음영, 면적, 발전량 추정 기반의 AI 설치 적합도와 검토 근거를 확인해보세요.',
-    },
+    suitability: getAiSuitabilityPageCopy(suitabilityPage),
   }[view];
+  const pageCopy = isSuitabilityView ? getAiSuitabilityPageCopy(suitabilityPage) : defaultPageCopy;
   const cumulativeSaving = createCumulativeValues(normalized.yearlyRevenue);
   const cumulativeNetProfit = cumulativeSaving.map((value) => Math.max(0, value - normalized.selfPaymentKrw));
   const resultSections: ResultSection[] = [
@@ -756,6 +883,10 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
     window.print();
   }, []);
 
+  const handleSuitabilityPageChange = useCallback((nextPage: number) => {
+    setSuitabilityPage(Math.min(AI_SUITABILITY_PAGE_COUNT, Math.max(1, nextPage)));
+  }, []);
+
   const profitReportActions = {
     onGenerate: handleProfitReportGenerate,
     onConsultationApply: handleConsultationApply,
@@ -765,7 +896,11 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
     <div className="simulationResultPage">
       <SolarMateHeader onBeforeLogin={() => saveSimulationResultToSession(normalized.result)} />
 
-      <main className={`simulationResultMain ${isProfitView ? 'isProfitReportMain' : ''}`}>
+      <main
+        className={`simulationResultMain ${isProfitView ? 'isProfitReportMain' : ''} ${
+          isSuitabilityView ? 'isSuitabilityMain' : ''
+        }`}
+      >
         <section className="resultTitleArea" aria-labelledby="simulation-result-title">
           <div>
             <span className={`resultSourcePill ${isDemo ? 'isDemo' : ''}`}>{sourceLabel}</span>
@@ -773,6 +908,9 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
             <p>{pageCopy.description}</p>
           </div>
           <div className="resultTitleActions">
+            {isSuitabilityView && result.aiSimulationResult && (
+              <AiSuitabilityStepIndicator activePage={suitabilityPage} pageCount={AI_SUITABILITY_PAGE_COUNT} />
+            )}
             <button className="printSaveButton" type="button" onClick={handlePrintSave}>
               <LuPrinter aria-hidden="true" />
               PDF로 저장
@@ -786,10 +924,10 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
         <section
           className={`simulationResultLayout ${isDetailView ? '' : 'isSingleColumn'} ${
             isProfitView ? 'isProfitReportLayout' : ''
-          }`}
+          } ${isSuitabilityView ? 'isSuitabilityLayout' : ''}`}
         >
           <div className="simulationResultContent">
-            {!isProfitView && <AddressSummary result={result} />}
+            {!isProfitView && (!isSuitabilityView || suitabilityPage === 1) && <AddressSummary result={result} />}
 
             {isDetailView && (
               <>
@@ -846,7 +984,13 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
 
             {isSuitabilityView &&
               (result.aiSimulationResult ? (
-                <AiAnalysisReport aiResult={result.aiSimulationResult} />
+                <AiSuitabilityPagedReport
+                  aiResult={result.aiSimulationResult}
+                  normalized={normalized}
+                  activePage={suitabilityPage}
+                  onPageChange={handleSuitabilityPageChange}
+                  onConsultationApply={handleConsultationApply}
+                />
               ) : (
                 <AnalysisEmptyState
                   title="AI 설치 적합도 결과가 없습니다."
@@ -884,139 +1028,379 @@ function AnalysisEmptyState({ title, message }: { title: string; message: string
   );
 }
 
-function AiAnalysisReport({ aiResult }: { aiResult: NonNullable<StoredSimulationResult['aiSimulationResult']> }) {
+function AiSuitabilityStepIndicator({ activePage, pageCount }: { activePage: number; pageCount: number }) {
+  return (
+    <div className="aiSuitabilityStepIndicator" aria-label={`AI 설치 적합도 ${activePage} / ${pageCount} 페이지`}>
+      <strong>
+        {activePage} <span>/ {pageCount}</span>
+      </strong>
+      <div aria-hidden="true">
+        {Array.from({ length: pageCount }, (_, index) => (
+          <i className={activePage === index + 1 ? 'isActive' : ''} key={index} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AiSuitabilityMetricCard({
+  icon: Icon,
+  tone,
+  label,
+  value,
+}: {
+  icon: IconType;
+  tone: 'green' | 'blue' | 'purple' | 'orange';
+  label: string;
+  value: string;
+}) {
+  return (
+    <article className={`aiSuitabilityMetricCard is-${tone}`}>
+      <span aria-hidden="true">
+        <Icon />
+      </span>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+      </div>
+    </article>
+  );
+}
+
+function AiSuitabilitySummaryTile({
+  icon: Icon,
+  tone,
+  label,
+  value,
+}: {
+  icon: IconType;
+  tone: 'green' | 'blue' | 'purple';
+  label: string;
+  value: string;
+}) {
+  return (
+    <article className={`aiSuitabilitySummaryTile is-${tone}`}>
+      <span aria-hidden="true">
+        <Icon />
+      </span>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+      </div>
+    </article>
+  );
+}
+
+function AiSuitabilityDetailCard({
+  icon: Icon,
+  tone,
+  label,
+  value,
+}: {
+  icon: IconType;
+  tone: 'green' | 'blue' | 'purple' | 'orange';
+  label: string;
+  value: string;
+}) {
+  return (
+    <article className={`aiSuitabilityDetailCard is-${tone}`}>
+      <span aria-hidden="true">
+        <Icon />
+      </span>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+      </div>
+    </article>
+  );
+}
+
+function AiSuitabilityChecklistPanel({
+  icon: Icon,
+  tone,
+  title,
+  items,
+  note,
+}: {
+  icon: IconType;
+  tone: 'green' | 'blue' | 'purple';
+  title: string;
+  items: string[];
+  note?: string;
+}) {
+  return (
+    <article className={`aiSuitabilityChecklistPanel is-${tone}`}>
+      <div>
+        <span aria-hidden="true">
+          <Icon />
+        </span>
+        <strong>{title}</strong>
+      </div>
+      <ul>
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+      {note && (
+        <p>
+          <LuInfo aria-hidden="true" />
+          {note}
+        </p>
+      )}
+    </article>
+  );
+}
+
+function AiSuitabilityPageNav({
+  activePage,
+  onPageChange,
+}: {
+  activePage: number;
+  onPageChange: (page: number) => void;
+}) {
+  return (
+    <nav className="aiSuitabilityPageNav" aria-label="AI 설치 적합도 페이지 이동">
+      <button type="button" onClick={() => onPageChange(activePage - 1)} disabled={activePage === 1}>
+        <LuArrowLeft aria-hidden="true" />
+        이전 페이지
+      </button>
+      <button
+        className="isPrimary"
+        type="button"
+        onClick={() => onPageChange(activePage + 1)}
+        disabled={activePage === AI_SUITABILITY_PAGE_COUNT}
+      >
+        다음 페이지
+        <LuArrowRight aria-hidden="true" />
+      </button>
+    </nav>
+  );
+}
+
+function AiSuitabilityPagedReport({
+  aiResult,
+  normalized,
+  activePage,
+  onPageChange,
+  onConsultationApply,
+}: {
+  aiResult: NonNullable<StoredSimulationResult['aiSimulationResult']>;
+  normalized: NormalizedResult;
+  activePage: number;
+  onPageChange: (page: number) => void;
+  onConsultationApply: () => void;
+}) {
   const suitability = aiResult.buildingSuitability ?? aiResult.suitability;
-  const warnings = suitability.warnings;
-  const questions = aiResult.agentPayload.questionsToAskUser;
-  const requiredDocuments = aiResult.agentPayload.requiredDocuments;
-  const reportInputMetrics = aiResult.agentPayload.reportInputMetrics;
-  const fieldCheckRequired = aiResult.agentPayload.fieldCheckRequired ?? [];
+  const metrics = resolveAiReportMetrics(aiResult, normalized);
+  const fieldCheckRequired = normalizeStringList(aiResult.agentPayload.fieldCheckRequired);
+  const questions = normalizeStringList(aiResult.agentPayload.questionsToAskUser);
+  const requiredDocuments = normalizeStringList(aiResult.agentPayload.requiredDocuments);
+  const warnings = normalizeStringList(suitability.warnings);
+  const reasons = normalizeStringList(suitability.reasons);
   const cluster = suitability.cluster;
+  const confidencePercent = Math.round((toFiniteNumber(aiResult.generationPrediction.confidence) ?? 0) * 100);
+  const confidenceLabel = aiResult.generationPrediction.confidenceLabel || '확인 필요';
+  const modelType = aiResult.generationPrediction.modelType || '발전량 모델 확인 필요';
+  const arrangementSummary = aiResult.panelOptimization.optimizationSummary || '패널 배치 요약 확인 필요';
+  const summaryText =
+    pickText(aiResult.agentPayload.summaryForCounselor) ??
+    `해당 건물은 예상 연간 발전량 ${metrics.annualGenerationKwh.toLocaleString(
+      'ko-KR',
+    )}kWh, 예상 자부담 ${metrics.selfPaymentEstimateKrw.toLocaleString('ko-KR')}원, 예상 회수기간 ${metrics.paybackYears.toLocaleString(
+      'ko-KR',
+      { maximumFractionDigits: 1 },
+    )}년 기준으로 AI 설치 적합도 ${metrics.suitabilityGrade}등급입니다.`;
 
   return (
-    <section className="aiAnalysisReport" aria-label="AI 분석 리포트">
-      <div className="aiReportHeader">
-        <div>
-          <span>AI 분석 리포트</span>
-          <h2>설치 적합도 {suitability.grade}등급</h2>
-        </div>
-        <strong>{suitability.score}점</strong>
-      </div>
+    <section className={`aiSuitabilityReport is-page-${activePage}`} aria-label="AI 설치 적합도 리포트">
+      {activePage === 1 && (
+        <article className="aiSuitabilityPrimaryPanel">
+          <div className="aiSuitabilityPrimaryHeader">
+            <div>
+              <span>AI 분석 리포트</span>
+              <h2>설치 적합도 {metrics.suitabilityGrade}등급</h2>
+            </div>
+            <strong>{metrics.suitabilityScore}점</strong>
+          </div>
 
-      <p className="aiReportSummary">{aiResult.agentPayload.summaryForCounselor}</p>
+          <p className="aiSuitabilityLead">{summaryText}</p>
 
-      {reportInputMetrics && (
+          <div className="aiSuitabilityMetricGrid">
+            <AiSuitabilityMetricCard
+              icon={LuZap}
+              tone="green"
+              label="예상 발전량"
+              value={formatKwh(metrics.annualGenerationKwh)}
+            />
+            <AiSuitabilityMetricCard
+              icon={LuCoins}
+              tone="blue"
+              label="도입 비용 / 자부담"
+              value={`${formatKrw(metrics.estimatedInstallCostKrw)} / ${formatKrw(metrics.selfPaymentEstimateKrw)}`}
+            />
+            <AiSuitabilityMetricCard
+              icon={LuChartNoAxesColumnIncreasing}
+              tone="purple"
+              label="회수기간"
+              value={formatOptionalPaybackYears(metrics.paybackYears)}
+            />
+            <AiSuitabilityMetricCard
+              icon={LuBadgeCheck}
+              tone="green"
+              label="보조금 / 설치 적합도"
+              value={`${metrics.suitabilityGrade}등급 · ${formatKrw(metrics.subsidyEstimateKrw)} 추정`}
+            />
+          </div>
+
+          <p className="aiSuitabilityNotice">
+            <LuInfo aria-hidden="true" />
+            보조금은 {metrics.subsidyProgramName} 기준 예상값입니다. 실제 지원 여부는 공고, 예산 잔여 여부,
+            관리주체 조건 확인이 필요합니다.
+          </p>
+        </article>
+      )}
+
+      {activePage === 2 && (
         <>
-          <dl className="aiReportMetricTable" aria-label="상담 에이전트 4대 입력 지표">
-            <div>
-              <dt>예상 발전량</dt>
-              <dd>{formatKwh(reportInputMetrics.annualGenerationKwh)}</dd>
-            </div>
-            <div>
-              <dt>투입 비용 / 자부담</dt>
-              <dd>
-                {formatKrw(reportInputMetrics.estimatedInstallCostKrw)} /{' '}
-                {formatKrw(reportInputMetrics.selfPaymentEstimateKrw)}
-              </dd>
-            </div>
-            <div>
-              <dt>회수기간</dt>
-              <dd>{formatOptionalPaybackYears(reportInputMetrics.paybackYears)}</dd>
-            </div>
-            <div>
-              <dt>보조금 / 설치 적합도</dt>
-              <dd>
-                {reportInputMetrics.installationSuitabilityGrade}등급 ·{' '}
-                {formatKrw(reportInputMetrics.subsidyEstimateKrw)} 추정
-              </dd>
-            </div>
-          </dl>
+          <div className="aiSuitabilitySummaryStrip">
+            <AiSuitabilitySummaryTile
+              icon={LuBadgeCheck}
+              tone="green"
+              label="설치 적합도 등급"
+              value={`${metrics.suitabilityGrade}등급`}
+            />
+            <AiSuitabilitySummaryTile icon={LuCircleCheck} tone="green" label="적합도 점수" value={`${metrics.suitabilityScore}점`} />
+            <AiSuitabilitySummaryTile
+              icon={LuChartNoAxesColumnIncreasing}
+              tone="purple"
+              label="예상 회수기간"
+              value={formatOptionalPaybackYears(metrics.paybackYears)}
+            />
+            <AiSuitabilitySummaryTile
+              icon={LuShieldCheck}
+              tone="blue"
+              label="예측 신뢰도"
+              value={`${confidenceLabel}${confidencePercent > 0 ? ` · ${confidencePercent}%` : ''}`}
+            />
+          </div>
 
-          <p className="aiReportPolicyNote">
-            보조금은 {reportInputMetrics.subsidyProgramName} 단일 기준으로 표시합니다. 실제 지원 여부는
-            공고와 예산 잔여 여부에 따라 달라질 수 있습니다.
+          <article className="aiSuitabilityPrimaryPanel">
+            <div className="aiSuitabilityDetailGrid">
+              <AiSuitabilityDetailCard icon={LuChartNoAxesColumnIncreasing} tone="blue" label="발전량 모델" value={modelType} />
+              <AiSuitabilityDetailCard
+                icon={LuBuilding2}
+                tone="green"
+                label="군집 유형"
+                value={cluster?.clusterName ?? '군집 확인 필요'}
+              />
+              <AiSuitabilityDetailCard icon={LuFileText} tone="purple" label="권장 조치" value={metrics.recommendedAction} />
+              <AiSuitabilityDetailCard
+                icon={LuZap}
+                tone="orange"
+                label="예상 발전량"
+                value={`${metrics.annualGenerationKwh.toLocaleString('ko-KR')}kWh/년`}
+              />
+              <AiSuitabilityDetailCard icon={LuPanelTop} tone="green" label="배치 요약" value={arrangementSummary} />
+              <AiSuitabilityDetailCard icon={LuShieldCheck} tone="blue" label="예측 신뢰도" value={confidenceLabel} />
+            </div>
+
+            {cluster?.description && <p className="aiSuitabilityLead">{cluster.description}</p>}
+
+            <p className="aiSuitabilityNotice">
+              <LuInfo aria-hidden="true" />
+              설치 용량 {formatKw(metrics.installCapacityKw)}와 예상 발전량, 자부담, 회수기간을 같은 AI 입력값에서
+              산정했습니다.
+            </p>
+
+            {(reasons.length > 0 || warnings.length > 0) && (
+              <div className="aiSuitabilityEvidenceGrid">
+                {reasons.length > 0 && (
+                  <section>
+                    <strong>주요 근거</strong>
+                    <ul>
+                      {reasons.slice(0, 4).map((reason) => (
+                        <li key={reason}>{reason}</li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+                {warnings.length > 0 && (
+                  <section>
+                    <strong>주의 항목</strong>
+                    <ul>
+                      {warnings.map((warning) => (
+                        <li key={warning}>{warning}</li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+              </div>
+            )}
+          </article>
+        </>
+      )}
+
+      {activePage === 3 && (
+        <>
+          <div className="aiSuitabilityChecklistGrid">
+            <AiSuitabilityChecklistPanel
+              icon={LuSearch}
+              tone="green"
+              title="현장 확인 필요"
+              items={
+                fieldCheckRequired.length > 0
+                  ? fieldCheckRequired
+                  : ['옥상 장애물', '구조안전성', '방수 상태', '관리주체 협의', '실제 공고 및 예산 잔여 여부']
+              }
+              note="AI가 확정하지 않으며 리포트 경고 및 상담 확인 항목으로만 사용합니다."
+            />
+            <AiSuitabilityChecklistPanel
+              icon={LuMessageCircle}
+              tone="purple"
+              title="상담 시 확인 질문"
+              items={
+                questions.length > 0
+                  ? questions
+                  : [
+                      '최근 12개월 공용부 전기요금 고지서 또는 사용량 자료가 있나요?',
+                      '옥상 장애물, 방수 상태, 피난 동선 등 현장 확인 항목을 확인할 수 있나요?',
+                      '관리주체 또는 입주자대표회의의 사전 검토 일정이 있나요?',
+                    ]
+              }
+            />
+            <AiSuitabilityChecklistPanel
+              icon={LuFileText}
+              tone="blue"
+              title="필요 서류"
+              items={
+                requiredDocuments.length > 0
+                  ? requiredDocuments
+                  : ['건축물대장 또는 건물 기본 정보', '공용부 전기요금 고지서', '옥상 평면도 또는 현장 사진']
+              }
+            />
+          </div>
+
+          <section className="aiSuitabilityConsultBox" aria-label="상담 신청">
+            <div>
+              <span aria-hidden="true">
+                <LuMessageCircle />
+              </span>
+              <strong>전문 상담사가 빠르게 안내해 드립니다.</strong>
+            </div>
+            <button type="button" onClick={onConsultationApply}>
+              <LuCheck aria-hidden="true" />
+              상담 신청하기
+            </button>
+          </section>
+
+          <p className="aiSuitabilityNotice">
+            <LuInfo aria-hidden="true" />
+            본 시뮬레이션은 예상치로 실제 결과와 다를 수 있습니다.
           </p>
         </>
       )}
 
-      <dl className="aiReportGrid">
-        <div>
-          <dt>발전량 모델</dt>
-          <dd>{aiResult.generationPrediction.modelType}</dd>
-        </div>
-        <div>
-          <dt>군집 유형</dt>
-          <dd>{cluster?.clusterName ?? '군집 확인 필요'}</dd>
-        </div>
-        <div>
-          <dt>권장 조치</dt>
-          <dd>{aiResult.recommendedAction}</dd>
-        </div>
-        <div>
-          <dt>예상 발전량</dt>
-          <dd>{aiResult.generationPrediction.annualGenerationKwh.toLocaleString('ko-KR')}kWh/년</dd>
-        </div>
-        <div>
-          <dt>배치 요약</dt>
-          <dd>{aiResult.panelOptimization.optimizationSummary}</dd>
-        </div>
-        <div>
-          <dt>예측 신뢰도</dt>
-          <dd>{aiResult.generationPrediction.confidenceLabel}</dd>
-        </div>
-      </dl>
-
-      {cluster?.description && <p className="aiReportSummary">{cluster.description}</p>}
-
-      {warnings.length > 0 && (
-        <div className="aiReportList">
-          <strong>주의 항목</strong>
-          <ul>
-            {warnings.map((warning) => (
-              <li key={warning}>{warning}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {fieldCheckRequired.length > 0 && (
-        <div className="aiReportList">
-          <strong>현장 확인 필요</strong>
-          <ul>
-            {fieldCheckRequired.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-          <p>위 항목은 AI가 확정하지 않으며 리포트 경고 및 상담 확인 항목으로만 사용합니다.</p>
-        </div>
-      )}
-
-      {questions.length > 0 && (
-        <div className="aiReportList">
-          <strong>상담 시 확인 질문</strong>
-          <ul>
-            {questions.map((question) => (
-              <li key={question}>{question}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {requiredDocuments.length > 0 && (
-        <div className="aiReportList">
-          <strong>필요 서류</strong>
-          <ul>
-            {requiredDocuments.map((documentName) => (
-              <li key={documentName}>{documentName}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <details className="agentPayloadPreview">
-        <summary>개발자 JSON · agentPayload</summary>
-        <pre>{formatAgentPayloadJson(aiResult.agentPayload)}</pre>
-      </details>
+      <AiSuitabilityPageNav activePage={activePage} onPageChange={onPageChange} />
     </section>
   );
 }

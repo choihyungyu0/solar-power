@@ -91,9 +91,29 @@ def _resolve_sigungu(input: dict[str, Any]):
     return None
 
 
+def _resolve_housing_type(input: dict[str, Any]):
+    explicit_type = str(input.get("housingType") or "").strip()
+
+    if explicit_type in ("apartment", "detached"):
+        return explicit_type
+
+    text = " ".join(
+        str(input.get(key) or "")
+        for key in ("buildingUsage", "usage", "buildingName", "roadAddress", "jibunAddress", "address")
+    )
+    classified_type = classify_housing_type(text)
+
+    if classified_type in ("apartment", "detached"):
+        return classified_type
+
+    # SolarMate is an apartment/public-housing MVP. If source building data is
+    # incomplete, do not fall back to the detached-house 3kW subsidy path.
+    return "apartment"
+
+
 def _build_subsidy_context(input: dict[str, Any]):
     building_usage = input.get("buildingUsage") or input.get("usage") or ""
-    housing_type = input.get("housingType") or classify_housing_type(str(building_usage))
+    housing_type = _resolve_housing_type(input)
     install_cost_krw = _as_float(input.get("estimatedInstallCostKrw"))
     install_capacity_kw = _as_float(input.get("installCapacityKw"))
     sigungu = _resolve_sigungu(input)

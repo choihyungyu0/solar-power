@@ -948,32 +948,7 @@
   color: #475569;
 }
 
-.developerDiagnosticsToggle {
-  width: fit-content;
-  border: 1px solid rgba(15, 118, 110, 0.22);
-  border-radius: 8px;
-  padding: 8px 12px;
-  background: #ffffff;
-  color: #0f766e;
-  font-size: 13px;
-  font-weight: 900;
-  cursor: pointer;
-}
-
-.developerDiagnosticsToggle:hover {
-  border-color: rgba(15, 118, 110, 0.42);
-  background: #f0fdfa;
-}
-
-.developerDiagnosticsContent {
-  display: grid;
-  gap: 10px;
-  border-top: 1px solid rgba(148, 163, 184, 0.24);
-  padding-top: 10px;
-}
-
-.geometryStatusBox > div:not(.analysisOverviewGrid):not(.developerDiagnosticsContent),
-.developerDiagnosticsContent > div {
+.geometryStatusBox > div:not(.analysisOverviewGrid) {
   display: grid;
   grid-template-columns: minmax(128px, 0.78fr) minmax(0, 1.22fr);
   gap: 14px;
@@ -1002,53 +977,6 @@
   font-size: 13px;
   font-weight: 650;
   line-height: 1.55;
-}
-
-.devDiagnosticsPanel {
-  display: grid;
-  gap: 10px;
-  margin-top: 12px;
-  border: 1px dashed rgba(100, 116, 139, 0.42);
-  border-radius: 14px;
-  padding: 12px;
-  background: #f8fafc;
-}
-
-.devDiagnosticsPanel > strong {
-  color: #334155;
-  font-size: 12px;
-  font-weight: 950;
-}
-
-.devDiagnosticsPanel dl {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-}
-
-.devDiagnosticsPanel div {
-  display: grid;
-  grid-template-columns: minmax(110px, 0.72fr) minmax(0, 1.28fr);
-  gap: 8px;
-}
-
-.devDiagnosticsPanel dt,
-.devDiagnosticsPanel dd {
-  min-width: 0;
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.devDiagnosticsPanel dt {
-  color: #64748b;
-  font-weight: 850;
-}
-
-.devDiagnosticsPanel dd {
-  color: #0f172a;
-  font-weight: 750;
-  overflow-wrap: anywhere;
 }
 
 .assumptionNote {
@@ -1629,8 +1557,7 @@
     grid-template-columns: 1fr;
   }
 
-  .geometryStatusBox > div:not(.analysisOverviewGrid):not(.developerDiagnosticsContent),
-  .developerDiagnosticsContent > div {
+  .geometryStatusBox > div:not(.analysisOverviewGrid) {
     grid-template-columns: 1fr;
     gap: 4px;
   }

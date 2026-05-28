@@ -590,20 +590,10 @@
   font-weight: 950;
 }
 
-.subsidyRagSourceList li span,
-.subsidyRagSourceList summary {
+.subsidyRagSourceList li span {
   color: #475569;
   font-size: 12px;
   font-weight: 800;
-}
-
-.subsidyRagSourceList pre {
-  max-height: 180px;
-  overflow: auto;
-  white-space: pre-wrap;
-  color: #334155;
-  font-size: 12px;
-  line-height: 1.5;
 }
 
 .aiReportMetricTable dd {
@@ -651,29 +641,505 @@
   line-height: 1.45;
 }
 
-.agentPayloadPreview {
-  border-top: 1px solid #e2e8f0;
-  padding-top: 12px;
-}
-
-.agentPayloadPreview summary {
-  cursor: pointer;
-  color: #166534;
-  font-size: 13px;
+.aiSuitabilityStepIndicator {
+  min-width: 112px;
+  display: grid;
+  gap: 9px;
+  justify-items: center;
+  color: #1268ef;
   font-weight: 950;
 }
 
-.agentPayloadPreview pre {
-  max-height: 300px;
-  overflow: auto;
-  margin: 10px 0 0;
+.aiSuitabilityStepIndicator strong {
+  color: #1268ef;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.aiSuitabilityStepIndicator strong span {
+  color: #94a3b8;
+}
+
+.aiSuitabilityStepIndicator div {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.aiSuitabilityStepIndicator i {
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  background: #d5deea;
+}
+
+.aiSuitabilityStepIndicator i.isActive {
+  background: #1268ef;
+}
+
+.simulationResultLayout.isSingleColumn.isSuitabilityLayout {
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: stretch;
+}
+
+.aiSuitabilityReport {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+
+.aiSuitabilityPrimaryPanel,
+.aiSuitabilitySummaryStrip,
+.aiSuitabilityChecklistPanel,
+.aiSuitabilityConsultBox {
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.04);
+}
+
+.aiSuitabilityPrimaryPanel {
+  display: grid;
+  gap: 20px;
+  padding: 28px 36px;
+}
+
+.aiSuitabilityPrimaryHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.aiSuitabilityPrimaryHeader span {
+  color: #16a34a;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.aiSuitabilityPrimaryHeader h2 {
+  margin: 6px 0 0;
+  color: #071634;
+  font-size: 33px;
+  font-weight: 950;
+  line-height: 1.2;
+  letter-spacing: 0;
+  word-break: keep-all;
+}
+
+.aiSuitabilityPrimaryHeader > strong {
+  min-width: 132px;
+  border-radius: 8px;
+  padding: 16px 20px;
+  background: #edf8f0;
+  color: #12833d;
+  font-size: 40px;
+  font-weight: 950;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.aiSuitabilityLead {
+  margin: 0;
+  color: #1f2a44;
+  font-size: 17px;
+  font-weight: 750;
+  line-height: 1.65;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.aiSuitabilityMetricGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.aiSuitabilityMetricCard,
+.aiSuitabilitySummaryTile,
+.aiSuitabilityDetailCard {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  border: 1px solid #e1e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.aiSuitabilityMetricCard {
+  min-height: 96px;
+  padding: 16px 24px;
+}
+
+.aiSuitabilityMetricCard > span:first-child,
+.aiSuitabilitySummaryTile > span:first-child,
+.aiSuitabilityDetailCard > span:first-child,
+.aiSuitabilityChecklistPanel > div > span,
+.aiSuitabilityConsultBox > div > span {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+}
+
+.aiSuitabilityMetricCard svg,
+.aiSuitabilitySummaryTile svg,
+.aiSuitabilityDetailCard svg,
+.aiSuitabilityChecklistPanel svg,
+.aiSuitabilityConsultBox svg {
+  width: 29px;
+  height: 29px;
+}
+
+.aiSuitabilityMetricCard.is-green > span:first-child,
+.aiSuitabilitySummaryTile.is-green > span:first-child,
+.aiSuitabilityDetailCard.is-green > span:first-child,
+.aiSuitabilityChecklistPanel.is-green > div > span {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.aiSuitabilityMetricCard.is-blue > span:first-child,
+.aiSuitabilitySummaryTile.is-blue > span:first-child,
+.aiSuitabilityDetailCard.is-blue > span:first-child,
+.aiSuitabilityChecklistPanel.is-blue > div > span {
+  background: #dbeafe;
+  color: #1268ef;
+}
+
+.aiSuitabilityMetricCard.is-purple > span:first-child,
+.aiSuitabilitySummaryTile.is-purple > span:first-child,
+.aiSuitabilityDetailCard.is-purple > span:first-child,
+.aiSuitabilityChecklistPanel.is-purple > div > span {
+  background: #f0e7ff;
+  color: #6d28d9;
+}
+
+.aiSuitabilityMetricCard.is-orange > span:first-child,
+.aiSuitabilityDetailCard.is-orange > span:first-child {
+  background: #fff2d7;
+  color: #ea580c;
+}
+
+.aiSuitabilityMetricCard div,
+.aiSuitabilitySummaryTile div,
+.aiSuitabilityDetailCard div {
+  min-width: 0;
+}
+
+.aiSuitabilityMetricCard div span,
+.aiSuitabilitySummaryTile div span,
+.aiSuitabilityDetailCard div span {
+  color: #27324f;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.aiSuitabilityMetricCard strong,
+.aiSuitabilitySummaryTile strong,
+.aiSuitabilityDetailCard strong {
+  display: block;
+  margin-top: 6px;
+  color: #071634;
+  font-size: 21px;
+  font-weight: 950;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.aiSuitabilityNotice {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  border: 1px solid #bdeccf;
+  border-radius: 8px;
+  padding: 14px 18px;
+  background: #f1fcf5;
+  color: #18324b;
+  font-size: 15px;
+  font-weight: 750;
+  line-height: 1.55;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.aiSuitabilityNotice svg {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  color: #16a34a;
+}
+
+.aiSuitabilitySummaryStrip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 22px;
+  padding: 28px 40px;
+}
+
+.aiSuitabilitySummaryTile {
+  min-height: 78px;
+  border: 0;
+  box-shadow: none;
+}
+
+.aiSuitabilitySummaryTile strong {
+  font-size: 27px;
+}
+
+.aiSuitabilitySummaryTile.is-green strong {
+  color: #12833d;
+}
+
+.aiSuitabilitySummaryTile.is-blue strong {
+  color: #1268ef;
+}
+
+.aiSuitabilitySummaryTile.is-purple strong {
+  color: #6d28d9;
+}
+
+.aiSuitabilityDetailGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.aiSuitabilityDetailCard {
+  min-height: 92px;
+  padding: 15px 18px;
+}
+
+.aiSuitabilityDetailCard strong {
+  font-size: 18px;
+}
+
+.aiSuitabilityEvidenceGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.aiSuitabilityEvidenceGrid section {
+  border: 1px solid #e1e8f0;
+  border-radius: 8px;
+  padding: 18px 20px;
+  background: #f8fafc;
+}
+
+.aiSuitabilityEvidenceGrid strong {
+  color: #071634;
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.aiSuitabilityEvidenceGrid ul,
+.aiSuitabilityChecklistPanel ul {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0 0;
+  padding-left: 20px;
+  color: #24324e;
+  font-size: 15px;
+  font-weight: 750;
+  line-height: 1.65;
+}
+
+.aiSuitabilityChecklistGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 28px;
+}
+
+.aiSuitabilityChecklistPanel {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 330px;
+  padding: 28px 30px;
+}
+
+.aiSuitabilityChecklistPanel > div {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+
+.aiSuitabilityChecklistPanel > div strong {
+  color: #071634;
+  font-size: 21px;
+  font-weight: 950;
+}
+
+.aiSuitabilityChecklistPanel p {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 8px 0 0;
+  border: 1px solid #bdeccf;
   border-radius: 8px;
   padding: 12px;
-  background: #0f172a;
-  color: #e2e8f0;
-  font-size: 12px;
-  line-height: 1.5;
+  background: #f1fcf5;
+  color: #24324e;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.55;
 }
+
+.aiSuitabilityConsultBox {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 380px);
+  align-items: center;
+  gap: 24px;
+  padding: 20px 44px;
+  background: #f1fcf5;
+}
+
+.aiSuitabilityConsultBox > div {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+}
+
+.aiSuitabilityConsultBox > div > span {
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.aiSuitabilityConsultBox strong {
+  color: #071634;
+  font-size: 22px;
+  font-weight: 950;
+}
+
+.aiSuitabilityConsultBox button,
+.aiSuitabilityPageNav button {
+  min-height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 8px;
+  padding: 0 24px;
+  font-size: 17px;
+  font-weight: 950;
+}
+
+.aiSuitabilityConsultBox button {
+  background: #ffc400;
+  color: #071634;
+  box-shadow: 0 10px 20px rgba(234, 179, 8, 0.18);
+}
+
+.aiSuitabilityPageNav {
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+}
+
+.aiSuitabilityPageNav button {
+  min-width: 236px;
+  border: 1px solid #ccd8e6;
+  background: #ffffff;
+  color: #1268ef;
+}
+
+.aiSuitabilityPageNav button.isPrimary {
+  border-color: #1268ef;
+  background: #1268ef;
+  color: #ffffff;
+}
+
+.aiSuitabilityPageNav button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+@media (max-width: 1180px) {
+  .aiSuitabilitySummaryStrip,
+  .aiSuitabilityChecklistGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .aiSuitabilityStepIndicator {
+    width: 100%;
+    justify-items: start;
+  }
+
+  .aiSuitabilityPrimaryPanel,
+  .aiSuitabilitySummaryStrip,
+  .aiSuitabilityChecklistPanel,
+  .aiSuitabilityConsultBox {
+    padding: 18px;
+  }
+
+  .aiSuitabilityPrimaryHeader,
+  .aiSuitabilityConsultBox {
+    grid-template-columns: 1fr;
+  }
+
+  .aiSuitabilityPrimaryHeader {
+    flex-direction: column;
+  }
+
+  .aiSuitabilityPrimaryHeader > strong {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .aiSuitabilityMetricGrid,
+  .aiSuitabilitySummaryStrip,
+  .aiSuitabilityDetailGrid,
+  .aiSuitabilityEvidenceGrid,
+  .aiSuitabilityChecklistGrid,
+  .aiSuitabilityConsultBox {
+    grid-template-columns: 1fr;
+  }
+
+  .aiSuitabilityMetricCard,
+  .aiSuitabilitySummaryTile,
+  .aiSuitabilityDetailCard,
+  .aiSuitabilityChecklistPanel > div,
+  .aiSuitabilityConsultBox > div {
+    grid-template-columns: 54px minmax(0, 1fr);
+  }
+
+  .aiSuitabilityMetricCard > span:first-child,
+  .aiSuitabilitySummaryTile > span:first-child,
+  .aiSuitabilityDetailCard > span:first-child,
+  .aiSuitabilityChecklistPanel > div > span,
+  .aiSuitabilityConsultBox > div > span {
+    width: 48px;
+    height: 48px;
+  }
+
+  .aiSuitabilityMetricCard strong,
+  .aiSuitabilitySummaryTile strong,
+  .aiSuitabilityDetailCard strong {
+    font-size: 19px;
+  }
+
+  .aiSuitabilityPageNav {
+    gap: 10px;
+  }
+
+  .aiSuitabilityPageNav button {
+    min-width: 0;
+    flex: 1 1 0;
+    padding-inline: 12px;
+    font-size: 15px;
+  }
+}
+
 
 .profitReportSection.profitReportPagedView {
   gap: 16px;
@@ -994,17 +1460,6 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   padding: 22px;
-}
-
-.profitReportPagedView .subsidyRagSourceList details {
-  justify-self: end;
-}
-
-.profitReportPagedView .agentPayloadPreview {
-  border: 1px solid #99f6e4;
-  border-radius: 8px;
-  padding: 18px 22px;
-  background: #f0fdfa;
 }
 
 .profitNextStepPanel {
@@ -2689,10 +3144,6 @@
     grid-template-columns: 1fr;
   }
 
-  .profitReportPagedView .subsidyRagSourceList details {
-    justify-self: start;
-  }
-
   .profitMetricTile,
   .profitReviewPointPanel article,
   .profitNextStepPanel > div {
@@ -2745,7 +3196,6 @@
   .resultCostPanel,
   .resultChartGrid,
   .ecoCardGrid,
-  .agentPayloadPreview,
   .sectionResultImage,
   .mobileConsultButton,
   .policyInfoBox button {

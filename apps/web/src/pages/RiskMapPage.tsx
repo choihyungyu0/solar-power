@@ -1429,10 +1429,10 @@ function RiskMapPage() {
     viewerDebugId: null,
     viewerEntityCount: null,
   });
-  const [isDeveloperDiagnosticsOpen, setIsDeveloperDiagnosticsOpen] = useState(false);
+  const isDeveloperDiagnosticsOpen = false;
   const hasActualSelectedBuildingGeometry =
     Boolean(selectedBuildingGeometry) && (selectionMode === 'geometry' || selectionMode === 'building_footprint');
-  const shouldShowDevDiagnostics = import.meta.env.DEV || import.meta.env.VITE_SHOW_SELECTION_DEBUG === 'true';
+  const shouldShowDevDiagnostics = false;
   const appEnv = import.meta.env.DEV ? 'development' : import.meta.env.MODE || 'production';
   const hasBuildingDataHealthError = buildingDataHealth.buildingIndexStatus === 'error';
   const buildingDataHealthStatusText = `index ${formatHealthStatus(
@@ -4218,14 +4218,6 @@ function RiskMapPage() {
                 <p className="analysisSourceWarning">
                   본 분석은 비공식 API와 건물 footprint 기반 추정을 포함한 MVP입니다. 실제 설치 가능 여부는 현장조사와 구조 검토가 필요합니다.
                 </p>
-                <button
-                  className="developerDiagnosticsToggle"
-                  type="button"
-                  aria-expanded={isDeveloperDiagnosticsOpen}
-                  onClick={() => setIsDeveloperDiagnosticsOpen((current) => !current)}
-                >
-                  개발자 진단 보기
-                </button>
                 {isDeveloperDiagnosticsOpen && (
                   <div className="developerDiagnosticsContent">
                 <div>

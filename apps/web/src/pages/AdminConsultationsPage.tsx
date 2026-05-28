@@ -529,7 +529,6 @@ function ProfitReportModal({
   onClose: () => void;
 }) {
   const report = modalState.report?.report ?? null;
-  const markdown = modalState.report?.reportMarkdown ?? '';
   const narrativeHeadline = getPathText(report, ['reportNarrative', 'headline']);
   const narrativeSummary = getPathText(report, ['reportNarrative', 'summary']);
   const narrativeSalesMessage = getPathText(report, ['reportNarrative', 'salesMessage']);
@@ -614,7 +613,7 @@ function ProfitReportModal({
                 <p>{loanApprovalStatus || '금융기관 심사 필요'} · 월 {formatKrw(monthlyPaymentKrw)} 추정</p>
               </div>
               <div>
-                <dt>실투자금/회수기간</dt>
+                <dt>초기 현금/회수기간</dt>
                 <dd>{formatKrw(cashNeededKrw)}</dd>
                 <p>{formatYears(paybackYears)} 추정</p>
               </div>
@@ -651,10 +650,6 @@ function ProfitReportModal({
                           {' · '}
                           중복지원 {getPathValue(match, ['stackingAllowed']) === true ? '검토 필요' : '불가'}
                         </p>
-                        <details>
-                          <summary>근거 chunk 보기</summary>
-                          <pre>{getPathText(match, ['chunkText']) || '근거 텍스트가 없습니다.'}</pre>
-                        </details>
                       </li>
                     );
                   })}
@@ -674,16 +669,6 @@ function ProfitReportModal({
                 )}
               </ul>
             </section>
-
-            <details className="admin-report-preview">
-              <summary>reportMarkdown 보기</summary>
-              <pre>{markdown || 'Markdown 리포트가 없습니다.'}</pre>
-            </details>
-
-            <details className="admin-report-preview">
-              <summary>개발자 JSON 보기</summary>
-              <pre>{JSON.stringify(report, null, 2)}</pre>
-            </details>
           </>
         )}
       </section>
