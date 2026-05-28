@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type FocusEvent, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FocusEvent, type FormEvent } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
-import { LuSearch } from 'react-icons/lu';
+import { LuArrowRight, LuSearch } from 'react-icons/lu';
 import SafeLocalImage from './components/SafeLocalImage';
 import ServiceIntroSection from './components/ServiceIntroSection';
 import SolarMateHeader from './components/SolarMateHeader';
@@ -97,6 +97,7 @@ function App() {
 
 function HomePage() {
   const navigate = useNavigate();
+  const heroAddressInputRef = useRef<HTMLInputElement>(null);
   const [heroAddress, setHeroAddress] = useState(() => readLandingAddressText());
   const [isHeroAddressOptionsOpen, setIsHeroAddressOptionsOpen] = useState(false);
 
@@ -150,6 +151,11 @@ function HomePage() {
     setIsHeroAddressOptionsOpen(false);
   };
 
+  const handleHeroQuickCheck = () => {
+    setIsHeroAddressOptionsOpen(true);
+    heroAddressInputRef.current?.focus();
+  };
+
   return (
     <main className="pageShell">
       <div className="siteFrame">
@@ -157,23 +163,24 @@ function HomePage() {
 
         <section className="heroSection" aria-labelledby="hero-title">
           <div className="heroCopy">
-            <span className="eyebrow">정책자금과 에너지 금융으로</span>
             <h1 id="hero-title">
-              부담 없이 태양광 설치하기
+              지역별 차등
               <br />
+              전기요금제가 걱정된다면?
             </h1>
-            <p className="heroDescription">(서비스 지역 : 경기도)</p>
-            <p className="disclaimer">
-              ※ 시뮬레이션 결과는 건축물 정보, 일사량,
-              <br />
-              전기사용량, 정책 데이터 기준의 예상값입니다.
-            </p>
+            <button className="heroCheckLink" type="button" onClick={handleHeroQuickCheck}>
+              태양광 설치 확인하기
+              <span aria-hidden="true">
+                <LuArrowRight />
+              </span>
+            </button>
             <div className="heroActions">
               <form className="heroAddressForm" onSubmit={handleHeroAddressSubmit}>
                 <div className="heroAddressCombobox" onBlur={handleHeroAddressBlur}>
                   <label className="heroAddressField" htmlFor="hero-address-input">
                     <span>아파트 주소</span>
                     <input
+                      ref={heroAddressInputRef}
                       id="hero-address-input"
                       type="text"
                       value={heroAddress}
@@ -221,7 +228,7 @@ function HomePage() {
                 </div>
                 <button className="primaryButton" type="submit">
                   <LuSearch aria-hidden="true" />
-                  우리 아파트 태양광 설치하기
+                  태양광 설치하기
                 </button>
               </form>
             </div>

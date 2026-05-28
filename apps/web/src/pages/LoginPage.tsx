@@ -1,5 +1,5 @@
-import { type ChangeEvent, type FormEvent, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { type ChangeEvent, type FormEvent, useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { LuShieldCheck } from 'react-icons/lu';
 import SolarMateHeader from '../components/SolarMateHeader';
 import { clearDemoAuth, setDemoAuth } from '../lib/demoAuth';
@@ -74,8 +74,10 @@ function getFriendlyAuthError(message: string) {
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { session } = useSupabaseSession();
-  const [mode, setMode] = useState<AuthMode>('login');
+  const requestedMode: AuthMode = searchParams.get('mode') === 'signup' ? 'signup' : 'login';
+  const [mode, setMode] = useState<AuthMode>(requestedMode);
   const [form, setForm] = useState<LoginFormState>({
     email: '',
     password: '',
@@ -86,6 +88,11 @@ export default function LoginPage() {
   });
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    setMode(requestedMode);
+    setMessage('');
+  }, [requestedMode]);
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { name, type, value, checked } = event.target;

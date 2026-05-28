@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { LuUserRound } from 'react-icons/lu';
+import { LuChevronRight, LuUserRound } from 'react-icons/lu';
 import { clearDemoAuth, getDemoAuth } from '../lib/demoAuth';
 import { supabase } from '../lib/supabase';
 import { useSupabaseSession } from '../lib/useSupabaseSession';
@@ -54,6 +54,16 @@ export default function SolarMateHeader({ variant = 'public', onBeforeLogin, onB
     navigate('/login');
   };
 
+  const handleLoginClick = () => {
+    onBeforeLogin?.();
+    navigate('/login?mode=login');
+  };
+
+  const handleSignupClick = () => {
+    onBeforeLogin?.();
+    navigate('/login?mode=signup');
+  };
+
   return (
     <header className={`solarmate-header ${variant === 'member' ? 'is-member' : ''}`}>
       <NavLink className="solarmate-header-logo" to="/" aria-label="이코햇 홈">
@@ -68,14 +78,41 @@ export default function SolarMateHeader({ variant = 'public', onBeforeLogin, onB
         ))}
       </nav>
 
-      <button
-        className={`solarmate-header-auth ${location.pathname === '/login' && !isLoggedIn ? 'is-active' : ''}`}
-        type="button"
-        onClick={handleAuthClick}
-      >
-        <LuUserRound aria-hidden="true" />
-        {isLoggedIn ? '로그아웃' : '로그인'}
-      </button>
+      <div className="solarmate-header-auth-group" aria-label="계정 메뉴">
+        {isLoggedIn ? (
+          <button className="solarmate-header-auth is-logout" type="button" onClick={handleAuthClick}>
+            <LuUserRound aria-hidden="true" />
+            로그아웃
+          </button>
+        ) : (
+          <>
+            <button
+              className={`solarmate-header-auth is-signup ${
+                location.pathname === '/login' && location.search.includes('mode=signup') ? 'is-active' : ''
+              }`}
+              type="button"
+              onClick={handleSignupClick}
+            >
+              <span aria-hidden="true" className="solarmate-header-auth-icon">
+                <LuChevronRight />
+              </span>
+              회원가입
+            </button>
+            <button
+              className={`solarmate-header-auth is-login ${
+                location.pathname === '/login' && !location.search.includes('mode=signup') ? 'is-active' : ''
+              }`}
+              type="button"
+              onClick={handleLoginClick}
+            >
+              <span aria-hidden="true" className="solarmate-header-auth-icon">
+                <LuChevronRight />
+              </span>
+              로그인
+            </button>
+          </>
+        )}
+      </div>
     </header>
   );
 }

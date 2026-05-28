@@ -46,18 +46,23 @@ function ServiceIntroSection() {
         <div className="introReviewGrid">
           {reviewCards.map((review) => (
             <article className="introReviewCard" key={review.name}>
-              <div className="reviewCopy">
-                <span className={`reviewBadge ${review.tone}`}>{review.badge}</span>
-                <p>“{review.quote}”</p>
-                <strong>{review.name}</strong>
-              </div>
-              <div className={`reviewResultBox ${review.tone}`}>
-                <span>예상 연간 절감액</span>
-                <strong>{review.saving}</strong>
-                <hr />
-                <span>만족 포인트</span>
-                <b>{review.point}</b>
-              </div>
+              <span className={`reviewBadge ${review.tone}`}>{review.badge}</span>
+              <p className="reviewQuote">“ {review.quote} ”</p>
+              <strong className="reviewName">{review.name}</strong>
+              <dl className={`reviewResultBox ${review.tone}`}>
+                <div>
+                  <dt>예상 연간 절감액</dt>
+                  <dd>
+                    <strong>{review.saving}</strong>
+                  </dd>
+                </div>
+                <div>
+                  <dt>만족 포인트</dt>
+                  <dd>
+                    <b>{review.point}</b>
+                  </dd>
+                </div>
+              </dl>
             </article>
           ))}
         </div>
