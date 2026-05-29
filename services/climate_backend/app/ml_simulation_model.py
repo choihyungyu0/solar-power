@@ -21,6 +21,7 @@ MODEL_METADATA_PATH = MODEL_DIR / "model_metadata.json"
 MODEL_VERSION = "solarmate-simulation-surrogate-rf-kmeans-v1"
 TRAINING_DATA_SOURCE = "simulation-derived-seed-data"
 MIN_ANNUAL_GENERATION_KWH_PER_KW = 900
+MAX_ANNUAL_GENERATION_KWH_PER_KW = 1350
 
 FEATURE_COLUMNS = [
     "roof_area_m2",
@@ -256,6 +257,13 @@ def _generation_guardrail_floor(features: dict[str, Any], formula_generation_kwh
     return max(0, min(max(physical_floor, formula_floor), install_kw * 1320))
 
 
+def _generation_guardrail_ceiling(features: dict[str, Any]):
+    values = _feature_map(features)
+    install_kw = values["install_capacity_kw"]
+
+    return install_kw * MAX_ANNUAL_GENERATION_KWH_PER_KW if install_kw > 0 else 0
+
+
 def _estimate_payback_formula(features: dict[str, Any]):
     existing_payback = _as_float(features.get("paybackYears", features.get("payback_years")), 0)
 
@@ -344,6 +352,20 @@ def predict_generation(features: dict[str, Any]):
     else:
         annual_generation_kwh = formula_generation_kwh
         model_type = "fallback-formula-v1"
+
+    ceiling_generation_kwh = _generation_guardrail_ceiling(features)
+
+    if ceiling_generation_kwh > 0 and annual_generation_kwh > ceiling_generation_kwh:
+        raw_before_ceiling_kwh = annual_generation_kwh
+        annual_generation_kwh = ceiling_generation_kwh
+        model_type = f"{model_type}+guardrail-ceiling"
+        calibration = {
+            **(calibration or {}),
+            "source": "generation_guardrail_ceiling",
+            "reason": "설치 용량 대비 발전량이 과대 산출되어 공동주택 MVP용 보수 상한을 적용했습니다.",
+            "rawBeforeCeilingKwh": round(raw_before_ceiling_kwh),
+            "ceilingAnnualGenerationKwh": round(ceiling_generation_kwh),
+        }
 
     confidence = _prediction_confidence(features, model_loaded)
 

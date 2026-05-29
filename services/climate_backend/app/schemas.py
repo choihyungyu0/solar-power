@@ -113,5 +113,5 @@ class SolarReportRequest(BaseModel):
 
     aiSimulationResult: dict[str, Any]
     sigungu: Optional[str] = None
-    loanRatio: float = 0.80
+    loanRatio: float = 0.40
     loanTermYears: int = 5

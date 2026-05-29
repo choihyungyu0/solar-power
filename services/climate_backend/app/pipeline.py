@@ -45,6 +45,12 @@ MONTHLY_GENERATION_WEIGHTS = [
     0.049,
     0.043,
 ]
+REALISTIC_INSTALL_COST_KRW_PER_KW = 1_550_000
+MIN_ACCEPTED_INSTALL_COST_KRW_PER_KW = 900_000
+MAX_ACCEPTED_INSTALL_COST_KRW_PER_KW = 1_950_000
+MAX_ANNUAL_GENERATION_KWH_PER_KW = 1_350
+ELECTRICITY_VALUE_KRW_PER_KWH = 150
+POLICY_LOAN_RATIO = 0.4
 
 
 def _elapsed_ms(started: float) -> int:
@@ -193,12 +199,89 @@ def _pipeline_validation_error_response(
     }
 
 
+def _normalize_apartment_scale_generation(annual_generation_kwh: float, install_kw: float):
+    if install_kw <= 0:
+        return max(0, annual_generation_kwh)
+
+    max_generation_kwh = install_kw * MAX_ANNUAL_GENERATION_KWH_PER_KW
+
+    return max(0, min(annual_generation_kwh, max_generation_kwh))
+
+
+def _normalize_apartment_scale_install_cost(install_cost_krw: float, install_kw: float):
+    if install_kw <= 0:
+        return max(0, install_cost_krw)
+
+    cost_per_kw = install_cost_krw / install_kw if install_cost_krw > 0 else 0
+
+    if cost_per_kw < MIN_ACCEPTED_INSTALL_COST_KRW_PER_KW or cost_per_kw > MAX_ACCEPTED_INSTALL_COST_KRW_PER_KW:
+        return install_kw * REALISTIC_INSTALL_COST_KRW_PER_KW
+
+    return max(0, install_cost_krw)
+
+
+def _normalize_apartment_scale_saving(annual_saving_krw: float, annual_generation_kwh: float):
+    generation_based_saving_krw = annual_generation_kwh * ELECTRICITY_VALUE_KRW_PER_KWH
+
+    if annual_saving_krw <= 0:
+        return generation_based_saving_krw
+
+    return min(annual_saving_krw, generation_based_saving_krw)
+
+
+def _normalize_monthly_generation_series(raw: Any, annual_generation_kwh: float):
+    values: list[float] = []
+
+    if isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, dict):
+                values.append(_coerce_float(item.get("generation"), 0))
+
+    value_total = sum(values)
+
+    if len(values) == 12 and value_total > 0:
+        return [
+            {
+                "month": index + 1,
+                "generation": round((value / value_total) * annual_generation_kwh, 1),
+            }
+            for index, value in enumerate(values)
+        ]
+
+    return [
+        {
+            "month": index + 1,
+            "generation": round(annual_generation_kwh * weight, 1),
+        }
+        for index, weight in enumerate(MONTHLY_GENERATION_WEIGHTS)
+    ]
+
+
+def _normalize_annual_save_cost_series(raw: Any, annual_saving_krw: float):
+    source = raw if isinstance(raw, list) else []
+    series: list[dict[str, int]] = []
+
+    for index in range(20):
+        item = source[index] if index < len(source) and isinstance(source[index], dict) else {}
+        year = round(_coerce_float(item.get("year") if isinstance(item, dict) else None, index + 1))
+        save_cost = _coerce_float(item.get("saveCost") if isinstance(item, dict) else None, annual_saving_krw)
+
+        series.append(
+            {
+                "year": year if year > 0 else index + 1,
+                "saveCost": round(min(max(0, save_cost), annual_saving_krw)),
+            }
+        )
+
+    return series
+
+
 def create_fallback_pv_output(panel_capacity_w: int, panel_count: int, shading_average: float):
     install_kw = panel_capacity_w * panel_count / 1000
     shading_factor = max(0.45, min(1.0, shading_average / 3.5 if shading_average else 0.6))
-    annual_generation_kwh = install_kw * 365 * 3.6 * shading_factor
-    annual_saving_krw = annual_generation_kwh * 150
-    expected_investment_krw = install_kw * 1_200_000
+    annual_generation_kwh = _normalize_apartment_scale_generation(install_kw * 365 * 3.6 * shading_factor, install_kw)
+    annual_saving_krw = _normalize_apartment_scale_saving(annual_generation_kwh * ELECTRICITY_VALUE_KRW_PER_KWH, annual_generation_kwh)
+    expected_investment_krw = install_kw * REALISTIC_INSTALL_COST_KRW_PER_KW
     carbon_reduction = annual_generation_kwh * 0.4594
 
     return {
@@ -218,20 +301,8 @@ def create_fallback_pv_output(panel_capacity_w: int, panel_count: int, shading_a
             "carbon_reduction": round(carbon_reduction, 1),
         },
         "annual_revenue": [],
-        "annual_saveCost": [
-            {
-                "year": year,
-                "saveCost": round(annual_saving_krw),
-            }
-            for year in range(1, 21)
-        ],
-        "monthly_generation": [
-            {
-                "month": index + 1,
-                "generation": round(annual_generation_kwh * weight, 1),
-            }
-            for index, weight in enumerate(MONTHLY_GENERATION_WEIGHTS)
-        ],
+        "annual_saveCost": _normalize_annual_save_cost_series([], annual_saving_krw),
+        "monthly_generation": _normalize_monthly_generation_series([], annual_generation_kwh),
     }
 
 
@@ -446,23 +517,36 @@ def normalize_backend_pv_output(raw: Any, panel_capacity_w: int, panel_count: in
         return fallback
 
     expected_revenue = data["expected_revenue"]
+    install_kw = _coerce_float(expected_revenue.get("install_kw"), fallback["expected_revenue"]["install_kw"])
     annual_generation = data.get("annual_generation", data.get("annual_generation_kwh"))
     first_year_save_cost = expected_revenue.get("first_year_save_cost", data.get("annual_saving_krw"))
     expected_investment = expected_revenue.get("expected_investment", data.get("expected_investment_krw"))
+    annual_generation_kwh = _normalize_apartment_scale_generation(
+        _coerce_float(annual_generation, fallback["annual_generation"]),
+        install_kw,
+    )
+    annual_saving_krw = _normalize_apartment_scale_saving(
+        _coerce_float(first_year_save_cost, fallback["annual_saving_krw"]),
+        annual_generation_kwh,
+    )
+    expected_investment_krw = _normalize_apartment_scale_install_cost(
+        _coerce_float(expected_investment, fallback["expected_investment_krw"]),
+        install_kw,
+    )
 
     data["source"] = "backend-pv-analysis"
-    data["annual_generation"] = round(_coerce_float(annual_generation, fallback["annual_generation"]))
+    data["annual_generation"] = round(annual_generation_kwh)
     data["annual_generation_kwh"] = data["annual_generation"]
-    data["annual_saving_krw"] = round(_coerce_float(first_year_save_cost, fallback["annual_saving_krw"]))
-    data["expected_investment_krw"] = round(_coerce_float(expected_investment, fallback["expected_investment_krw"]))
-    expected_revenue.setdefault("install_kw", fallback["expected_revenue"]["install_kw"])
+    data["annual_saving_krw"] = round(annual_saving_krw)
+    data["expected_investment_krw"] = round(expected_investment_krw)
+    expected_revenue["install_kw"] = round(install_kw, 1)
     expected_revenue.setdefault("first_year_revenue", data["annual_saving_krw"])
     expected_revenue["first_year_save_cost"] = data["annual_saving_krw"]
     expected_revenue["expected_investment"] = data["expected_investment_krw"]
     data.setdefault("environmental_contribution", fallback["environmental_contribution"])
     data.setdefault("annual_revenue", fallback["annual_revenue"])
-    data.setdefault("annual_saveCost", fallback["annual_saveCost"])
-    data.setdefault("monthly_generation", fallback["monthly_generation"])
+    data["annual_saveCost"] = _normalize_annual_save_cost_series(data.get("annual_saveCost"), annual_saving_krw)
+    data["monthly_generation"] = _normalize_monthly_generation_series(data.get("monthly_generation"), annual_generation_kwh)
 
     return data
 
@@ -787,10 +871,10 @@ async def run_hybrid_pipeline(request):
         )
         subsidy_estimate_krw = round(_coerce_float(subsidy_detail.get("subsidyKrw"), 0))
         self_payment_estimate_krw = max(0, round(estimated_install_cost_krw - subsidy_estimate_krw))
-        policy_loan_limit_krw = round(self_payment_estimate_krw * 0.75)
+        policy_loan_limit_krw = round(self_payment_estimate_krw * POLICY_LOAN_RATIO)
         payback_years = (
-            round(estimated_install_cost_krw / annual_saving_krw, 1)
-            if annual_saving_krw > 0 and estimated_install_cost_krw > 0
+            round(self_payment_estimate_krw / annual_saving_krw, 1)
+            if annual_saving_krw > 0 and self_payment_estimate_krw > 0
             else 0
         )
         used_cell_count = len(shading)

@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir, rm, stat } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -22,12 +22,45 @@ await assertReadablePath(sourceDir, '행정동 분할 건물 데이터 폴더');
 await assertReadablePath(path.join(sourceDir, 'index.json'), '행정동 분할 건물 index.json');
 await assertReadablePath(sourceMeta, '화성시 건물 메타데이터');
 
-await mkdir(targetRoot, { recursive: true });
-await rm(targetDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
-await cp(sourceDir, targetDir, { recursive: true });
-await cp(sourceMeta, targetMeta);
+async function copyFileIfChanged(sourcePath, targetPath) {
+  const sourceStats = await stat(sourcePath);
 
-const copiedFiles = await readdir(targetDir);
+  try {
+    const targetStats = await stat(targetPath);
+
+    if (targetStats.size === sourceStats.size) {
+      return;
+    }
+  } catch {
+    // Missing target files are copied below.
+  }
+
+  await copyFile(sourcePath, targetPath);
+}
+
+async function syncDirectory(sourcePath, targetPath) {
+  await mkdir(targetPath, { recursive: true });
+
+  const entries = await readdir(sourcePath, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const nextSourcePath = path.join(sourcePath, entry.name);
+    const nextTargetPath = path.join(targetPath, entry.name);
+
+    if (entry.isDirectory()) {
+      await syncDirectory(nextSourcePath, nextTargetPath);
+      continue;
+    }
+
+    await copyFileIfChanged(nextSourcePath, nextTargetPath);
+  }
+}
+
+await mkdir(targetRoot, { recursive: true });
+await syncDirectory(sourceDir, targetDir);
+await copyFileIfChanged(sourceMeta, targetMeta);
+
+const copiedFiles = await readdir(sourceDir);
 const geoJsonCount = copiedFiles.filter((file) => file.toLowerCase().endsWith('.geojson')).length;
 
 console.log(`Synced ${geoJsonCount.toLocaleString('ko-KR')} GeoJSON files plus index.json.`);

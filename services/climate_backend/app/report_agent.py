@@ -23,7 +23,7 @@ from .subsidy_table import classify_housing_type, estimate_subsidy, normalize_si
 REPORT_VERSION = "solarmate-report-agent-v1"
 
 # 대출 목업 가정 (현석 확정 시 교체)
-DEFAULT_LOAN_RATIO = 0.80
+DEFAULT_LOAN_RATIO = 0.40
 DEFAULT_LOAN_TERM_YEARS = 5
 
 GRADE_COLORS = {

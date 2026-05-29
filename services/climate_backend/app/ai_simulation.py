@@ -37,6 +37,7 @@ MONTHLY_GENERATION_WEIGHTS = [
 DEFAULT_SUBSIDY_PROGRAM_NAME = "보조금 공고 확인 필요"
 DEFAULT_SUBSIDY_POLICY_MODE = "housing_type_based_policy"
 DEFAULT_SUBSIDY_STACKING_REASON = "주택 유형별 적용 제도를 분기하며 중복 합산하지 않음"
+DEFAULT_POLICY_LOAN_RATIO = 0.4
 FIELD_CHECK_REQUIRED = [
     "옥상 장애물",
     "구조안전성",
@@ -141,7 +142,7 @@ def _build_subsidy_context(input: dict[str, Any]):
     policy_loan_limit_krw = round(_as_float(input.get("policyLoanLimitKrw")))
 
     if policy_loan_limit_krw <= 0:
-        policy_loan_limit_krw = round(self_payment_estimate_krw * 0.75)
+        policy_loan_limit_krw = round(self_payment_estimate_krw * DEFAULT_POLICY_LOAN_RATIO)
 
     return {
         "housingType": housing_type,
