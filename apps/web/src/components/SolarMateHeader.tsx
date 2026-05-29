@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { LuChevronRight, LuUserRound } from 'react-icons/lu';
+import { LuMenu, LuUserRound } from 'react-icons/lu';
 import { clearDemoAuth, getDemoAuth } from '../lib/demoAuth';
 import { supabase } from '../lib/supabase';
 import { useSupabaseSession } from '../lib/useSupabaseSession';
@@ -8,6 +8,8 @@ import './SolarMateHeader.css';
 
 type SolarMateHeaderProps = {
   variant?: 'public' | 'member';
+  appearance?: 'solid' | 'hero';
+  isScrolled?: boolean;
   onBeforeLogin?: () => void;
   onBeforeLogout?: () => void;
 };
@@ -31,13 +33,27 @@ const navItems = [
   },
 ];
 
-export default function SolarMateHeader({ variant = 'public', onBeforeLogin, onBeforeLogout }: SolarMateHeaderProps) {
+export default function SolarMateHeader({
+  variant = 'public',
+  appearance = 'solid',
+  isScrolled = false,
+  onBeforeLogin,
+  onBeforeLogout,
+}: SolarMateHeaderProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { session } = useSupabaseSession();
   const demoAuth = useMemo(() => getDemoAuth(), [location.pathname, location.search]);
   const isSupabaseLoggedIn = Boolean(session?.user);
   const isLoggedIn = isSupabaseLoggedIn || demoAuth?.isLoggedIn === true;
+  const headerClassName = [
+    'solarmate-header',
+    variant === 'member' ? 'is-member' : '',
+    appearance === 'hero' ? 'is-hero' : '',
+    isScrolled ? 'is-scrolled' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   const handleAuthClick = async () => {
     if (isLoggedIn) {
@@ -65,14 +81,20 @@ export default function SolarMateHeader({ variant = 'public', onBeforeLogin, onB
   };
 
   return (
-    <header className={`solarmate-header ${variant === 'member' ? 'is-member' : ''}`}>
-      <NavLink className="solarmate-header-logo" to="/" aria-label="이코햇 홈">
-        <img className="solarmate-header-logo-image" src="/assets/logo.png" alt="이코햇" />
+    <header className={headerClassName} aria-label="쏠쏠햇 상단 메뉴">
+      <NavLink className="solarmate-header-logo" to="/" aria-label="쏠쏠햇 홈">
+        <img className="solarmate-header-logo-image" src="/assets/logo.png" alt="쏠쏠햇" />
       </NavLink>
 
       <nav className="solarmate-header-nav" aria-label="주요 메뉴">
         {navItems.map((item) => (
-          <NavLink key={item.to} to={item.to} className={({ isActive }) => (isActive ? 'is-active' : undefined)}>
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) =>
+              isActive || (location.pathname === '/' && item.to === '/solar-adoption') ? 'is-active' : undefined
+            }
+          >
             {item.label}
           </NavLink>
         ))}
@@ -94,7 +116,7 @@ export default function SolarMateHeader({ variant = 'public', onBeforeLogin, onB
               onClick={handleSignupClick}
             >
               <span aria-hidden="true" className="solarmate-header-auth-icon">
-                <LuChevronRight />
+                <LuUserRound />
               </span>
               회원가입
             </button>
@@ -106,12 +128,21 @@ export default function SolarMateHeader({ variant = 'public', onBeforeLogin, onB
               onClick={handleLoginClick}
             >
               <span aria-hidden="true" className="solarmate-header-auth-icon">
-                <LuChevronRight />
+                <LuUserRound />
               </span>
               로그인
             </button>
           </>
         )}
+
+        <button
+          className="solarmate-header-menu-button"
+          type="button"
+          onClick={() => navigate('/service')}
+          aria-label="메뉴 보기"
+        >
+          <LuMenu aria-hidden="true" />
+        </button>
       </div>
     </header>
   );

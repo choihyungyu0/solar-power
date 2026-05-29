@@ -278,7 +278,7 @@ export default function ConsultationPage() {
         : {}),
     };
     const rawContentWithProfitReport = selectedSimulationContext.profitReportSummary
-      ? `${trimmedFormValues.content || 'AI 수익 리포트 기반 상담을 요청합니다.'}\n\nAI 수익 리포트 요약: ${
+      ? `${trimmedFormValues.content || 'AI 맞춤형 설치 리포트 기반 상담을 요청합니다.'}\n\nAI 맞춤형 설치 리포트 요약: ${
           selectedSimulationContext.profitReportSummary
         }`
       : trimmedFormValues.content;

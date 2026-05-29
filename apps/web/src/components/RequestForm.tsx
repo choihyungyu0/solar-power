@@ -57,7 +57,7 @@ function RequestForm({ onSubmit, isSaving }: RequestFormProps) {
   return (
     <section className="mvpPanel requestPanel" id="solar-request" aria-labelledby="request-title">
       <span className="panelKicker">Apartment Solar Request</span>
-      <h2 id="request-title">우리 아파트 태양광 설치하기</h2>
+      <h2 id="request-title">우리 집 태양광 설치하기</h2>
       <p>입력값으로 예상 발전량, 절감액, 보조금 후보, 다음 액션을 한 번에 확인합니다.</p>
 
       <form className="requestForm" onSubmit={handleSubmit}>

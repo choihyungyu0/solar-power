@@ -48,7 +48,7 @@ const policyNewsItems: PolicyNewsItem[] = [
 ];
 
 const faqItems = [
-  '우리 아파트도 설치 가능한가요?',
+  '우리 집도 설치 가능한가요?',
   '예상 절감액은 어떻게 계산되나요?',
   '보조금은 언제 확정되나요?',
   '회원가입 없이도 확인할 수 있나요?',

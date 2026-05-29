@@ -1381,7 +1381,7 @@ function RiskMapPage() {
   );
   const [analysisStatus, setAnalysisStatus] = useState(() =>
     initialRestoredSimulationResult
-      ? '이전 분석 결과를 불러왔습니다. 결과 상세보기에서 AI 수익 리포트와 AI 설치 적합도를 함께 확인할 수 있습니다.'
+      ? '이전 분석 결과를 불러왔습니다. 결과 상세보기에서 AI 맞춤형 설치 리포트를 확인할 수 있습니다.'
       : '',
   );
   const [activeTab] = useState<RiskPanelTab>(() => (initialRestoredSimulationResult ? 'solar' : 'risk'));
@@ -3862,8 +3862,10 @@ function RiskMapPage() {
 
       {isSimulationLoading && (
         <div className="simulationFullscreenLoading" role="status" aria-live="assertive" aria-label="태양광 시뮬레이션 로딩 중">
-          <span className="simulationFullscreenSpinner" aria-hidden="true" />
-          <strong>로딩 중</strong>
+          <div className="simulationLoadingBadge">
+            <span className="simulationFullscreenSpinner" aria-hidden="true" />
+            <strong>로딩 중</strong>
+          </div>
         </div>
       )}
 
@@ -5055,10 +5057,10 @@ function RiskMapPage() {
               )}
 
               {activeReportInputMetrics && (
-                <section className="aiProfitReportCard" aria-label="AI 수익 리포트 요약">
+                <section className="aiProfitReportCard" aria-label="AI 맞춤형 설치 리포트 요약">
                   <div className="aiProfitReportHeader">
                     <div>
-                      <span>AI 수익·보조금·금융 리포트</span>
+                      <span>AI 맞춤형 설치 리포트</span>
                       <strong>도입 판단용 핵심 요약</strong>
                     </div>
                   </div>
@@ -5088,7 +5090,7 @@ function RiskMapPage() {
                   </p>
 
                   <p className="aiProfitReportGuide">
-                    결과 상세보기 화면에서 AI 수익 리포트와 설치 적합도 상세 페이지를 함께 확인할 수 있습니다.
+                    결과 상세보기 화면에서 AI 맞춤형 설치 리포트를 확인할 수 있습니다.
                   </p>
                 </section>
               )}

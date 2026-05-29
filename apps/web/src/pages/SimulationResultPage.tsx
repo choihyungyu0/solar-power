@@ -8,7 +8,6 @@ import {
   LuBuilding2,
   LuChartNoAxesColumnIncreasing,
   LuCheck,
-  LuChevronLeft,
   LuChevronRight,
   LuCircleCheck,
   LuCoins,
@@ -108,25 +107,24 @@ const fallbackDemoResult: StoredSimulationResult = {
     buildingId: 'demo-result-building',
   },
   solar: {
-    investmentKrw: 27_324_000,
-    panelCount: 46,
-    installCapacityKw: 23,
-    annualSavingKrw: 6_087_790,
-    paybackYears: 5,
-    annualGenerationKwh: 32_041,
-    firstYearSavingKrw: 5_511_052,
-    tenYearSavingKrw: 53_886_922,
-    twentyYearSavingKrw: 105_139_319,
-    pineTreeEffect: 109_684,
-    carbonReductionKg: 15_319,
-    subsidyMaxKrw: 13_000_000,
-    selfPaymentKrw: 14_000_000,
-    loanLimitKrw: 10_500_000,
-    monthlyGeneration: [1525, 1229, 2179, 3012, 3522, 3864, 3133, 2446, 1775, 1256, 1068, 1112],
+    investmentKrw: 6_000_000,
+    panelCount: 15,
+    installCapacityKw: 6,
+    annualSavingKrw: 900_000,
+    paybackYears: 6,
+    annualGenerationKwh: 14_160,
+    firstYearSavingKrw: 900_000,
+    tenYearSavingKrw: 8_712_000,
+    twentyYearSavingKrw: 16_524_000,
+    pineTreeEffect: 48_470,
+    carbonReductionKg: 6_773,
+    subsidyMaxKrw: 600_000,
+    selfPaymentKrw: 5_400_000,
+    loanLimitKrw: 900_000,
+    monthlyGeneration: [780, 760, 1090, 1390, 1630, 1790, 1690, 1530, 1270, 980, 640, 610],
     yearlyRevenue: [
-      5_272_700, 5_546_000, 5_869_000, 5_435_500, 5_446_500, 5_416_500, 5_171_500, 5_115_900,
-      5_086_500, 5_110_000, 5_220_300, 5_174_500, 5_015_300, 4_921_500, 4_923_100, 4_827_200,
-      4_923_500, 4_889_500, 4_856_800, 4_765_500,
+      900_000, 894_600, 889_200, 883_800, 878_400, 873_000, 867_600, 862_200, 856_800, 851_400,
+      846_000, 840_600, 835_200, 829_800, 824_400, 819_000, 813_600, 808_200, 802_800, 797_400,
     ],
   },
   source: 'demo',
@@ -134,6 +132,19 @@ const fallbackDemoResult: StoredSimulationResult = {
 };
 
 const badges = ['공동주택', '가상설치 가능', '예상 분석 완료'];
+const REPORT_DISPLAY_MAX_INSTALL_CAPACITY_KW = 6;
+const REPORT_PANEL_CAPACITY_KW = 0.4;
+const REPORT_INSTALL_COST_KRW_PER_KW = 1_000_000;
+const REPORT_MIN_ACCEPTED_INSTALL_COST_KRW_PER_KW = 700_000;
+const REPORT_MAX_ACCEPTED_INSTALL_COST_KRW_PER_KW = 1_500_000;
+const REPORT_ELECTRICITY_VALUE_KRW_PER_KWH = 35;
+const REPORT_ANNUAL_SAVING_DISPLAY_CAP_KRW = 900_000;
+const REPORT_APARTMENT_SUBSIDY_KRW_PER_KW = 466_000;
+const REPORT_APARTMENT_SUBSIDY_MAX_CAPACITY_KW = 30;
+const REPORT_SUBSIDY_RATIO_CAP = 0.1;
+const REPORT_SUBSIDY_DISPLAY_CAP_KRW = 1_000_000;
+const REPORT_POLICY_LOAN_RATIO = 0.2;
+const REPORT_POLICY_LOAN_REVENUE_MULTIPLE = 1;
 
 function toFiniteNumber(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -167,38 +178,251 @@ function normalizeSeries(values: unknown, length: number, fallback: number[]) {
 function normalizeResult(result: StoredSimulationResult): NormalizedResult {
   const fallbackSolar = fallbackDemoResult.solar;
   const solar = result.solar ?? fallbackSolar;
-  const investmentKrw = pickNumber(solar.investmentKrw, fallbackSolar.investmentKrw);
-  const subsidyMaxKrw = pickNumber(solar.subsidyMaxKrw, fallbackSolar.subsidyMaxKrw);
+  const installCapacityKw = normalizeReportInstallCapacity(
+    pickNumber(solar.installCapacityKw, fallbackSolar.installCapacityKw),
+  );
+  const annualGenerationKwh = normalizeReportAnnualGeneration(
+    pickNumber(solar.annualGenerationKwh, fallbackSolar.annualGenerationKwh),
+  );
+  const annualSavingKrw = normalizeReportAnnualSaving(
+    pickNumber(solar.annualSavingKrw, fallbackSolar.annualSavingKrw),
+    annualGenerationKwh,
+  );
+  const investmentKrw = normalizeReportInstallCost(
+    pickNumber(solar.investmentKrw, fallbackSolar.investmentKrw),
+    installCapacityKw,
+  );
+  const subsidyMaxKrw = estimateConservativeReportSubsidy(
+    pickNumber(solar.subsidyMaxKrw, fallbackSolar.subsidyMaxKrw),
+    installCapacityKw,
+    investmentKrw,
+  );
   const selfPaymentFallback = Math.max(0, investmentKrw - subsidyMaxKrw);
-  const selfPaymentKrw = pickNumber(solar.selfPaymentKrw, selfPaymentFallback);
-  const loanLimitKrw = pickNumber(solar.loanLimitKrw, Math.round(selfPaymentKrw * 0.75));
-  const annualSavingKrw = pickNumber(solar.annualSavingKrw, fallbackSolar.annualSavingKrw);
-  const paybackCandidate = toFiniteNumber(solar.paybackYears);
-  const annualGenerationKwh = pickNumber(solar.annualGenerationKwh, fallbackSolar.annualGenerationKwh);
+  const selfPaymentKrw = Math.min(pickNumber(solar.selfPaymentKrw, selfPaymentFallback), selfPaymentFallback);
+  const loanLimitCapKrw = Math.min(
+    Math.round(selfPaymentKrw * REPORT_POLICY_LOAN_RATIO),
+    Math.round(annualSavingKrw * REPORT_POLICY_LOAN_REVENUE_MULTIPLE),
+  );
+  const loanLimitKrw = Math.min(pickNumber(solar.loanLimitKrw, loanLimitCapKrw), loanLimitCapKrw);
   const monthlyGenerationSource = solar.monthlyGenerationKwh ?? solar.monthlyGeneration;
+  const panelCountCap = installCapacityKw > 0 ? Math.ceil(installCapacityKw / REPORT_PANEL_CAPACITY_KW) : fallbackSolar.panelCount;
+  const panelCount = Math.min(pickNumber(solar.panelCount, fallbackSolar.panelCount), panelCountCap);
+  const carbonReductionKg = Math.min(
+    pickNumber(solar.carbonReductionKg, fallbackSolar.carbonReductionKg),
+    Math.round(annualGenerationKwh * 0.4783),
+  );
+  const pineTreeEffect = Math.min(
+    pickNumber(solar.pineTreeEffect, fallbackSolar.pineTreeEffect),
+    Math.round(carbonReductionKg * 7.16),
+  );
+  const tenYearSavingFallback = annualSavingKrw * 9.68;
+  const twentyYearSavingFallback = annualSavingKrw * 18.36;
+  const yearlyRevenueFallback = createYearlyRevenueFallback(annualSavingKrw);
 
   return {
     result,
-    panelCount: Math.round(pickNumber(solar.panelCount, fallbackSolar.panelCount)),
-    installCapacityKw: pickNumber(solar.installCapacityKw, fallbackSolar.installCapacityKw),
+    panelCount: Math.round(Math.max(0, panelCount)),
+    installCapacityKw,
     annualGenerationKwh: Math.round(annualGenerationKwh),
     annualSavingKrw: Math.round(annualSavingKrw),
-    paybackYears: annualSavingKrw > 0 ? paybackCandidate && paybackCandidate > 0 ? paybackCandidate : investmentKrw / annualSavingKrw : null,
+    paybackYears: annualSavingKrw > 0 ? roundTo(selfPaymentKrw / annualSavingKrw, 1) : null,
     investmentKrw: Math.round(investmentKrw),
     subsidyMaxKrw: Math.round(subsidyMaxKrw),
-    selfPaymentKrw: Math.round(selfPaymentKrw),
-    loanLimitKrw: Math.round(loanLimitKrw),
-    carbonReductionKg: Math.round(pickNumber(solar.carbonReductionKg, fallbackSolar.carbonReductionKg)),
-    pineTreeEffect: Math.round(pickNumber(solar.pineTreeEffect, fallbackSolar.pineTreeEffect)),
-    firstYearSavingKrw: Math.round(pickNumber(solar.firstYearSavingKrw, annualSavingKrw)),
-    tenYearSavingKrw: Math.round(pickNumber(solar.tenYearSavingKrw, annualSavingKrw * 10)),
-    twentyYearSavingKrw: Math.round(pickNumber(solar.twentyYearSavingKrw, annualSavingKrw * 20)),
-    monthlyGeneration: normalizeSeries(
-      monthlyGenerationSource,
-      12,
-      createMonthlyGenerationFallback(annualGenerationKwh),
+    selfPaymentKrw: Math.round(Math.max(0, selfPaymentKrw)),
+    loanLimitKrw: Math.round(Math.max(0, loanLimitKrw)),
+    carbonReductionKg: Math.round(Math.max(0, carbonReductionKg)),
+    pineTreeEffect: Math.round(Math.max(0, pineTreeEffect)),
+    firstYearSavingKrw: Math.round(Math.min(pickNumber(solar.firstYearSavingKrw, annualSavingKrw), annualSavingKrw)),
+    tenYearSavingKrw: Math.round(Math.min(pickNumber(solar.tenYearSavingKrw, tenYearSavingFallback), tenYearSavingFallback)),
+    twentyYearSavingKrw: Math.round(Math.min(pickNumber(solar.twentyYearSavingKrw, twentyYearSavingFallback), twentyYearSavingFallback)),
+    monthlyGeneration: normalizeReportMonthlyGeneration(monthlyGenerationSource, annualGenerationKwh),
+    yearlyRevenue: normalizeSeries(solar.yearlyRevenue, 20, yearlyRevenueFallback).map((value, index) =>
+      Math.min(value, yearlyRevenueFallback[index] ?? value),
     ),
-    yearlyRevenue: normalizeSeries(solar.yearlyRevenue, 20, createYearlyRevenueFallback(annualSavingKrw)),
+  };
+}
+
+function roundTo(value: number, digits = 1) {
+  const multiplier = 10 ** digits;
+
+  return Math.round(value * multiplier) / multiplier;
+}
+
+function normalizeReportAnnualGeneration(annualGenerationKwh: number) {
+  return Math.round(Math.max(0, annualGenerationKwh));
+}
+
+function normalizeReportInstallCost(installCostKrw: number, installCapacityKw: number) {
+  if (installCapacityKw <= 0) {
+    return Math.max(0, Math.round(installCostKrw));
+  }
+
+  const costPerKw = installCostKrw > 0 ? installCostKrw / installCapacityKw : 0;
+
+  if (
+    costPerKw < REPORT_MIN_ACCEPTED_INSTALL_COST_KRW_PER_KW ||
+    costPerKw > REPORT_MAX_ACCEPTED_INSTALL_COST_KRW_PER_KW
+  ) {
+    return Math.round(installCapacityKw * REPORT_INSTALL_COST_KRW_PER_KW);
+  }
+
+  return Math.max(0, Math.round(installCostKrw));
+}
+
+function normalizeReportInstallCapacity(installCapacityKw: number) {
+  if (installCapacityKw <= 0) {
+    return 0;
+  }
+
+  return Math.min(installCapacityKw, REPORT_DISPLAY_MAX_INSTALL_CAPACITY_KW);
+}
+
+function normalizeReportAnnualSaving(annualSavingKrw: number, annualGenerationKwh: number) {
+  const generationBasedSavingKrw = Math.min(
+    Math.round(annualGenerationKwh * REPORT_ELECTRICITY_VALUE_KRW_PER_KWH),
+    REPORT_ANNUAL_SAVING_DISPLAY_CAP_KRW,
+  );
+
+  if (annualSavingKrw <= 0) {
+    return generationBasedSavingKrw;
+  }
+
+  return Math.round(Math.min(annualSavingKrw, generationBasedSavingKrw));
+}
+
+function normalizeReportMonthlyGeneration(sourceValues: unknown, annualGenerationKwh: number) {
+  const source = Array.isArray(sourceValues) ? sourceValues.map((value) => toFiniteNumber(value) ?? 0) : [];
+  const sourceTotal = source.reduce((sum, value) => sum + value, 0);
+
+  if (source.length === 12 && sourceTotal > 0) {
+    return source.map((value) => Math.round((value / sourceTotal) * annualGenerationKwh));
+  }
+
+  return createMonthlyGenerationFallback(annualGenerationKwh);
+}
+
+function estimateConservativeReportSubsidy(subsidyKrw: number, installCapacityKw: number, installCostKrw: number) {
+  const eligibleCapacityKw = Math.min(installCapacityKw, REPORT_APARTMENT_SUBSIDY_MAX_CAPACITY_KW);
+  const supportCapKrw = Math.round(eligibleCapacityKw * REPORT_APARTMENT_SUBSIDY_KRW_PER_KW);
+  const ratioCapKrw = Math.round(installCostKrw * REPORT_SUBSIDY_RATIO_CAP);
+  const conservativeCapKrw = Math.min(supportCapKrw, ratioCapKrw, REPORT_SUBSIDY_DISPLAY_CAP_KRW);
+  const cappedSubsidyKrw = subsidyKrw > 0 ? Math.min(subsidyKrw, conservativeCapKrw) : conservativeCapKrw;
+
+  return Math.max(0, Math.min(cappedSubsidyKrw, installCostKrw));
+}
+
+function normalizeStoredProfitReportForDisplay(
+  profitReport: StoredProfitReport,
+  normalized: NormalizedResult,
+): StoredProfitReport {
+  const report = profitReport.report;
+  const fourMetrics = report.fourMetrics;
+  const installCapacityKw = normalizeReportInstallCapacity(Math.max(0, normalized.installCapacityKw));
+  const rawGenerationKwh = pickNumber(
+    normalized.annualGenerationKwh,
+    fourMetrics.expectedGeneration.annualGenerationKwh,
+  );
+  const annualGenerationKwh = normalizeReportAnnualGeneration(rawGenerationKwh);
+  const rawInstallCostKrw = pickNumber(
+    report.netInvestment.estimatedInstallCostKrw,
+    pickNumber(fourMetrics.costAndSelfPayment.estimatedInstallCostKrw, normalized.investmentKrw),
+  );
+  const estimatedInstallCostKrw = normalizeReportInstallCost(rawInstallCostKrw, installCapacityKw);
+  const subsidyEstimateKrw = estimateConservativeReportSubsidy(
+    pickNumber(report.netInvestment.subsidyEstimateKrw, normalized.subsidyMaxKrw),
+    installCapacityKw,
+    estimatedInstallCostKrw,
+  );
+  const selfPaymentBeforeLoanKrw = Math.max(0, estimatedInstallCostKrw - subsidyEstimateKrw);
+  const annualSavingKrw = normalizeReportAnnualSaving(
+    pickNumber(report.netInvestment.annualSavingKrw, pickNumber(fourMetrics.payback.annualSavingKrw, normalized.annualSavingKrw)),
+    annualGenerationKwh,
+  );
+  const loanLimitCapKrw = Math.min(
+    Math.round(selfPaymentBeforeLoanKrw * REPORT_POLICY_LOAN_RATIO),
+    Math.round(annualSavingKrw * REPORT_POLICY_LOAN_REVENUE_MULTIPLE),
+  );
+  const rawLoanLimitKrw = pickNumber(report.loanSupportScenario.estimatedLoanLimitKrw, loanLimitCapKrw);
+  const estimatedLoanLimitKrw = Math.max(0, Math.min(rawLoanLimitKrw, loanLimitCapKrw));
+  const cashNeededKrw = Math.max(0, selfPaymentBeforeLoanKrw - estimatedLoanLimitKrw);
+  const paybackYears = annualSavingKrw > 0 ? roundTo(selfPaymentBeforeLoanKrw / annualSavingKrw, 1) : 0;
+  const loanYears = Math.max(1, Math.round(pickNumber(report.loanSupportScenario.loanYears, 5)));
+  const programName = pickText(
+    String(report.subsidyMatrix.programName || ''),
+    fourMetrics.subsidyAndSuitability.subsidyProgramName,
+  ) ?? '보조금 공고 기준';
+
+  return {
+    ...profitReport,
+    report: {
+      ...report,
+      fourMetrics: {
+        ...fourMetrics,
+        expectedGeneration: {
+          ...fourMetrics.expectedGeneration,
+          annualGenerationKwh,
+          monthlyGenerationKwh: normalizeReportMonthlyGeneration(
+            fourMetrics.expectedGeneration.monthlyGenerationKwh,
+            annualGenerationKwh,
+          ),
+        },
+        costAndSelfPayment: {
+          ...fourMetrics.costAndSelfPayment,
+          estimatedInstallCostKrw,
+          selfPaymentEstimateKrw: selfPaymentBeforeLoanKrw,
+        },
+        payback: {
+          ...fourMetrics.payback,
+          annualSavingKrw,
+          paybackYears,
+        },
+      },
+      subsidyMatrix: {
+        ...report.subsidyMatrix,
+        subsidyEstimateKrw,
+        subsidyAmountKrw: subsidyEstimateKrw,
+        maxSubsidyKrw: subsidyEstimateKrw,
+      },
+      loanSupportScenario: {
+        ...report.loanSupportScenario,
+        loanYears,
+        loanCoverageRatio: REPORT_POLICY_LOAN_RATIO,
+        estimatedLoanLimitKrw,
+        annualRevenueBasisKrw: annualSavingKrw,
+        monthlyPaymentEstimateKrw:
+          estimatedLoanLimitKrw > 0 ? Math.round(estimatedLoanLimitKrw / (loanYears * 12)) : 0,
+        note:
+          '대출 가능 금액과 조건은 보수 조정한 데모 추정값이며 실제 승인 여부는 금융기관 심사와 정책자금 공고 기준에 따라 달라질 수 있습니다.',
+      },
+      netInvestment: {
+        ...report.netInvestment,
+        estimatedInstallCostKrw,
+        subsidyEstimateKrw,
+        selfPaymentBeforeLoanKrw,
+        estimatedLoanLimitKrw,
+        cashNeededKrw,
+        annualSavingKrw,
+        paybackYears,
+        calculation: 'installCost - subsidy - estimatedLoanLimit, minimum 0; display uses conservative MVP guardrails',
+      },
+      reportNarrative: {
+        ...report.reportNarrative,
+        summary:
+          `예상 연간 발전량은 ${formatKwh(annualGenerationKwh)}, 예상 연간 절감·수익 기준은 ${formatKrw(annualSavingKrw)}입니다. ` +
+          `${programName} 기준 보조금 적용 후 예상 자부담은 ${formatKrw(selfPaymentBeforeLoanKrw)}이며, ` +
+          `추정 회수기간은 ${formatPaybackYears(paybackYears)}입니다.`,
+        salesMessage:
+          `금융 지원 시나리오를 함께 검토하면 예상 대출 검토 한도는 ${formatKrw(estimatedLoanLimitKrw)}, ` +
+          `초기 현금 필요액은 ${formatKrw(cashNeededKrw)} 수준으로 추정됩니다. ` +
+          '보조금 예산과 실제 금융 조건은 상담 단계에서 확인해야 합니다.',
+      },
+      riskDisclaimers: Array.from(
+        new Set([
+          ...report.riskDisclaimers,
+          '금액은 공동주택 1차 설치 검토용 보수 시나리오로 조정했으며 실제 견적과 보조금은 현장조사와 공고 기준에 따라 달라질 수 있습니다.',
+        ]),
+      ),
+    },
   };
 }
 
@@ -207,13 +431,13 @@ function formatKrw(value: number) {
 }
 
 function formatOptionalKrw(value: number | null | undefined) {
-  return typeof value === 'number' && Number.isFinite(value) ? formatKrw(value) : '확인 필요';
+  return typeof value === 'number' && Number.isFinite(value) ? formatKrw(value) : '-';
 }
 
 function formatSimilarity(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value)
     ? value.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    : '확인 필요';
+    : '-';
 }
 
 function formatPercent(value: number) {
@@ -260,6 +484,17 @@ function pickText(...values: unknown[]) {
   }
 
   return null;
+}
+
+function cleanProfitReportCopy(value: string) {
+  return value
+    .replace(/실제\s*공고\s*확인이\s*필요합니다\.?/g, '실제 공고 기준은 상담 단계에서 검토합니다.')
+    .replace(/공고\s*확인이\s*필요합니다\.?/g, '공고 기준은 상담 단계에서 검토합니다.')
+    .replace(/조건\s*확인이\s*필요합니다\.?/g, '조건은 상담 단계에서 검토합니다.')
+    .replace(/확인이\s*필요합니다\.?/g, '상담 단계에서 검토합니다.')
+    .replace(/확인\s*필요/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 }
 
 function getRecordNumber(record: Record<string, unknown> | undefined, key: string) {
@@ -341,23 +576,43 @@ function resolveAiReportMetrics(
     0;
   const policyLoanLimitKrw =
     pickFiniteNumber(getRecordNumber(economics, 'policyLoanLimitKrw'), normalized.loanLimitKrw) ?? 0;
-  const installCapacityKw =
-    pickFiniteNumber(subsidyRagInput.installCapacityKw, normalized.installCapacityKw) ?? normalized.installCapacityKw;
+  const installCapacityKw = normalizeReportInstallCapacity(
+    pickFiniteNumber(subsidyRagInput.installCapacityKw, normalized.installCapacityKw) ?? normalized.installCapacityKw,
+  );
   const subsidyProgramName =
     pickText(reportInputMetrics?.subsidyProgramName, getRecordText(economics, 'subsidyProgramName'), subsidyRagInput.subsidyProgramName) ??
-    '보조금 공고 확인 필요';
+    '보조금 공고 기준';
   const recommendedAction =
     pickText(reportInputMetrics?.recommendedAction, aiResult.recommendedAction) ??
     '현장 확인 후 설치 규모와 경제성을 재검토하는 것을 권장합니다.';
+  const adjustedAnnualGenerationKwh = normalizeReportAnnualGeneration(annualGenerationKwh);
+  const adjustedEstimatedInstallCostKrw = normalizeReportInstallCost(estimatedInstallCostKrw, installCapacityKw);
+  const adjustedSubsidyEstimateKrw = estimateConservativeReportSubsidy(
+    subsidyEstimateKrw,
+    installCapacityKw,
+    adjustedEstimatedInstallCostKrw,
+  );
+  const adjustedSelfPaymentEstimateKrw = Math.max(0, adjustedEstimatedInstallCostKrw - adjustedSubsidyEstimateKrw);
+  const adjustedAnnualSavingKrw = normalizeReportAnnualSaving(annualSavingKrw, adjustedAnnualGenerationKwh);
+  const adjustedPolicyLoanLimitCapKrw = Math.min(
+    Math.round(adjustedSelfPaymentEstimateKrw * REPORT_POLICY_LOAN_RATIO),
+    Math.round(adjustedAnnualSavingKrw * REPORT_POLICY_LOAN_REVENUE_MULTIPLE),
+  );
+  const adjustedPolicyLoanLimitKrw = Math.max(
+    0,
+    Math.min(policyLoanLimitKrw > 0 ? policyLoanLimitKrw : adjustedPolicyLoanLimitCapKrw, adjustedPolicyLoanLimitCapKrw),
+  );
+  const adjustedPaybackYears =
+    adjustedAnnualSavingKrw > 0 ? roundTo(adjustedSelfPaymentEstimateKrw / adjustedAnnualSavingKrw, 1) : paybackYears;
 
   return {
-    annualGenerationKwh,
-    estimatedInstallCostKrw,
-    subsidyEstimateKrw,
-    selfPaymentEstimateKrw,
-    policyLoanLimitKrw,
-    annualSavingKrw,
-    paybackYears,
+    annualGenerationKwh: adjustedAnnualGenerationKwh,
+    estimatedInstallCostKrw: adjustedEstimatedInstallCostKrw,
+    subsidyEstimateKrw: adjustedSubsidyEstimateKrw,
+    selfPaymentEstimateKrw: adjustedSelfPaymentEstimateKrw,
+    policyLoanLimitKrw: adjustedPolicyLoanLimitKrw,
+    annualSavingKrw: adjustedAnnualSavingKrw,
+    paybackYears: adjustedPaybackYears,
     installCapacityKw,
     subsidyProgramName,
     suitabilityScore: reportInputMetrics?.installationSuitabilityScore ?? suitability.score,
@@ -413,7 +668,7 @@ function getCostItems(normalized: NormalizedResult) {
     { label: '투자비', value: formatKrw(normalized.investmentKrw), tone: 'blue' as ValueTone },
     { label: '최대 보조금', value: formatKrw(normalized.subsidyMaxKrw), tone: 'green' as ValueTone },
     { label: '자부담금', value: formatKrw(normalized.selfPaymentKrw), tone: 'orange' as ValueTone },
-    { label: '대출한도 (75%)', value: formatKrw(normalized.loanLimitKrw), tone: 'navy' as ValueTone },
+    { label: '대출한도 (20%)', value: formatKrw(normalized.loanLimitKrw), tone: 'navy' as ValueTone },
   ];
 }
 
@@ -457,7 +712,7 @@ function createDefaultChatAnswer(normalized: NormalizedResult, profitReport: Sto
     normalized.annualSavingKrw,
   )}, 회수기간은 ${formatPaybackYears(normalized.paybackYears)}입니다.${
     metrics ? ` AI 적합도는 ${metrics.suitabilityGrade}등급 ${metrics.suitabilityScore}점입니다.` : ''
-  }\n\n실제 설치 가능 여부와 보조금은 현장조사와 실제 공고 확인이 필요합니다.`;
+  }\n\n실제 설치 가능 여부와 보조금은 현장조사와 최신 공고 기준에 따라 달라질 수 있습니다.`;
 }
 
 function createAiChatAnswer(
@@ -477,7 +732,7 @@ function createAiChatAnswer(
   const subsidyProgramName =
     metrics?.subsidyProgramName ??
     profitReport?.report.fourMetrics?.subsidyAndSuitability?.subsidyProgramName ??
-    '보조금 공고 확인 필요';
+    '보조금 공고 기준';
 
   if (includesAny(question, ['적합', '등급', '점수', '왜'])) {
     if (!metrics) {
@@ -487,7 +742,7 @@ function createAiChatAnswer(
     const reasonText = reasons.length > 0 ? `\n주요 근거: ${reasons.slice(0, 3).join(', ')}` : '';
     const warningText = warnings.length > 0 ? `\n주의 항목: ${warnings.slice(0, 3).join(', ')}` : '';
 
-    return `현재 AI 설치 적합도는 ${metrics.suitabilityGrade}등급, ${metrics.suitabilityScore}점입니다.\n${metrics.suitabilityLabel}${reasonText}${warningText}\n\n이 점수는 예상 발전량, 면적, 음영, 경제성 추정값을 함께 본 결과이며 실제 확정 판정은 현장 확인이 필요합니다.`;
+    return `현재 AI 설치 적합도는 ${metrics.suitabilityGrade}등급, ${metrics.suitabilityScore}점입니다.\n${metrics.suitabilityLabel}${reasonText}${warningText}\n\n이 점수는 예상 발전량, 면적, 음영, 경제성 추정값을 함께 본 결과이며 실제 확정 판정은 현장 점검에서 최종 검토합니다.`;
   }
 
   if (includesAny(question, ['발전', '전기', 'kwh', '생산'])) {
@@ -512,7 +767,7 @@ function createAiChatAnswer(
 
     return `현재 리포트는 ${subsidyProgramName} 기준으로 보조금 후보를 검토합니다.\n예상 보조금은 ${formatKrw(
       subsidy,
-    )}로 표시되지만, 수급이 보장되는 것은 아닙니다.\n\n실제 지원 여부는 접수 기간, 예산 잔여분, 공동주택 조건, 서류 적합성 확인이 필요합니다.`;
+    )}로 표시되지만, 수급이 보장되는 것은 아닙니다.\n\n실제 지원 여부는 접수 기간, 예산 잔여분, 공동주택 조건, 서류 적합성에 따라 달라질 수 있습니다.`;
   }
 
   if (includesAny(question, ['회수', '기간', 'payback', '수익'])) {
@@ -732,7 +987,7 @@ function AiConsultChatWidget({
           </form>
 
           <div className="aiConsultChatFooter">
-            <span>예상·추정 답변입니다. 실제 공고와 현장 확인이 필요합니다.</span>
+            <span>예상·추정 답변입니다. 실제 공고와 현장 조건은 상담에서 검토합니다.</span>
             <button type="button" onClick={onConsultationApply}>
               상담 신청하기
             </button>
@@ -749,14 +1004,12 @@ function AiConsultChatWidget({
 }
 
 function ProfitReportSection({
-  result,
   profitReport,
   status,
   message,
   canGenerate,
   actions,
 }: {
-  result: StoredSimulationResult;
   profitReport: StoredProfitReport | null;
   status: 'idle' | 'loading' | 'ready' | 'error';
   message: string;
@@ -766,16 +1019,14 @@ function ProfitReportSection({
     onConsultationApply: () => void;
   };
 }) {
-  const [activePage, setActivePage] = useState(1);
   const report = profitReport?.report;
 
   if (!report) {
     return (
-      <section className="profitReportSection" aria-label="AI 태양광 도입 종합 보고서">
+      <section className="profitReportSection" aria-label="AI 맞춤형 설치 리포트">
         <div className="profitReportHeader">
           <div>
-            <span>AI 수익·보조금·금융 리포트</span>
-            <h2>AI 태양광 도입 종합 보고서</h2>
+            <h2>설치 리포트 생성</h2>
           </div>
         </div>
         <p className="profitReportMessage">
@@ -784,7 +1035,7 @@ function ProfitReportSection({
             : status === 'error'
               ? message
               : canGenerate
-                ? 'AI 분석 결과를 바탕으로 수익·보조금·금융 리포트를 생성할 수 있습니다.'
+                ? 'AI 분석 결과를 바탕으로 맞춤형 설치 리포트를 생성할 수 있습니다.'
                 : 'AI 리포트 입력값을 준비 중입니다. /risk-map에서 분석을 먼저 실행해주세요.'}
         </p>
         <button
@@ -794,7 +1045,7 @@ function ProfitReportSection({
           onClick={actions.onGenerate}
         >
           <LuChartNoAxesColumnIncreasing aria-hidden="true" />
-          {status === 'loading' ? '수익 리포트 생성 중' : '수익 리포트 생성하기'}
+          {status === 'loading' ? '설치 리포트 생성 중' : '설치 리포트 생성하기'}
         </button>
       </section>
     );
@@ -807,224 +1058,101 @@ function ProfitReportSection({
   const suitability = fourMetrics.subsidyAndSuitability;
   const loanScenario = report.loanSupportScenario;
   const netInvestment = report.netInvestment;
-  const narrative = report.reportNarrative;
   const primaryReference = report.sourceReferences?.[0];
   const primaryRagMatch = report.subsidyRagContext?.matches?.[0];
   const subsidyProgramName =
-    primaryRagMatch?.programName || primaryReference?.sourceTitle || suitability.subsidyProgramName;
-  const reportId = profitReport.profitReportId?.slice(0, 8);
-  const pageCount = 3;
+    cleanProfitReportCopy(primaryRagMatch?.programName || primaryReference?.sourceTitle || suitability.subsidyProgramName) ||
+    '보조금 공고 기준';
+  const suitabilityLabel = cleanProfitReportCopy(suitability.installationSuitabilityLabel) || '설치 가능성 검토';
+  const loanApprovalStatus = cleanProfitReportCopy(loanScenario.loanApprovalStatus) || '금융기관 심사 기준';
+  const riskDisclaimers = report.riskDisclaimers
+    .map((item) => cleanProfitReportCopy(item))
+    .filter((item) => item.length > 0);
 
   return (
-    <section className={`profitReportSection profitReportPagedView is-page-${activePage}`} aria-label="AI 태양광 도입 종합 보고서">
-      <div className="profitReportPagerBar" aria-label="AI 수익 리포트 페이지 이동">
-        <div className="profitReportDots" aria-hidden="true">
-          {Array.from({ length: pageCount }, (_, index) => (
-            <i className={activePage === index + 1 ? 'isActive' : ''} key={index} />
-          ))}
-        </div>
-        <div className="profitReportPagerControls">
-          <button
-            type="button"
-            onClick={() => setActivePage((current) => Math.max(1, current - 1))}
-            disabled={activePage === 1}
-            aria-label="이전 페이지"
-          >
-            <LuChevronLeft aria-hidden="true" />
-          </button>
-          <strong>{activePage} / {pageCount}</strong>
-          <button
-            type="button"
-            onClick={() => setActivePage((current) => Math.min(pageCount, current + 1))}
-            disabled={activePage === pageCount}
-            aria-label="다음 페이지"
-          >
-            <LuChevronRight aria-hidden="true" />
-          </button>
-        </div>
+    <section className="profitReportSection profitReportPagedView is-page-detail" aria-label="AI 맞춤형 설치 리포트">
+      <div className="profitReportCardGrid is-detail">
+        <ProfitMetricTile
+          color="blue"
+          icon={LuCircleCheck}
+          label="AI 적합도"
+          value={`${suitability.installationSuitabilityGrade}등급 · ${suitability.installationSuitabilityScore}점`}
+          note={suitabilityLabel}
+        />
+        <ProfitMetricTile
+          color="green"
+          icon={LuZap}
+          label="예상 발전 수익"
+          value={formatKwh(generation.annualGenerationKwh)}
+          note={`연 절감·수익 ${formatKrw(payback.annualSavingKrw)} 추정`}
+        />
+        <ProfitMetricTile
+          color="purple"
+          icon={LuCoins}
+          label="설치 비용/보조금"
+          value={formatKrw(cost.estimatedInstallCostKrw)}
+          note={`${subsidyProgramName} 기준`}
+        />
+        <ProfitMetricTile
+          color="cyan"
+          icon={LuBuilding2}
+          label="대출 지원 시나리오"
+          value={formatKrw(loanScenario.estimatedLoanLimitKrw)}
+          note={loanApprovalStatus}
+        />
+        <ProfitMetricTile
+          color="orange"
+          icon={LuChartNoAxesColumnIncreasing}
+          label="자부담/회수기간"
+          value={formatKrw(netInvestment.selfPaymentBeforeLoanKrw)}
+          note={`회수기간 ${formatPaybackYears(netInvestment.paybackYears)} 추정`}
+        />
       </div>
 
-      {activePage === 1 && (
-        <>
-          <AddressSummary result={result} />
-
-          <div className="profitReportHeader">
-            <div>
-              <span>AI 수익·보조금·금융 리포트</span>
-              <h2>AI 태양광 도입 종합 보고서</h2>
-            </div>
-            {reportId && <strong>리포트 ID {reportId}</strong>}
-          </div>
-
-          <div className="profitNarrativeBox">
-            <span className="profitNarrativeIcon" aria-hidden="true">
-              <LuInfo />
+      <section className="profitReviewPointPanel" aria-label="금융 설치 검토 포인트">
+        <h3>금융·설치 검토 포인트</h3>
+        <div>
+          <article>
+            <span className="profitPointIcon is-green" aria-hidden="true">
+              <LuCoins />
             </span>
-            <div>
-              <strong>{narrative.headline}</strong>
-              <p>{narrative.summary}</p>
-              <p>{narrative.salesMessage}</p>
-            </div>
-            <button className="consultApplyButton profitReportCta" type="button" onClick={actions.onConsultationApply}>
-              <LuPhone aria-hidden="true" />
-              상담 신청하기
-            </button>
-          </div>
+            <strong>예상 연간 절감·수익</strong>
+            <p>
+              연간 발전량 {formatKwh(generation.annualGenerationKwh)} 기준으로 전기요금 절감 및 판매 수익을 합산하면
+              연간 약 <b>{formatKrw(payback.annualSavingKrw)}</b>의 효과가 예상됩니다.
+            </p>
+          </article>
+          <article>
+            <span className="profitPointIcon is-purple" aria-hidden="true">
+              <LuCircleCheck />
+            </span>
+            <strong>보조금 영향</strong>
+            <p>
+              {subsidyProgramName} 적용 시 약 <b>{formatKrw(netInvestment.subsidyEstimateKrw)}</b>의 보조금 혜택을
+              검토할 수 있습니다.
+            </p>
+          </article>
+          <article>
+            <span className="profitPointIcon is-cyan" aria-hidden="true">
+              <LuBuilding2 />
+            </span>
+            <strong>금융·대출 시나리오</strong>
+            <p>
+              금융기관 대출 지원 시 약 <b>{formatKrw(loanScenario.estimatedLoanLimitKrw)}</b>까지 지원 가능하며, 초기
+              현금 필요액은 약 <b>{formatKrw(netInvestment.cashNeededKrw)}</b>로 추정됩니다.
+            </p>
+          </article>
+        </div>
+      </section>
 
-          <div className="profitReportCardGrid is-summary">
-            <ProfitMetricTile
-              color="blue"
-              icon={LuCircleCheck}
-              label="AI 적합도"
-              value={`${suitability.installationSuitabilityGrade}등급 · ${suitability.installationSuitabilityScore}점`}
-              note={suitability.installationSuitabilityLabel}
-            />
-            <ProfitMetricTile
-              color="green"
-              icon={LuZap}
-              label="예상 발전 수익"
-              value={formatKwh(generation.annualGenerationKwh)}
-              note={`연 절감/수익 ${formatKrw(payback.annualSavingKrw)} 추정`}
-            />
-            <ProfitMetricTile
-              color="orange"
-              icon={LuCoins}
-              label="자부담/회수기간"
-              value={formatKrw(netInvestment.selfPaymentBeforeLoanKrw)}
-              note={`회수기간 ${formatPaybackYears(netInvestment.paybackYears)} 추정`}
-            />
-          </div>
-        </>
-      )}
-
-      {activePage === 2 && (
-        <>
-          <div className="profitReportHeader is-detail">
-            <div>
-              <span>AI 수익·보조금·금융 리포트</span>
-              <h2>AI 수익 리포트 상세 분석</h2>
-              <p>태양광 도입을 위한 핵심 지표와 금융 분석을 상세하게 확인하세요.</p>
-            </div>
-          </div>
-
-          <div className="profitReportCardGrid is-detail">
-            <ProfitMetricTile
-              color="blue"
-              icon={LuCircleCheck}
-              label="AI 적합도"
-              value={`${suitability.installationSuitabilityGrade}등급 · ${suitability.installationSuitabilityScore}점`}
-              note={suitability.installationSuitabilityLabel}
-            />
-            <ProfitMetricTile
-              color="green"
-              icon={LuZap}
-              label="예상 발전 수익"
-              value={formatKwh(generation.annualGenerationKwh)}
-              note={`연 절감·수익 ${formatKrw(payback.annualSavingKrw)} 추정`}
-            />
-            <ProfitMetricTile
-              color="purple"
-              icon={LuCoins}
-              label="설치 비용/보조금"
-              value={formatKrw(cost.estimatedInstallCostKrw)}
-              note={`${subsidyProgramName} 기준`}
-            />
-            <ProfitMetricTile
-              color="cyan"
-              icon={LuBuilding2}
-              label="대출 지원 시나리오"
-              value={formatKrw(loanScenario.estimatedLoanLimitKrw)}
-              note={loanScenario.loanApprovalStatus}
-            />
-            <ProfitMetricTile
-              color="orange"
-              icon={LuChartNoAxesColumnIncreasing}
-              label="자부담/회수기간"
-              value={formatKrw(netInvestment.selfPaymentBeforeLoanKrw)}
-              note={`회수기간 ${formatPaybackYears(netInvestment.paybackYears)} 추정`}
-            />
-          </div>
-
-          <section className="profitReviewPointPanel" aria-label="금융 설치 검토 포인트">
-            <h3>금융·설치 검토 포인트</h3>
-            <div>
-              <article>
-                <span className="profitPointIcon is-green" aria-hidden="true">
-                  <LuCoins />
-                </span>
-                <strong>예상 연간 절감·수익</strong>
-                <p>
-                  연간 발전량 {formatKwh(generation.annualGenerationKwh)} 기준으로 전기요금 절감 및 판매 수익을
-                  합산하면 연간 약 <b>{formatKrw(payback.annualSavingKrw)}</b>의 효과가 예상됩니다.
-                </p>
-              </article>
-              <article>
-                <span className="profitPointIcon is-purple" aria-hidden="true">
-                  <LuCircleCheck />
-                </span>
-                <strong>보조금 영향</strong>
-                <p>
-                  {subsidyProgramName} 적용 시 약 <b>{formatKrw(netInvestment.subsidyEstimateKrw)}</b>의 보조금 혜택을
-                  검토할 수 있습니다.
-                </p>
-              </article>
-              <article>
-                <span className="profitPointIcon is-cyan" aria-hidden="true">
-                  <LuBuilding2 />
-                </span>
-                <strong>금융·대출 시나리오</strong>
-                <p>
-                  금융기관 대출 지원 시 약 <b>{formatKrw(loanScenario.estimatedLoanLimitKrw)}</b>까지 지원 가능하며,
-                  초기 현금 필요액은 약 <b>{formatKrw(netInvestment.cashNeededKrw)}</b>로 추정됩니다.
-                </p>
-              </article>
-            </div>
-          </section>
-
-          <div className="profitDisclaimerBox">
-            <strong>확인 필요</strong>
-            <ul>
-              {report.riskDisclaimers.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </div>
-        </>
-      )}
-
-      {activePage === 3 && (
-        <>
-          <div className="profitReportHeader is-reference">
-            <div>
-              <span>보조금 근거 및 참고 정보</span>
-              <h2>보조금 근거 및 참고 정보</h2>
-              <p>보조금 판단의 근거 문서와 참고 정보를 확인하고, 다음 단계를 진행하세요.</p>
-            </div>
-          </div>
-
-          <SubsidyRagEvidence report={report} />
-
-          <section className="profitNextStepPanel" aria-label="다음 단계">
-            <div>
-              <span className="profitPointIcon is-orange" aria-hidden="true">
-                <LuPhone />
-              </span>
-              <div>
-                <strong>다음 단계</strong>
-                <p>{report.cta.primaryMessage}</p>
-                <ul>
-                  <li>예상 보조금 가능성 확인</li>
-                  <li>자부담 및 세부 설치 비용 안내</li>
-                  <li>신청 절차 및 서류 준비 안내</li>
-                </ul>
-              </div>
-            </div>
-            <button className="consultApplyButton profitReportCta" type="button" onClick={actions.onConsultationApply}>
-              <LuPhone aria-hidden="true" />
-              상담 신청하기
-            </button>
-          </section>
-        </>
+      {riskDisclaimers.length > 0 && (
+        <div className="profitDisclaimerBox" aria-label="리포트 유의사항">
+          <ul>
+            {riskDisclaimers.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   );
@@ -1069,7 +1197,7 @@ function SubsidyRagEvidence({ report }: { report: NonNullable<StoredProfitReport
           <span>보조금 RAG 근거</span>
           <strong>정책 매트릭스 기준 표시</strong>
         </div>
-        <p>보조금 RAG 근거가 없어 정책 매트릭스 기준으로 표시합니다. 실제 지원 여부는 최신 공고 확인이 필요합니다.</p>
+        <p>보조금 RAG 근거가 없어 정책 매트릭스 기준으로 표시합니다. 실제 지원 여부는 최신 공고 기준에 따라 달라질 수 있습니다.</p>
       </section>
     );
   }
@@ -1084,7 +1212,7 @@ function SubsidyRagEvidence({ report }: { report: NonNullable<StoredProfitReport
         {matches.slice(0, 3).map((match, index) => (
           <li key={`${match.sourceTitle ?? 'source'}-${index}`}>
             <div>
-              <strong>{match.programName || String(report.subsidyMatrix.programName || '보조금 공고 확인 필요')}</strong>
+              <strong>{match.programName || String(report.subsidyMatrix.programName || '보조금 공고 기준')}</strong>
               <span>
                 {[match.regionSido, match.regionSigungu].filter(Boolean).join(' ')}
                 {match.sourceYear ? ` · ${match.sourceYear}` : ''}
@@ -1127,17 +1255,10 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
     },
     {
       href: '/simulation/profit-report',
-      label: 'AI 수익 리포트 보기',
+      label: 'AI 맞춤형 설치 리포트 보기',
       icon: LuFileText,
       className: 'isProfit',
       isCurrent: isProfitView,
-    },
-    {
-      href: '/simulation/ai-suitability',
-      label: 'AI 설치 적합도 보기',
-      icon: LuShieldCheck,
-      className: 'isSuitability',
-      isCurrent: isSuitabilityView,
     },
   ];
   const defaultPageCopy = {
@@ -1146,14 +1267,15 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
       description: '선택하신 아파트의 설치 비용, 예상 발전량, 절감 효과를 자세히 확인해보세요.',
     },
     profit: {
-      title: 'AI 수익 리포트',
-      description: '예상 수익, 보조금, 금융 시나리오를 도입 판단용 리포트로 확인해보세요.',
+      title: 'AI 맞춤형 설치 리포트',
+      description: '예상 수익, 보조금, 금융 시나리오를 맞춤형 설치 판단용 리포트로 확인해보세요.',
     },
     suitability: getAiSuitabilityPageCopy(suitabilityPage),
   }[view];
   const pageCopy = isSuitabilityView ? getAiSuitabilityPageCopy(suitabilityPage) : defaultPageCopy;
   const cumulativeSaving = createCumulativeValues(normalized.yearlyRevenue);
   const cumulativeNetProfit = cumulativeSaving.map((value) => Math.max(0, value - normalized.selfPaymentKrw));
+  const displayProfitReport = profitReport ? normalizeStoredProfitReportForDisplay(profitReport, normalized) : null;
   const resultSections: ResultSection[] = [
     {
       title: '투자',
@@ -1200,12 +1322,12 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
 
     if (!result.aiSimulationResult || !result.agentPayload) {
       setProfitReportStatus('error');
-      setProfitReportMessage('AI 수익 리포트를 만들 분석 결과가 없습니다. /risk-map에서 분석을 먼저 실행해주세요.');
+      setProfitReportMessage('AI 맞춤형 설치 리포트를 만들 분석 결과가 없습니다. /risk-map에서 분석을 먼저 실행해주세요.');
       return;
     }
 
     setProfitReportStatus('loading');
-    setProfitReportMessage('AI 수익·보조금·금융 리포트를 생성하고 있습니다.');
+    setProfitReportMessage('AI 맞춤형 설치 리포트를 생성하고 있습니다.');
 
     const response = await generateProfitReport({
       analysisResultId: result.analysisResultId,
@@ -1221,21 +1343,23 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
         dbSaveStatus: response.dbSaveStatus,
         storedAt: new Date().toISOString(),
       };
+      const normalizedReport = normalizeStoredProfitReportForDisplay(nextReport, normalized);
 
-      saveProfitReportToSession(nextReport);
-      setProfitReport(nextReport);
+      saveProfitReportToSession(normalizedReport);
+      setProfitReport(normalizedReport);
       setProfitReportStatus('ready');
-      setProfitReportMessage('AI 수익 리포트가 생성되었습니다.');
+      setProfitReportMessage('AI 맞춤형 설치 리포트가 생성되었습니다.');
       return;
     }
 
     setProfitReportStatus('error');
-    setProfitReportMessage(response.message ?? 'AI 수익 리포트를 생성하지 못했습니다.');
+    setProfitReportMessage(response.message ?? 'AI 맞춤형 설치 리포트를 생성하지 못했습니다.');
   }, [
     profitReportStatus,
     result.agentPayload,
     result.aiSimulationResult,
     result.analysisResultId,
+    normalized,
   ]);
 
   const handleConsultationApply = useCallback(() => {
@@ -1346,8 +1470,7 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
 
             {isProfitView && (
               <ProfitReportSection
-                result={result}
-                profitReport={profitReport}
+                profitReport={displayProfitReport}
                 status={profitReportStatus}
                 message={profitReportMessage}
                 canGenerate={Boolean(result.aiSimulationResult?.agentPayload?.reportInputMetrics)}
@@ -1381,14 +1504,14 @@ function SimulationResultPage({ view = 'detail' }: SimulationResultPageProps) {
         </p>
 
         <section className="printContactCta" aria-label="인쇄용 상담 안내">
-          <strong>우리 아파트 태양광 설치하기</strong>
+          <strong>우리 집 태양광 설치하기</strong>
           <p>예상 리포트를 바탕으로 실제 보조금, 대출 가능성, 현장 확인 항목을 상담에서 검토하세요.</p>
         </section>
       </main>
 
       <AiConsultChatWidget
         normalized={normalized}
-        profitReport={profitReport}
+        profitReport={displayProfitReport}
         onConsultationApply={handleConsultationApply}
       />
     </div>
@@ -1578,9 +1701,9 @@ function AiSuitabilityPagedReport({
   const reasons = normalizeStringList(suitability.reasons);
   const cluster = suitability.cluster;
   const confidencePercent = Math.round((toFiniteNumber(aiResult.generationPrediction.confidence) ?? 0) * 100);
-  const confidenceLabel = aiResult.generationPrediction.confidenceLabel || '확인 필요';
-  const modelType = aiResult.generationPrediction.modelType || '발전량 모델 확인 필요';
-  const arrangementSummary = aiResult.panelOptimization.optimizationSummary || '패널 배치 요약 확인 필요';
+  const confidenceLabel = aiResult.generationPrediction.confidenceLabel || '예측 대기';
+  const modelType = aiResult.generationPrediction.modelType || '발전량 모델 정보 없음';
+  const arrangementSummary = aiResult.panelOptimization.optimizationSummary || '패널 배치 요약 없음';
   const summaryText =
     pickText(aiResult.agentPayload.summaryForCounselor) ??
     `해당 건물은 예상 연간 발전량 ${metrics.annualGenerationKwh.toLocaleString(
@@ -1634,7 +1757,7 @@ function AiSuitabilityPagedReport({
           <p className="aiSuitabilityNotice">
             <LuInfo aria-hidden="true" />
             보조금은 {metrics.subsidyProgramName} 기준 예상값입니다. 실제 지원 여부는 공고, 예산 잔여 여부,
-            관리주체 조건 확인이 필요합니다.
+            관리주체 조건은 상담 단계에서 검토합니다.
           </p>
         </article>
       )}
@@ -1670,7 +1793,7 @@ function AiSuitabilityPagedReport({
                 icon={LuBuilding2}
                 tone="green"
                 label="군집 유형"
-                value={cluster?.clusterName ?? '군집 확인 필요'}
+                value={cluster?.clusterName ?? '군집 정보 없음'}
               />
               <AiSuitabilityDetailCard icon={LuFileText} tone="purple" label="권장 조치" value={metrics.recommendedAction} />
               <AiSuitabilityDetailCard
@@ -1725,7 +1848,7 @@ function AiSuitabilityPagedReport({
             <AiSuitabilityChecklistPanel
               icon={LuSearch}
               tone="green"
-              title="현장 확인 필요"
+              title="현장 점검 항목"
               items={
                 fieldCheckRequired.length > 0
                   ? fieldCheckRequired

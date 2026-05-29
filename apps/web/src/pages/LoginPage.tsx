@@ -219,14 +219,13 @@ export default function LoginPage() {
     <div className="login-page">
       <SolarMateHeader />
 
-      <main className="login-main">
-        <section className="login-card" aria-labelledby="login-title">
+      <main className={`login-main ${mode === 'signup' ? 'is-signup' : 'is-login'}`}>
+        <section className={`login-card ${mode === 'signup' ? 'is-signup' : 'is-login'}`} aria-labelledby="login-title">
           <div className="login-lock-circle">
             <LockIcon />
           </div>
 
           <h1 id="login-title">{session?.user ? '로그인 상태' : mode === 'signup' ? '회원가입' : '로그인'}</h1>
-          <p>Supabase 이메일/비밀번호 계정으로 요청서와 시뮬레이션 결과를 사용자별로 저장합니다.</p>
           {!isSupabaseConfigured && (
             <p className="login-demo-help">{supabaseConfigMessage}</p>
           )}

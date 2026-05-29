@@ -135,7 +135,7 @@ function SimulationSetupPage() {
         <section className="setupTopSection" aria-labelledby="simulation-setup-title">
           <div className="setupTitleBox">
             <h1 id="simulation-setup-title">태양광 설치 시뮬레이션</h1>
-            <p>우리 아파트에 맞는 패널과 설치 각도를 선택해 예상 발전량과 절감효과를 확인하세요.</p>
+            <p>우리 집에 맞는 패널과 설치 각도를 선택해 예상 발전량과 절감효과를 확인하세요.</p>
           </div>
 
           <article className="setupAddressCard" aria-label="분석 대상 주소">

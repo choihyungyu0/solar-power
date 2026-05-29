@@ -92,6 +92,7 @@ const FALLBACK_ANNUAL_GENERATION_KWH = 32_041;
 const FALLBACK_ANNUAL_SAVING_KRW = 6_087_790;
 const FALLBACK_CARBON_REDUCTION_KG = 15_319;
 const FALLBACK_PINE_TREE_EFFECT = 109_684;
+const POLICY_LOAN_RATIO = 0.4;
 
 function toFiniteNumber(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -148,7 +149,7 @@ function buildSolarPayload(
     toFiniteNumber(values.investmentKrw) ?? toFiniteNumber(selectedEstimate?.investmentKrw) ?? FALLBACK_INVESTMENT_KRW;
   const subsidyMaxKrw = toFiniteNumber(values.subsidyMaxKrw) ?? FALLBACK_SUBSIDY_MAX_KRW;
   const selfPaymentKrw = Math.max(0, investmentKrw - subsidyMaxKrw);
-  const loanLimitKrw = Math.round(selfPaymentKrw * 0.75);
+  const loanLimitKrw = Math.round(selfPaymentKrw * POLICY_LOAN_RATIO);
   const paybackCandidate = toFiniteNumber(values.paybackYears) ?? toFiniteNumber(selectedEstimate?.paybackYears);
   const paybackYears =
     annualSavingKrw > 0
@@ -235,7 +236,7 @@ function applyAiSimulationToSolarPayload(solar: StoredSimulationSolar, aiSimulat
   const investmentKrw = toFiniteNumber(economics.estimatedInstallCostKrw) ?? solar.investmentKrw;
   const subsidyMaxKrw = toFiniteNumber(economics.subsidyEstimateKrw) ?? solar.subsidyMaxKrw;
   const selfPaymentKrw = toFiniteNumber(economics.estimatedSelfPaymentKrw) ?? Math.max(0, investmentKrw - subsidyMaxKrw);
-  const loanLimitKrw = toFiniteNumber(economics.policyLoanLimitKrw) ?? Math.round(selfPaymentKrw * 0.75);
+  const loanLimitKrw = toFiniteNumber(economics.policyLoanLimitKrw) ?? Math.round(selfPaymentKrw * POLICY_LOAN_RATIO);
   const paybackYears = toFiniteNumber(economics.paybackYears) ?? solar.paybackYears;
   const monthlyGeneration =
     solar.monthlyGeneration.length === 12

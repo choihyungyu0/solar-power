@@ -35,7 +35,7 @@ const newsItems: NewsItem[] = [
 
 const faqItems: FaqItem[] = [
   {
-    question: '우리 아파트도 설치 가능한가요?',
+    question: '우리 집도 설치 가능한가요?',
     answer:
       '건물 옥상 면적, 음영, 구조안전성, 관리주체 협의 여부에 따라 달라질 수 있습니다. 이코햇은 3D 지도와 공공데이터 기반으로 1차 가능성을 안내합니다.',
   },

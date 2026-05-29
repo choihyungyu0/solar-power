@@ -215,7 +215,7 @@ export function SolarAdoptionStep3Page() {
         </div>
         <div>
           <span>정책 금융</span>
-          <strong>대출한도: 자부담의 75%</strong>
+          <strong>대출한도: 자부담의 40%</strong>
         </div>
       </section>
 

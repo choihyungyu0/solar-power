@@ -276,7 +276,6 @@ export default function AdminConsultationsPage() {
       <header className="admin-consultations-header">
         <a className="admin-consultations-brand" href="/" aria-label="이코햇 홈">
           <img className="admin-consultations-brand-image" src="/assets/logo.png" alt="이코햇" />
-          <small>SolarMate Admin</small>
         </a>
 
         <div className="admin-consultations-header-actions">
@@ -290,7 +289,6 @@ export default function AdminConsultationsPage() {
       <main className="admin-consultations-main">
         <section className="admin-consultations-toolbar" aria-labelledby="admin-consultations-title">
           <div>
-            <span>SolarMate Admin</span>
             <h1 id="admin-consultations-title">상담 신청 관리</h1>
           </div>
 

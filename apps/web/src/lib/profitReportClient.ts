@@ -29,7 +29,7 @@ export async function generateProfitReport(
   if (!baseUrl) {
     return {
       ok: false,
-      message: 'AI 수익 리포트 서버가 설정되지 않았습니다.',
+      message: 'AI 맞춤형 설치 리포트 서버가 설정되지 않았습니다.',
       errorType: 'BackendNotConfigured',
       reason: 'VITE_CLIMATE_BACKEND_BASE_URL is empty.',
     };
@@ -69,14 +69,14 @@ export async function generateProfitReport(
       message:
         isRecord(data) && typeof data.message === 'string'
           ? data.message
-          : 'AI 수익 리포트를 생성하지 못했습니다.',
+          : 'AI 맞춤형 설치 리포트를 생성하지 못했습니다.',
       errorType: isRecord(data) && typeof data.errorType === 'string' ? data.errorType : `HTTP_${response.status}`,
       reason: isRecord(data) && typeof data.reason === 'string' ? data.reason : undefined,
     };
   } catch (error) {
     return {
       ok: false,
-      message: 'AI 수익 리포트를 생성하지 못했습니다.',
+      message: 'AI 맞춤형 설치 리포트를 생성하지 못했습니다.',
       errorType: error instanceof Error ? error.name : 'FetchError',
       reason: error instanceof Error ? error.message : String(error),
     };

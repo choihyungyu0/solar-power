@@ -1,14 +1,19 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FocusEvent, type FormEvent } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import {
   LuArrowRight,
+  LuBot,
+  LuBuilding2,
+  LuCircleCheck,
   LuFileText,
+  LuFileSearch,
   LuMapPin,
   LuMenu,
   LuMessageCircle,
   LuPhone,
   LuSunMedium,
 } from 'react-icons/lu';
+import SolarMateHeader from './components/SolarMateHeader';
 import { saveLandingAddressDraft } from './lib/addressDraft';
 import AdminConsultationsPage from './pages/AdminConsultationsPage';
 import ConsultationCompletePage from './pages/ConsultationCompletePage';
@@ -29,6 +34,29 @@ import {
 import SimulationResultPage from './pages/SimulationResultPage';
 import SimulationSetupPage from './pages/SimulationSetupPage';
 
+const heroAddressExamples = [
+  {
+    label: '동탄 공동주택 예시',
+    address: '경기도 화성시 동탄구 반송동 88-12',
+    meta: '기본 데모 주소',
+  },
+  {
+    label: '수원 아파트 예시',
+    address: '경기도 수원시 팔달구 경수대로 464',
+    meta: '도심형 공동주택',
+  },
+  {
+    label: '성남 아파트 예시',
+    address: '경기도 성남시 분당구 판교역로 166',
+    meta: '업무지구 인근',
+  },
+  {
+    label: '고양 아파트 예시',
+    address: '경기도 고양시 일산동구 중앙로 1275',
+    meta: '대단지 검토 예시',
+  },
+];
+
 function App() {
   return (
     <Routes>
@@ -37,7 +65,7 @@ function App() {
       <Route path="/simulation/setup" element={<SimulationSetupPage />} />
       <Route path="/simulation/result" element={<SimulationResultPage view="detail" />} />
       <Route path="/simulation/profit-report" element={<SimulationResultPage view="profit" />} />
-      <Route path="/simulation/ai-suitability" element={<SimulationResultPage view="suitability" />} />
+      <Route path="/simulation/ai-suitability" element={<Navigate to="/simulation/profit-report" replace />} />
       <Route path="/solar-adoption" element={<HomePage />} />
       <Route path="/solar-adoption/step-1" element={<SolarAdoptionStep1Page />} />
       <Route path="/solar-adoption/step-2" element={<SolarAdoptionStep2Page />} />
@@ -62,7 +90,20 @@ function App() {
 
 function HomePage() {
   const navigate = useNavigate();
-  const [heroAddress, setHeroAddress] = useState('경기도 화성시 동탄구 반송동 88-12');
+  const [heroAddress, setHeroAddress] = useState('');
+  const [isHeroAddressExamplesOpen, setIsHeroAddressExamplesOpen] = useState(false);
+  const [isHeaderScrolled, setIsHeaderScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsHeaderScrolled(window.scrollY > 20);
+    };
+
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const handleHeroAddressSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -77,9 +118,29 @@ function HomePage() {
     navigate('/risk-map');
   };
 
+  const handleHeroAddressBlur = (event: FocusEvent<HTMLFormElement>) => {
+    const nextFocusedElement = event.relatedTarget as Node | null;
+
+    if (nextFocusedElement && event.currentTarget.contains(nextFocusedElement)) {
+      return;
+    }
+
+    setIsHeroAddressExamplesOpen(false);
+  };
+
+  const handleHeroAddressExampleSelect = (address: string) => {
+    setHeroAddress(address);
+    setIsHeroAddressExamplesOpen(false);
+  };
+
+  const handleHeroScrollHintClick = () => {
+    document.getElementById('solsol-cases-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const caseCards = [
     {
       tone: 'blue',
+      icon: <LuBot />,
       label: '사용자 테스트 후기',
       quote: '복잡할 줄 알았는데, 단계별로 안내가 잘 되어 이해하기 쉬웠어요.',
       name: '김ㅇㅇ 님',
@@ -88,6 +149,7 @@ function HomePage() {
     },
     {
       tone: 'green',
+      icon: <LuBuilding2 />,
       label: '도입 사례 예시',
       quote: '보조금 조건을 자동으로 매칭해줘서 신청 준비가 훨씬 빨라졌어요.',
       name: '이ㅇㅇ 님',
@@ -96,6 +158,7 @@ function HomePage() {
     },
     {
       tone: 'orange',
+      icon: <LuFileSearch />,
       label: '파일럿 피드백',
       quote: '정보가 투명하게 정리되어 있어 의사결정에 큰 도움이 되었습니다.',
       name: '박ㅇㅇ 님',
@@ -104,78 +167,106 @@ function HomePage() {
     },
   ];
 
+  const trustItems = ['정확한 비용 예측', '맞춤형 설계 제안', '전문 시공 & 사후관리'];
+
   return (
     <main className="pageShell solsolLanding">
       <section className="solsolHero" aria-labelledby="solsol-hero-title">
-        <header className="solsolHeader" aria-label="쏠쏠햇 상단 메뉴">
-          <button className="solsolLogoButton" type="button" onClick={() => navigate('/')}>
-            <img src="/assets/logo.png" alt="쏠쏠햇" />
-          </button>
-          <nav className="solsolNav" aria-label="주요 메뉴">
-            <button className="isActive" type="button" onClick={() => navigate('/solar-adoption')}>
-              태양광 도입
-            </button>
-            <button type="button" onClick={() => navigate('/service')}>
-              서비스 소개
-            </button>
-            <button type="button" onClick={() => navigate('/notice')}>
-              공지사항
-            </button>
-            <button type="button" onClick={() => navigate('/consultation')}>
-              상담하기
-            </button>
-          </nav>
-          <div className="solsolHeaderActions">
-            <button className="solsolSignupButton" type="button" onClick={() => navigate('/login?mode=signup')}>
-              <span className="solsolAuthArrow" aria-hidden="true">
-                <LuArrowRight />
-              </span>
-              회원가입
-            </button>
-            <button className="solsolLoginButton" type="button" onClick={() => navigate('/login?mode=login')}>
-              <span className="solsolAuthArrow" aria-hidden="true">
-                <LuArrowRight />
-              </span>
-              로그인
-            </button>
-            <button className="solsolMenuButton" type="button" onClick={() => navigate('/service')} aria-label="메뉴 열기">
-              <LuMenu />
-            </button>
-          </div>
-        </header>
+        <SolarMateHeader appearance="hero" isScrolled={isHeaderScrolled} />
+        <button className="solsolMobileMenuButton" type="button" onClick={() => navigate('/service')} aria-label="메뉴 보기">
+          <LuMenu aria-hidden="true" />
+        </button>
 
         <div className="solsolHeroContent">
+          <p className="solsolHeroEyebrow">우리 아파트 태양광 설치하기</p>
           <h1 id="solsol-hero-title">
             지역별 차등
             <br />
-            전기요금제가
+            <span className="solsolHeroGradientText">전기요금제</span>가
             <br />
             걱정된다면?
           </h1>
+          <p className="solsolHeroLead">
+            경기도 아파트 주소를 입력하면
+            <br />
+            설치 가능 여부와 예상 절감액을 바로 확인해드려요.
+          </p>
 
           <button className="solsolCheckLink" type="button" onClick={() => navigate('/solar-adoption/step-1')}>
-            태양광 설치 확인하기
-            <span aria-hidden="true">
+            <span className="solsolCheckText">무료 진단으로 예상 절감액 보기</span>
+            <span className="solsolCheckIcon" aria-hidden="true">
               <LuArrowRight />
             </span>
           </button>
 
-          <form className="solsolSearchForm" onSubmit={handleHeroAddressSubmit} aria-label="태양광 설치 주소 입력">
-            <label className="solsolSearchField">
-              <LuMapPin aria-hidden="true" />
-              <input
-                aria-label="아파트 주소"
-                value={heroAddress}
-                placeholder="주소를 입력하여 예상 발전량과 비용을 확인해 보세요"
-                onChange={(event) => setHeroAddress(event.target.value)}
-              />
+          <form
+            className={`solsolSearchForm${isHeroAddressExamplesOpen ? ' isExamplesOpen' : ''}`}
+            onSubmit={handleHeroAddressSubmit}
+            onBlur={handleHeroAddressBlur}
+            aria-label="태양광 설치 주소 입력"
+          >
+            <label className="solsolSearchField" htmlFor="solsol-hero-address">
+              <span className="solsolSearchFieldLabel">아파트 주소</span>
+              <span className="solsolSearchInputRow">
+                <LuMapPin aria-hidden="true" />
+                <input
+                  id="solsol-hero-address"
+                  type="text"
+                  aria-label="아파트 주소"
+                  aria-expanded={isHeroAddressExamplesOpen}
+                  aria-controls="solsol-address-examples"
+                  value={heroAddress}
+                  placeholder="예: 경기도 화성시 동탄구 반송동 88-12"
+                  onFocus={() => setIsHeroAddressExamplesOpen(true)}
+                  onClick={() => setIsHeroAddressExamplesOpen(true)}
+                  onChange={(event) => {
+                    setHeroAddress(event.target.value);
+                    setIsHeroAddressExamplesOpen(true);
+                  }}
+                />
+              </span>
             </label>
+            {isHeroAddressExamplesOpen && (
+              <div id="solsol-address-examples" className="solsolAddressExamples" aria-label="주소 예시">
+                <div className="solsolAddressExamplesHeader">주소 예시</div>
+                {heroAddressExamples.map((example) => (
+                  <button
+                    key={example.address}
+                    className="solsolAddressExampleButton"
+                    type="button"
+                    aria-pressed={heroAddress === example.address}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => handleHeroAddressExampleSelect(example.address)}
+                  >
+                    <strong>{example.label}</strong>
+                    <span>{example.address}</span>
+                    <em>{example.meta}</em>
+                  </button>
+                ))}
+              </div>
+            )}
             <button className="solsolSearchButton" type="submit">
               <LuSunMedium aria-hidden="true" />
-              <span>우리 아파트</span>
-              태양광 설치하기
+              <span className="solsolSearchButtonCopy">
+                <strong>우리집 태양광 진단하기</strong>
+                <small>무료 · 30초 확인</small>
+              </span>
             </button>
           </form>
+
+          <ul className="solsolTrustList" aria-label="쏠쏠햇 서비스 강점">
+            {trustItems.map((item) => (
+              <li key={item}>
+                <LuCircleCheck aria-hidden="true" />
+                {item}
+              </li>
+            ))}
+          </ul>
+
+          <button className="solsolHeroScrollHint" type="button" onClick={handleHeroScrollHintClick}>
+            아래에서 도입 사례 시뮬레이션을 확인해보세요
+            <LuArrowRight aria-hidden="true" />
+          </button>
         </div>
 
         <aside className="solsolQuickBar" aria-label="빠른 상담 메뉴">
@@ -209,38 +300,62 @@ function HomePage() {
           </button>
           <div className="solsolQuickPhone">
             <small>고객센터</small>
-            <strong>1544<br />5579</strong>
+            <strong>1544<br />1234</strong>
           </div>
         </aside>
 
         <button className="solsolFloatingChat" type="button" onClick={() => navigate('/consultation')}>
           <LuMessageCircle aria-hidden="true" />
-          상담하기
+          빠른 상담
+        </button>
+
+        <button className="solsolBottomConsult" type="button" onClick={() => navigate('/consultation')}>
+          <span className="solsolBottomConsultIcon" aria-hidden="true">
+            <LuPhone />
+          </span>
+          <span className="solsolBottomConsultCopy">
+            <strong>무료 상담하기</strong>
+            <small>전문 상담사가 빠르게 도와드려요</small>
+          </span>
+          <LuArrowRight className="solsolBottomConsultArrow" aria-hidden="true" />
         </button>
       </section>
 
       <section className="solsolCases" aria-labelledby="solsol-cases-title">
         <div className="solsolCasesTop">
-          <h2 id="solsol-cases-title">도입 사례 시뮬레이션</h2>
+          <h2 id="solsol-cases-title">도입 시뮬레이션 후기</h2>
           <p>후기는 실제 고객 후기가 아닌 서비스 화면 예시 문구입니다.</p>
         </div>
 
         <div className="solsolCaseGrid">
           {caseCards.map((card) => (
             <article className={`solsolCaseCard ${card.tone}`} key={card.label}>
-              <span className="solsolCaseLabel">{card.label}</span>
-              <blockquote>“ {card.quote} ”</blockquote>
-              <strong className="solsolCaseName">{card.name}</strong>
-              <div className="solsolCaseStats">
-                <div>
-                  <span>예상 연간 절감액</span>
-                  <strong>{card.saving}</strong>
-                </div>
-                <div>
-                  <span>만족 포인트</span>
-                  <em>{card.point}</em>
+              <span className="solsolCaseIcon" aria-hidden="true">
+                {card.icon}
+              </span>
+              <div className="solsolCaseBody">
+                <span className="solsolCaseLabel">{card.label}</span>
+                <blockquote>“ {card.quote} ”</blockquote>
+                <strong className="solsolCaseName">{card.name}</strong>
+                <div className="solsolCaseStats">
+                  <div>
+                    <span>예상 연간 절감액</span>
+                    <strong>{card.saving}</strong>
+                  </div>
+                  <div>
+                    <span>만족 포인트</span>
+                    <em>{card.point}</em>
+                  </div>
                 </div>
               </div>
+              <button
+                className="solsolCaseArrow"
+                type="button"
+                onClick={() => navigate('/service')}
+                aria-label={`${card.label} 자세히 보기`}
+              >
+                <LuArrowRight aria-hidden="true" />
+              </button>
             </article>
           ))}
         </div>
